@@ -6,7 +6,9 @@ import Navbar from './components/Navbar'
 import Hero from './components/Hero'
 import LogoLoop from './components/LogoLoop'
 import Features from './components/Features'
+import Insights from './components/Insights'
 import HowItWorks from './components/HowItWorks'
+import CallBreakdown from './components/CallBreakdown'
 import Pricing from './components/Pricing'
 import CTA from './components/CTA'
 import Footer from './components/Footer'
@@ -67,7 +69,9 @@ function App() {
               </section>
 
               <Features />
+              <Insights />
               <HowItWorks />
+              <CallBreakdown />
               <Pricing />
               <CTA />
             </main>
