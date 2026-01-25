@@ -430,12 +430,12 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 20px;
   width: 100%;
-  max-width: 480px;
+  max-width: 680px;
   backdrop-filter: blur(20px);
   box-shadow: 0 25px 80px rgba(0, 0, 0, 0.5), 0 0 60px rgba(0, 255, 136, 0.1);
   overflow: hidden;
   position: relative;
-  margin-top:100px;
+
 }
 
 .dashboard-glow {
@@ -1475,7 +1475,7 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
 }
 
 /* ===== RESPONSIVE FOR NEW SECTIONS ===== */
-@media (max-width: 768px) {
+@media (max-width: 500px) {
   .breakdown-grid {
     grid-template-columns: 1fr;
   }
