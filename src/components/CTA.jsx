@@ -45,7 +45,8 @@ const CTA = () => {
             }}
           />
 
-          <h2>Ready to Make <span className="gradient-text">Data-Driven</span> Decisions?</h2>
+          <h2>Ready to Make </h2>
+          <h2><span className="gradient-text">Data-Driven</span> Decisions?</h2>
           <p>Join the sales teams that stopped guessing and started knowing.</p>
 
           {/* Primary CTA */}
@@ -66,7 +67,7 @@ const CTA = () => {
 
             <motion.a
               href="#how-it-works"
-              className="btn btn-secondary"
+              className="btn btn-outline"
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
             >
@@ -97,7 +98,7 @@ const CTA = () => {
                   <motion.button
                     key="submit"
                     type="submit"
-                    className="btn btn-outline"
+                    className="btn btn-secondary"
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.9 }}
