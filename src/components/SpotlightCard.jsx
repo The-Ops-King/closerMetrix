@@ -35,6 +35,9 @@ const SpotlightCard = ({
         border: `1px solid ${borderColor}`,
         borderRadius: '20px',
         backdropFilter: 'blur(10px)',
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
       }}
     >
       {/* Spotlight effect */}
@@ -75,7 +78,7 @@ const SpotlightCard = ({
         }}
       />
 
-      <div style={{ position: 'relative', zIndex: 3 }}>{children}</div>
+      <div style={{ position: 'relative', zIndex: 3, flex: 1, display: 'flex', flexDirection: 'column' }}>{children}</div>
     </motion.div>
   )
 }

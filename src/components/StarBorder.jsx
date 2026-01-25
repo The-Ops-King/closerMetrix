@@ -16,6 +16,9 @@ const StarBorder = ({
         padding: '2px',
         background: 'transparent',
         overflow: 'hidden',
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
       }}
     >
       {/* Animated border */}
@@ -46,6 +49,9 @@ const StarBorder = ({
           background: 'rgba(2, 6, 23, 0.9)',
           borderRadius: `calc(${borderRadius} - 2px)`,
           zIndex: 1,
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
         }}
       >
         {children}
