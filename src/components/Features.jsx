@@ -84,7 +84,7 @@ const Features = () => {
               viewport={{ once: true }}
               transition={{ duration: 0.5, delay: index * 0.1 }}
             >
-              <GlareHover glareColor="rgba(0, 255, 136, 0.3)">
+
                 <SpotlightCard className="feature-card-inner">
                   <div className="feature-card-content">
                     <motion.div
@@ -97,7 +97,7 @@ const Features = () => {
                     <p>{feature.description}</p>
                   </div>
                 </SpotlightCard>
-              </GlareHover>
+
             </motion.div>
           ))}
         </div>
