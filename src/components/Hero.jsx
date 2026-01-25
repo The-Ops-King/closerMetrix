@@ -51,9 +51,18 @@ const Hero = () => {
           transition={{ duration: 0.6, delay: 0.4 }}
         >
           <GradualBlurText
-            text="CloserMetrix automatically analyzes your sales calls and delivers actionable insights within 24 hours. No manual input required."
+            text="CloserMetrix automatically analyzes every one of your sales calls, and gives you actionable insights within 24 hours. Without changes to your existing setup."
             delay={0.5}
           />
+        </motion.p>
+
+        <motion.p
+          className="hero-target"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.6, delay: 0.5 }}
+        >
+          Built for high-ticket sales teams doing $50k–$2M+/month.
         </motion.p>
 
         <motion.div
@@ -70,7 +79,7 @@ const Hero = () => {
               whileTap={{ scale: 0.98 }}
               style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
             >
-              <span>Start Analyzing Calls</span>
+              <span>Book a Demo</span>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M5 12h14M12 5l7 7-7 7"/>
               </svg>
@@ -99,6 +108,15 @@ const Hero = () => {
           <div className="stat-divider" />
           <Stat number="100" suffix="%" label="Automatic analysis" delay={1.1} />
         </motion.div>
+
+        <motion.p
+          className="hero-tagline"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 1.2 }}
+        >
+          Increase show rate, close rate, or both — without more leads.
+        </motion.p>
       </div>
 
       <motion.div

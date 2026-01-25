@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import StarBorder from './StarBorder'
 
 const CTA = () => {
   const [email, setEmail] = useState('')
@@ -44,89 +45,106 @@ const CTA = () => {
             }}
           />
 
-          <h2>Ready to Make</h2>
+          <h2>Ready to Make </h2>
           <h2><span className="gradient-text">Data-Driven</span> Decisions?</h2>
           <p>Join the sales teams that stopped guessing and started knowing.</p>
 
-          <form className="cta-form" onSubmit={handleSubmit}>
-            <motion.div
-              className="input-wrapper"
-              whileFocus={{ scale: 1.02 }}
+          {/* Primary CTA */}
+          <div className="cta-buttons">
+            <StarBorder color="#00ff88" speed={4} borderRadius="12px">
+              <motion.a
+                href="#book-demo"
+                className="btn btn-primary"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                Book a Demo
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+              </motion.a>
+            </StarBorder>
+
+            <motion.a
+              href="#how-it-works"
+              className="btn btn-outline"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
             >
-              <input
-                type="email"
-                placeholder="Enter your work email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={status !== 'idle'}
-                required
-              />
-            </motion.div>
+              See How It Works
+            </motion.a>
+          </div>
 
-            <AnimatePresence mode="wait">
-              {status === 'idle' && (
-                <motion.button
-                  key="submit"
-                  type="submit"
-                  className="btn btn-primary"
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  whileHover={{ scale: 1.05, boxShadow: '0 20px 60px rgba(0, 255, 136, 0.4)' }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  Get Early Access
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M5 12h14M12 5l7 7-7 7"/>
-                  </svg>
-                </motion.button>
-              )}
+          {/* Secondary - Email signup */}
+          <div className="cta-email-section">
+            <p className="cta-email-label">Or sign up for the email list:</p>
+            <form className="cta-form" onSubmit={handleSubmit}>
+              <motion.div
+                className="input-wrapper"
+                whileFocus={{ scale: 1.02 }}
+              >
+                <input
+                  type="email"
+                  placeholder="Enter your work email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={status !== 'idle'}
+                  required
+                />
+              </motion.div>
 
-              {status === 'loading' && (
-                <motion.button
-                  key="loading"
-                  className="btn btn-primary"
-                  disabled
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                >
-                  <motion.div
-                    className="spinner"
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                  />
-                  Processing...
-                </motion.button>
-              )}
+              <AnimatePresence mode="wait">
+                {status === 'idle' && (
+                  <motion.button
+                    key="submit"
+                    type="submit"
+                    className="btn btn-secondary"
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    Get Early Access
+                  </motion.button>
+                )}
 
-              {status === 'success' && (
-                <motion.button
-                  key="success"
-                  className="btn btn-success"
-                  disabled
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M5 13l4 4L19 7"/>
-                  </svg>
-                  You're on the list!
-                </motion.button>
-              )}
-            </AnimatePresence>
-          </form>
+                {status === 'loading' && (
+                  <motion.button
+                    key="loading"
+                    className="btn btn-outline"
+                    disabled
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                  >
+                    <motion.div
+                      className="spinner"
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                    />
+                    Processing...
+                  </motion.button>
+                )}
 
-          <motion.p
-            className="cta-note"
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.5 }}
-          >
-            No credit card required. Start analyzing calls in under 5 minutes.
-          </motion.p>
+                {status === 'success' && (
+                  <motion.button
+                    key="success"
+                    className="btn btn-success"
+                    disabled
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M5 13l4 4L19 7"/>
+                    </svg>
+                    You're on the list!
+                  </motion.button>
+                )}
+              </AnimatePresence>
+            </form>
+          </div>
 
           <div className="cta-particles">
             {Array.from({ length: 20 }).map((_, i) => (
