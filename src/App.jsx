@@ -33,7 +33,7 @@ function App() {
 
   return (
     <div className="app">
-      <Aurora />
+      <Aurora colorStops={["#3A29FF", "#FF94B4", "#FF3232"]} blend={1} amplitude={0}/>
       <ShapeBlur
         color1="#00ff88"
         color2="#00d4ff"
