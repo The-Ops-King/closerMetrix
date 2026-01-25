@@ -1,4 +1,6 @@
 import { motion } from 'framer-motion'
+import StarBorder from './StarBorder'
+import SpotlightCard from './SpotlightCard'
 
 const plans = [
   {
@@ -42,6 +44,75 @@ const plans = [
   },
 ]
 
+const PricingCard = ({ plan, index }) => {
+  const cardContent = (
+    <SpotlightCard
+      className="pricing-card-inner"
+      spotlightColor={plan.featured ? 'rgba(0, 255, 136, 0.2)' : 'rgba(0, 212, 255, 0.15)'}
+    >
+      <div className="pricing-card-content">
+        {plan.badge && (
+          <motion.span
+            className="pricing-badge"
+            initial={{ scale: 0 }}
+            whileInView={{ scale: 1 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.3, type: 'spring' }}
+          >
+            {plan.badge}
+          </motion.span>
+        )}
+        <div className="pricing-header">
+          <h3>{plan.name}</h3>
+          <p className="pricing-desc">{plan.description}</p>
+        </div>
+        <ul className="pricing-features">
+          {plan.features.map((feature, i) => (
+            <motion.li
+              key={feature}
+              initial={{ opacity: 0, x: -20 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: index * 0.1 + i * 0.05 }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M5 13l4 4L19 7"/>
+              </svg>
+              {feature}
+            </motion.li>
+          ))}
+        </ul>
+        <motion.a
+          href="#cta"
+          className={`btn ${plan.featured ? 'btn-primary' : 'btn-outline'}`}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+        >
+          {plan.cta}
+        </motion.a>
+      </div>
+    </SpotlightCard>
+  )
+
+  return (
+    <motion.div
+      className={`pricing-card-wrapper ${plan.featured ? 'featured' : ''}`}
+      initial={{ opacity: 0, y: 40 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.5, delay: index * 0.1 }}
+    >
+      {plan.featured ? (
+        <StarBorder color="#00ff88" speed={6} borderRadius="24px">
+          {cardContent}
+        </StarBorder>
+      ) : (
+        cardContent
+      )}
+    </motion.div>
+  )
+}
+
 const Pricing = () => {
   return (
     <section id="pricing" className="pricing-section">
@@ -60,61 +131,7 @@ const Pricing = () => {
 
         <div className="pricing-grid">
           {plans.map((plan, index) => (
-            <motion.div
-              key={plan.name}
-              className={`pricing-card ${plan.featured ? 'featured' : ''}`}
-              initial={{ opacity: 0, y: 40 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.5, delay: index * 0.1 }}
-              whileHover={{
-                y: -10,
-                boxShadow: plan.featured
-                  ? '0 30px 100px rgba(0, 255, 136, 0.3)'
-                  : '0 20px 60px rgba(0, 0, 0, 0.3)',
-              }}
-            >
-              {plan.badge && (
-                <motion.span
-                  className="pricing-badge"
-                  initial={{ scale: 0 }}
-                  whileInView={{ scale: 1 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: 0.3, type: 'spring' }}
-                >
-                  {plan.badge}
-                </motion.span>
-              )}
-              <div className="pricing-header">
-                <h3>{plan.name}</h3>
-                <p className="pricing-desc">{plan.description}</p>
-              </div>
-              <ul className="pricing-features">
-                {plan.features.map((feature, i) => (
-                  <motion.li
-                    key={feature}
-                    initial={{ opacity: 0, x: -20 }}
-                    whileInView={{ opacity: 1, x: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: index * 0.1 + i * 0.05 }}
-                  >
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M5 13l4 4L19 7"/>
-                    </svg>
-                    {feature}
-                  </motion.li>
-                ))}
-              </ul>
-              <motion.a
-                href="#cta"
-                className={`btn ${plan.featured ? 'btn-primary' : 'btn-outline'}`}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                {plan.cta}
-              </motion.a>
-              {plan.featured && <div className="card-glow" />}
-            </motion.div>
+            <PricingCard key={plan.name} plan={plan} index={index} />
           ))}
         </div>
       </div>
