@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import GooeyNav from './GooeyNav'
 
 const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false)
@@ -13,10 +14,10 @@ const Navbar = () => {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
-  const navLinks = [
-    { name: 'Features', href: '#features' },
-    { name: 'How It Works', href: '#how-it-works' },
-    { name: 'Pricing', href: '#pricing' },
+  const navItems = [
+    { label: 'Features', href: '#features' },
+    { label: 'How It Works', href: '#how-it-works' },
+    { label: 'Pricing', href: '#pricing' },
   ]
 
   return (
@@ -37,20 +38,9 @@ const Navbar = () => {
           <span className="logo-text">CloserMetrix</span>
         </motion.a>
 
-        <div className="nav-links">
-          {navLinks.map((link, index) => (
-            <motion.a
-              key={link.name}
-              href={link.href}
-              className="nav-link"
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 + 0.3 }}
-              whileHover={{ color: '#00ff88' }}
-            >
-              {link.name}
-            </motion.a>
-          ))}
+        {/* Gooey Nav for desktop */}
+        <div className="nav-gooey-wrapper">
+          <GooeyNav items={navItems} />
         </div>
 
         <motion.a
@@ -66,9 +56,15 @@ const Navbar = () => {
           className="mobile-menu-toggle"
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
         >
-          <span></span>
-          <span></span>
-          <span></span>
+          <motion.span
+            animate={{ rotate: isMobileMenuOpen ? 45 : 0, y: isMobileMenuOpen ? 7 : 0 }}
+          />
+          <motion.span
+            animate={{ opacity: isMobileMenuOpen ? 0 : 1 }}
+          />
+          <motion.span
+            animate={{ rotate: isMobileMenuOpen ? -45 : 0, y: isMobileMenuOpen ? -7 : 0 }}
+          />
         </button>
       </div>
 
@@ -80,16 +76,19 @@ const Navbar = () => {
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
           >
-            {navLinks.map((link) => (
-              <a
-                key={link.name}
-                href={link.href}
+            {navItems.map((item) => (
+              <motion.a
+                key={item.label}
+                href={item.href}
                 onClick={() => setIsMobileMenuOpen(false)}
+                whileHover={{ x: 10, color: '#00ff88' }}
               >
-                {link.name}
-              </a>
+                {item.label}
+              </motion.a>
             ))}
-            <a href="#cta" className="mobile-cta">Get Started</a>
+            <a href="#cta" className="mobile-cta" onClick={() => setIsMobileMenuOpen(false)}>
+              Get Started
+            </a>
           </motion.div>
         )}
       </AnimatePresence>

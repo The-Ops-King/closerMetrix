@@ -1,4 +1,6 @@
 import { motion } from 'framer-motion'
+import SpotlightCard from './SpotlightCard'
+import GlareHover from './GlareHover'
 
 const features = [
   {
@@ -77,26 +79,25 @@ const Features = () => {
           {features.map((feature, index) => (
             <motion.div
               key={feature.title}
-              className="feature-card"
               initial={{ opacity: 0, y: 40 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.5, delay: index * 0.1 }}
-              whileHover={{
-                y: -8,
-                boxShadow: '0 25px 80px rgba(0, 255, 136, 0.15)',
-                borderColor: 'rgba(0, 255, 136, 0.3)',
-              }}
             >
-              <motion.div
-                className="feature-icon"
-                whileHover={{ scale: 1.1, rotate: 5 }}
-              >
-                {feature.icon}
-              </motion.div>
-              <h3>{feature.title}</h3>
-              <p>{feature.description}</p>
-              <div className="feature-glow" />
+              <GlareHover glareColor="rgba(0, 255, 136, 0.3)">
+                <SpotlightCard className="feature-card-inner">
+                  <div className="feature-card-content">
+                    <motion.div
+                      className="feature-icon"
+                      whileHover={{ scale: 1.1, rotate: 5 }}
+                    >
+                      {feature.icon}
+                    </motion.div>
+                    <h3>{feature.title}</h3>
+                    <p>{feature.description}</p>
+                  </div>
+                </SpotlightCard>
+              </GlareHover>
             </motion.div>
           ))}
         </div>

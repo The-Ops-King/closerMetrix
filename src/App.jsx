@@ -1,15 +1,15 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Aurora from './components/Aurora'
-import ChromaGrid from './components/ChromaGrid'
+import ShapeBlur from './components/ShapeBlur'
 import Navbar from './components/Navbar'
 import Hero from './components/Hero'
+import LogoLoop from './components/LogoLoop'
 import Features from './components/Features'
 import HowItWorks from './components/HowItWorks'
 import Pricing from './components/Pricing'
 import CTA from './components/CTA'
 import Footer from './components/Footer'
-import GlowingCursor from './components/GlowingCursor'
 
 function App() {
   const [isLoaded, setIsLoaded] = useState(false)
@@ -18,10 +18,27 @@ function App() {
     setIsLoaded(true)
   }, [])
 
+  const logoItems = [
+    { icon: '📊', text: 'AI-Powered Analytics' },
+    { icon: '🎯', text: 'Close Rate Tracking' },
+    { icon: '📞', text: 'Call Intelligence' },
+    { icon: '⚡', text: 'Real-time Insights' },
+    { icon: '🛡️', text: 'Compliance Monitoring' },
+    { icon: '📈', text: 'Performance Metrics' },
+    { icon: '🤖', text: 'Automated Reports' },
+    { icon: '💡', text: 'Coaching Tips' },
+  ]
+
   return (
     <div className="app">
       <Aurora />
-      <GlowingCursor />
+      <ShapeBlur
+        color1="#00ff88"
+        color2="#00d4ff"
+        color3="#6366f1"
+        blur={100}
+        opacity={0.2}
+      />
 
       <AnimatePresence>
         {isLoaded && (
@@ -33,7 +50,22 @@ function App() {
             <Navbar />
             <main>
               <Hero />
-              <ChromaGrid />
+
+              {/* Logo Loop / Trust Bar */}
+              <section className="logo-loop-section">
+                <div className="container">
+                  <motion.p
+                    className="logo-loop-label"
+                    initial={{ opacity: 0 }}
+                    whileInView={{ opacity: 1 }}
+                    viewport={{ once: true }}
+                  >
+                    Powering insights for high-ticket sales teams
+                  </motion.p>
+                </div>
+                <LogoLoop items={logoItems} speed={35} />
+              </section>
+
               <Features />
               <HowItWorks />
               <Pricing />

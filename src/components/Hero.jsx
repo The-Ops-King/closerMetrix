@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
-import AnimatedText from './AnimatedText'
+import { GradualBlurText } from './GradualBlur'
 import Dashboard from './Dashboard'
+import StarBorder from './StarBorder'
 
 const Hero = () => {
   return (
@@ -8,8 +9,8 @@ const Hero = () => {
       <div className="hero-content">
         <motion.div
           className="hero-badge"
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
         >
           <span className="pulse"></span>
@@ -17,55 +18,70 @@ const Hero = () => {
         </motion.div>
 
         <h1>
-          <AnimatedText
-            text="Stop Making"
+          <motion.span
             className="hero-title-line"
-            delay={0.2}
-          />
-          <AnimatedText
-            text="$100K+ Decisions"
+            initial={{ opacity: 0, y: 30, filter: 'blur(10px)' }}
+            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+            transition={{ duration: 0.6, delay: 0.1 }}
+          >
+            Stop Making
+          </motion.span>
+          <motion.span
             className="hero-title-line gradient-text"
-            delay={0.4}
-          />
-          <AnimatedText
-            text="Based on Feelings"
+            initial={{ opacity: 0, y: 30, filter: 'blur(10px)' }}
+            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+            transition={{ duration: 0.6, delay: 0.2 }}
+          >
+            $100K+ Decisions
+          </motion.span>
+          <motion.span
             className="hero-title-line"
-            delay={0.6}
-          />
+            initial={{ opacity: 0, y: 30, filter: 'blur(10px)' }}
+            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+            transition={{ duration: 0.6, delay: 0.3 }}
+          >
+            Based on Feelings
+          </motion.span>
         </h1>
 
         <motion.p
           className="hero-subtitle"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.8, duration: 0.6 }}
+          transition={{ duration: 0.6, delay: 0.4 }}
         >
-          CloserMetrix automatically analyzes your sales calls and delivers
-          actionable insights within 24 hours. No manual input required.
+          <GradualBlurText
+            text="CloserMetrix automatically analyzes your sales calls and delivers actionable insights within 24 hours. No manual input required."
+            delay={0.5}
+          />
         </motion.p>
 
         <motion.div
           className="hero-cta"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 1, duration: 0.6 }}
+          transition={{ duration: 0.6, delay: 0.6 }}
         >
-          <motion.a
-            href="#cta"
-            className="btn btn-primary"
-            whileHover={{ scale: 1.05, boxShadow: '0 20px 60px rgba(0, 255, 136, 0.4)' }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <span>Start Analyzing Calls</span>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M5 12h14M12 5l7 7-7 7"/>
-            </svg>
-          </motion.a>
+          <StarBorder color="#00ff88" speed={4} borderRadius="12px">
+            <motion.a
+              href="#cta"
+              className="btn btn-primary"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+              <span>Start Analyzing Calls</span>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M5 12h14M12 5l7 7-7 7"/>
+              </svg>
+            </motion.a>
+          </StarBorder>
+
           <motion.a
             href="#how-it-works"
             className="btn btn-secondary"
-            whileHover={{ scale: 1.05, backgroundColor: 'rgba(255,255,255,0.15)' }}
-            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.02, borderColor: 'rgba(255,255,255,0.4)' }}
+            whileTap={{ scale: 0.98 }}
           >
             See How It Works
           </motion.a>
@@ -75,21 +91,21 @@ const Hero = () => {
           className="hero-stats"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: 1.2, duration: 0.6 }}
+          transition={{ duration: 0.6, delay: 0.8 }}
         >
-          <Stat number="45" suffix=" min" label="Saved daily per closer" />
+          <Stat number="45" suffix=" min" label="Saved daily per closer" delay={0.9} />
           <div className="stat-divider" />
-          <Stat number="24" suffix=" hrs" label="To first insights" />
+          <Stat number="24" suffix=" hrs" label="To first insights" delay={1.0} />
           <div className="stat-divider" />
-          <Stat number="100" suffix="%" label="Automatic analysis" />
+          <Stat number="100" suffix="%" label="Automatic analysis" delay={1.1} />
         </motion.div>
       </div>
 
       <motion.div
         className="hero-visual"
-        initial={{ opacity: 0, x: 100 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ delay: 0.5, duration: 0.8, ease: 'easeOut' }}
+        initial={{ opacity: 0, scale: 0.9, x: 50 }}
+        animate={{ opacity: 1, scale: 1, x: 0 }}
+        transition={{ duration: 0.8, delay: 0.3 }}
       >
         <Dashboard />
       </motion.div>
@@ -97,18 +113,23 @@ const Hero = () => {
   )
 }
 
-const Stat = ({ number, suffix, label }) => (
-  <div className="stat">
+const Stat = ({ number, suffix, label, delay = 0 }) => (
+  <motion.div
+    className="stat"
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.5, delay }}
+  >
     <motion.span
       className="stat-number"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      transition={{ duration: 0.5 }}
+      transition={{ duration: 0.5, delay: delay + 0.2 }}
     >
       {number}{suffix}
     </motion.span>
     <span className="stat-label">{label}</span>
-  </div>
+  </motion.div>
 )
 
 export default Hero

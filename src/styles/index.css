@@ -92,16 +92,31 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
   border-radius: 50%;
 }
 
-/* Glowing Cursor */
-.glowing-cursor {
-  position: fixed;
-  width: 400px;
-  height: 400px;
-  background: radial-gradient(circle, rgba(0, 255, 136, 0.15) 0%, transparent 70%);
-  border-radius: 50%;
-  pointer-events: none;
+/* Logo Loop Section */
+.logo-loop-section {
+  padding: 60px 0;
+  position: relative;
   z-index: 1;
-  mix-blend-mode: screen;
+}
+
+.logo-loop-label {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  margin-bottom: 24px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+/* Nav Gooey Wrapper */
+.nav-gooey-wrapper {
+  display: block;
+}
+
+@media (max-width: 768px) {
+  .nav-gooey-wrapper {
+    display: none;
+  }
 }
 
 /* Buttons */
@@ -677,6 +692,24 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
   line-height: 1.6;
 }
 
+/* Feature card with new components */
+.feature-card-inner {
+  height: 100%;
+}
+
+.feature-card-content {
+  padding: 32px;
+}
+
+.feature-card-content h3 {
+  margin-bottom: 12px;
+}
+
+.feature-card-content p {
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
 /* ===== HOW IT WORKS ===== */
 .how-it-works {
   padding: 120px 0;
@@ -894,6 +927,45 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
 
 .pricing-card .btn {
   width: 100%;
+}
+
+/* Pricing card with new components */
+.pricing-card-wrapper {
+  height: 100%;
+}
+
+.pricing-card-inner {
+  height: 100%;
+}
+
+.pricing-card-content {
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  position: relative;
+}
+
+.pricing-card-content .pricing-header {
+  margin-bottom: 24px;
+  padding-top: 12px;
+}
+
+.pricing-card-content .pricing-features {
+  flex-grow: 1;
+  margin-bottom: 24px;
+}
+
+.pricing-card-content .btn {
+  width: 100%;
+}
+
+.pricing-card-wrapper.featured .pricing-badge {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
 }
 
 /* ===== CTA ===== */
