@@ -94,9 +94,12 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
 
 /* Logo Loop Section */
 .logo-loop-section {
-  padding: 60px 0;
+  padding: 20px 0;
   position: relative;
   z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .logo-loop-label {
@@ -185,7 +188,7 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
 /* Section Header */
 .section-header {
   text-align: center;
-  margin-bottom: 64px;
+  margin-bottom: 40px;
 }
 
 .section-header p {
@@ -319,12 +322,12 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
 
 /* ===== HERO ===== */
 .hero {
-  min-height: 100vh;
+  min-height: auto;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 60px;
+  gap: 40px;
   align-items: center;
-  padding: 120px 24px 80px;
+  padding: 100px 24px 40px;
   max-width: 1400px;
   margin: 0 auto;
   position: relative;
@@ -380,7 +383,7 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
 .hero-cta {
   display: flex;
   gap: 16px;
-  margin-bottom: 48px;
+  margin-bottom: 24px;
   flex-wrap: wrap;
 }
 
@@ -554,7 +557,7 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
 
 /* ===== CHROMA GRID SECTION ===== */
 .chroma-section {
-  padding: 120px 0;
+  padding: 60px 0;
   position: relative;
   z-index: 1;
 }
@@ -634,7 +637,7 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
 
 /* ===== FEATURES ===== */
 .features-section {
-  padding: 120px 0;
+  padding: 60px 0;
   position: relative;
   z-index: 1;
 }
@@ -712,14 +715,14 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
 
 /* ===== HOW IT WORKS ===== */
 .how-it-works {
-  padding: 120px 0;
+  padding: 60px 0;
   position: relative;
   z-index: 1;
 }
 
 .steps-container {
   max-width: 700px;
-  margin: 0 auto 80px;
+  margin: 0 auto 40px;
 }
 
 .step {
@@ -835,7 +838,7 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
 
 /* ===== PRICING ===== */
 .pricing-section {
-  padding: 120px 0;
+  padding: 60px 0;
   position: relative;
   z-index: 1;
 }
@@ -1002,7 +1005,7 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
 
 /* ===== CTA ===== */
 .cta-section {
-  padding: 120px 0;
+  padding: 60px 0;
   position: relative;
   z-index: 1;
 }
@@ -1118,7 +1121,7 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
 
 /* ===== FOOTER ===== */
 .footer {
-  padding: 80px 0 40px;
+  padding: 40px 0 20px;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   position: relative;
   z-index: 1;
@@ -1127,7 +1130,7 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
 .footer-content {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 60px;
+  margin-bottom: 30px;
 }
 
 .footer-brand {
@@ -1316,7 +1319,7 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
 
 /* ===== INSIGHTS SECTION ===== */
 .insights-section {
-  padding: 100px 0;
+  padding: 60px 0;
   position: relative;
   z-index: 1;
 }
@@ -1372,7 +1375,7 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
 
 /* ===== CALL BREAKDOWN SECTION ===== */
 .call-breakdown-section {
-  padding: 100px 0;
+  padding: 60px 0;
   position: relative;
   z-index: 1;
 }
