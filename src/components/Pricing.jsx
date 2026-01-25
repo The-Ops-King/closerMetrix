@@ -4,8 +4,8 @@ import SpotlightCard from './SpotlightCard'
 
 const plans = [
   {
-    name: 'Minimum',
-    description: 'Essential metrics for growing teams',
+    name: 'Essential',
+    description: 'Baseline metrics for growing teams',
     features: [
       'Core show/close rates',
       'Objection tracking',
@@ -19,7 +19,6 @@ const plans = [
     name: 'Insight',
     description: 'Deep analytics for scaling teams',
     features: [
-      'Everything in Minimum',
       'Per-closer analysis',
       'AI coaching recommendations',
       'Trend detection',
