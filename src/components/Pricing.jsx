@@ -24,8 +24,11 @@ const plans = [
       'Per-closer performance breakdowns',
       'Objection handling by closer',
       'Trend detection across calls & time',
-      'AI-generated coaching insights',
-      'Priority support',
+      'Weekly-generated coaching plans',
+      'Learn what prospects say they want and need',
+      'Daily, weekly, and monthly performance updates',
+      'Extra visibility into new closer performance',
+
     ],
     cta: 'Book a Demo',
     featured: true,

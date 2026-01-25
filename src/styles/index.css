@@ -349,7 +349,7 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
   font-size: 0.85rem;
   color: var(--aurora-green);
   margin-bottom: 24px;
-  margin-top: 75px;
+  margin-top: 24px;
 }
 
 .pulse {
