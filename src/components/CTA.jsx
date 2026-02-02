@@ -45,8 +45,7 @@ const CTA = () => {
             }}
           />
 
-          <h2>Ready to Make </h2>
-          <h2><span className="gradient-text">Data-Driven</span> Decisions?</h2>
+          <h2>Ready to Make <span className="gradient-text">Data-Driven</span> Decisions?</h2>
           <p>Join the sales teams that stopped guessing and started knowing.</p>
 
           {/* Primary CTA */}
