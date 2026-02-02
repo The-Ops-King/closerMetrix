@@ -44,7 +44,9 @@ const Navbar = () => {
         </div>
 
         <motion.a
-          href="#cta"
+          href="https://calendar.app.google/FBHCJbBbxhR1YP9V6"
+          target="_blank"
+          rel="noopener noreferrer"
           className="nav-cta"
           whileHover={{ scale: 1.05, boxShadow: '0 0 30px rgba(0, 255, 136, 0.5)' }}
           whileTap={{ scale: 0.95 }}
@@ -86,7 +88,7 @@ const Navbar = () => {
                 {item.label}
               </motion.a>
             ))}
-            <a href="#cta" className="mobile-cta" onClick={() => setIsMobileMenuOpen(false)}>
+            <a href="https://calendar.app.google/FBHCJbBbxhR1YP9V6" target="_blank" rel="noopener noreferrer" className="mobile-cta" onClick={() => setIsMobileMenuOpen(false)}>
               Get Started
             </a>
           </motion.div>
