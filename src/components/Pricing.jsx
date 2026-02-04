@@ -88,7 +88,9 @@ const PricingCard = ({ plan, index }) => {
           ))}
         </ul>
         <motion.a
-          href="#cta"
+          href="https://calendar.app.google/FBHCJbBbxhR1YP9V6"
+          target="_blank"
+          rel="noopener noreferrer"
           className={`btn ${plan.featured ? 'btn-primary' : 'btn-outline'}`}
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}

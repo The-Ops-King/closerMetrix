@@ -4,22 +4,41 @@ import StarBorder from './StarBorder'
 
 const CTA = () => {
   const [email, setEmail] = useState('')
-  const [status, setStatus] = useState('idle') // idle, loading, success
+  const [status, setStatus] = useState('idle') // idle, loading, success, error
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     if (!email) return
 
     setStatus('loading')
 
-    // Simulate API call
-    setTimeout(() => {
-      setStatus('success')
-      setTimeout(() => {
-        setStatus('idle')
-        setEmail('')
-      }, 3000)
-    }, 1500)
+    try {
+      const response = await fetch('https://formsubmit.co/ajax/jt@jtylerray.com', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+          email: email,
+          _subject: 'New CloserMetrix Early Access Signup',
+        }),
+      })
+
+      if (response.ok) {
+        setStatus('success')
+        setTimeout(() => {
+          setStatus('idle')
+          setEmail('')
+        }, 3000)
+      } else {
+        setStatus('error')
+        setTimeout(() => setStatus('idle'), 3000)
+      }
+    } catch {
+      setStatus('error')
+      setTimeout(() => setStatus('idle'), 3000)
+    }
   }
 
   return (
@@ -45,15 +64,16 @@ const CTA = () => {
             }}
           />
 
-          <h2>Ready to Make </h2>
-          <h2><span className="gradient-text">Data-Driven</span> Decisions?</h2>
+          <h2>Ready to Make <span className="gradient-text">Data-Driven</span> Decisions?</h2>
           <p>Join the sales teams that stopped guessing and started knowing.</p>
 
           {/* Primary CTA */}
           <div className="cta-buttons">
             <StarBorder color="#00ff88" speed={4} borderRadius="12px">
               <motion.a
-                href="#book-demo"
+                href="https://calendar.app.google/FBHCJbBbxhR1YP9V6"
+                target="_blank"
+                rel="noopener noreferrer"
                 className="btn btn-primary"
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
@@ -140,6 +160,19 @@ const CTA = () => {
                       <path d="M5 13l4 4L19 7"/>
                     </svg>
                     You're on the list!
+                  </motion.button>
+                )}
+
+                {status === 'error' && (
+                  <motion.button
+                    key="error"
+                    className="btn btn-outline"
+                    disabled
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                  >
+                    Something went wrong. Try again.
                   </motion.button>
                 )}
               </AnimatePresence>

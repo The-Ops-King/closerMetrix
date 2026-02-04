@@ -73,7 +73,9 @@ const Hero = () => {
         >
           <StarBorder color="#00ff88" speed={4} borderRadius="12px">
             <motion.a
-              href="#cta"
+              href="https://calendar.app.google/FBHCJbBbxhR1YP9V6"
+              target="_blank"
+              rel="noopener noreferrer"
               className="btn btn-primary"
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}

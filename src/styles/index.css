@@ -391,6 +391,7 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
 .hero-stats {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 32px;
   padding: 24px 0;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
@@ -559,7 +560,7 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
 
 /* ===== CHROMA GRID SECTION ===== */
 .chroma-section {
-  padding: 60px 0;
+  padding: 24px 0;
   position: relative;
   z-index: 1;
 }
@@ -650,6 +651,14 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
   gap: 24px;
 }
 
+.features-grid > * {
+  height: 100%;
+}
+
+.features-grid > * > * {
+  height: 100%;
+}
+
 .feature-card {
   position: relative;
   background: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 100%);
@@ -700,10 +709,13 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
 /* Feature card with new components */
 .feature-card-inner {
   height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .feature-card-content {
   padding: 32px;
+  flex: 1;
 }
 
 .feature-card-content h3 {
@@ -1041,6 +1053,7 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
   margin-bottom: 16px;
   position: relative;
   z-index: 1;
+  white-space: nowrap;
 }
 
 .cta-content > p {
@@ -1314,8 +1327,8 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
 .hero-tagline {
   font-size: 1.1rem;
   color: var(--text-secondary);
-  margin-top: 24px;
-  padding-top: 24px;
+  margin-top: 12px;
+  padding-top: 12px;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   font-style: italic;
 }
