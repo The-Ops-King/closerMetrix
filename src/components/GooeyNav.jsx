@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 
 const GooeyNav = ({ items, className = '' }) => {
@@ -7,6 +8,7 @@ const GooeyNav = ({ items, className = '' }) => {
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 })
   const navRef = useRef(null)
   const itemRefs = useRef([])
+  const navigate = useNavigate()
 
   useEffect(() => {
     const currentIndex = hoverIndex !== null ? hoverIndex : activeIndex
@@ -93,9 +95,13 @@ const GooeyNav = ({ items, className = '' }) => {
           onClick={(e) => {
             e.preventDefault()
             setActiveIndex(index)
-            const target = document.querySelector(item.href)
-            if (target) {
-              target.scrollIntoView({ behavior: 'smooth' })
+            if (item.href.startsWith('#')) {
+              const target = document.querySelector(item.href)
+              if (target) {
+                target.scrollIntoView({ behavior: 'smooth' })
+              }
+            } else {
+              navigate(item.href)
             }
           }}
           onMouseEnter={() => setHoverIndex(index)}

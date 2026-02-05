@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import StarBorder from './StarBorder'
 
@@ -85,14 +86,12 @@ const CTA = () => {
               </motion.a>
             </StarBorder>
 
-            <motion.a
-              href="#how-it-works"
+            <Link
+              to="/how-it-works-video"
               className="btn btn-outline"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
             >
               See How It Works
-            </motion.a>
+            </Link>
           </div>
 
           {/* Secondary - Email signup */}
