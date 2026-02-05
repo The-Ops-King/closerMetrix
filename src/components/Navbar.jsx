@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import GooeyNav from './GooeyNav'
 
 const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const navigate = useNavigate()
 
   useEffect(() => {
     const handleScroll = () => {
@@ -16,7 +18,7 @@ const Navbar = () => {
 
   const navItems = [
     { label: 'Features', href: '#features' },
-    { label: 'How It Works', href: '#how-it-works' },
+    { label: 'How It Works', href: '/how-it-works-video' },
     { label: 'Pricing', href: '#pricing' },
   ]
 
@@ -82,7 +84,18 @@ const Navbar = () => {
               <motion.a
                 key={item.label}
                 href={item.href}
-                onClick={() => setIsMobileMenuOpen(false)}
+                onClick={(e) => {
+                  e.preventDefault()
+                  setIsMobileMenuOpen(false)
+                  if (item.href.startsWith('#')) {
+                    const target = document.querySelector(item.href)
+                    if (target) {
+                      target.scrollIntoView({ behavior: 'smooth' })
+                    }
+                  } else {
+                    navigate(item.href)
+                  }
+                }}
                 whileHover={{ x: 10, color: '#00ff88' }}
               >
                 {item.label}
