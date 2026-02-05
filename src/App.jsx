@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Routes, Route } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import Aurora from './components/Aurora'
 import ShapeBlur from './components/ShapeBlur'
@@ -12,14 +13,9 @@ import CallBreakdown from './components/CallBreakdown'
 import Pricing from './components/Pricing'
 import CTA from './components/CTA'
 import Footer from './components/Footer'
+import HowItWorksVideo from './components/HowItWorksVideo'
 
-function App() {
-  const [isLoaded, setIsLoaded] = useState(false)
-
-  useEffect(() => {
-    setIsLoaded(true)
-  }, [])
-
+function LandingPage() {
   const logoItems = [
     { icon: '📊', text: 'AI-Powered Analytics' },
     { icon: '🎯', text: 'Close Rate Tracking' },
@@ -30,6 +26,46 @@ function App() {
     { icon: '🤖', text: 'Automated Reports' },
     { icon: '💡', text: 'Coaching Tips' },
   ]
+
+  return (
+    <>
+      <Navbar />
+      <main>
+        <Hero />
+
+        {/* Logo Loop / Trust Bar */}
+        <section className="logo-loop-section">
+          <div className="container">
+            <motion.p
+              className="logo-loop-label"
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true }}
+            >
+              Powering insights for high-ticket sales teams
+            </motion.p>
+          </div>
+          <LogoLoop items={logoItems} speed={35} />
+        </section>
+
+        <Features />
+        <Insights />
+        <HowItWorks />
+        <CallBreakdown />
+        <Pricing />
+        <CTA />
+      </main>
+      <Footer />
+    </>
+  )
+}
+
+function App() {
+  const [isLoaded, setIsLoaded] = useState(false)
+
+  useEffect(() => {
+    setIsLoaded(true)
+  }, [])
 
   return (
     <div className="app">
@@ -49,33 +85,10 @@ function App() {
             animate={{ opacity: 1 }}
             transition={{ duration: 0.5 }}
           >
-            <Navbar />
-            <main>
-              <Hero />
-
-              {/* Logo Loop / Trust Bar */}
-              <section className="logo-loop-section">
-                <div className="container">
-                  <motion.p
-                    className="logo-loop-label"
-                    initial={{ opacity: 0 }}
-                    whileInView={{ opacity: 1 }}
-                    viewport={{ once: true }}
-                  >
-                    Powering insights for high-ticket sales teams
-                  </motion.p>
-                </div>
-                <LogoLoop items={logoItems} speed={35} />
-              </section>
-
-              <Features />
-              <Insights />
-              <HowItWorks />
-              <CallBreakdown />
-              <Pricing />
-              <CTA />
-            </main>
-            <Footer />
+            <Routes>
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/how-it-works-video" element={<HowItWorksVideo />} />
+            </Routes>
           </motion.div>
         )}
       </AnimatePresence>
