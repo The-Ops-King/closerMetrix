@@ -1516,11 +1516,37 @@ h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); }
 .video-page {
   min-height: 100vh;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 80px 24px 60px;
   position: relative;
   z-index: 1;
+}
+
+.video-page-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: rgba(2, 6, 23, 0.85);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.video-back-btn {
+  padding: 8px 16px;
+  font-size: 0.85rem;
+  border-radius: 8px;
+}
+
+.video-nav-spacer {
+  width: 85px; /* matches back button width for centering */
 }
 
 .video-page-content {
