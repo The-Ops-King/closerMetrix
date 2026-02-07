@@ -32,7 +32,7 @@ const Hero = () => {
             animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
             transition={{ duration: 0.6, delay: 0.2 }}
           >
-            $100K+ Decisions
+            $1M+ Decisions
           </motion.span>
           <motion.span
             className="hero-title-line"
