@@ -1,0 +1,17 @@
+.git
+.gitignore
+node_modules/
+tests/
+coverage/
+.env
+.env.*
+*.md
+.DS_Store
+.claude/
+scripts/
+
+# Secrets & credentials — NEVER upload to Cloud Build
+service-account.json
+client_secret.json
+*.pem
+*.key

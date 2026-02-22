@@ -1,0 +1,55 @@
+{
+  "title": "Discovery Call",
+  "meeting_title": "Discovery Call with John Smith",
+  "recording_id": 12347,
+  "url": "https://fathom.video/calls/ghi789",
+  "share_url": "https://fathom.video/share/ghi789",
+  "created_at": "2026-02-20T20:05:00Z",
+  "scheduled_start_time": "2026-02-20T20:00:00Z",
+  "scheduled_end_time": "2026-02-20T21:00:00Z",
+  "recording_start_time": "2026-02-20T20:02:00Z",
+  "recording_end_time": "2026-02-20T20:08:00Z",
+  "recorded_by": {
+    "name": "Sarah Closer",
+    "email": "sarah@acmecoaching.com"
+  },
+  "calendar_invitees": [
+    {
+      "name": "Sarah Closer",
+      "email": "sarah@acmecoaching.com",
+      "is_external": false
+    },
+    {
+      "name": "John Smith",
+      "email": "john@example.com",
+      "is_external": true
+    }
+  ],
+  "transcript": [
+    {
+      "speaker": {
+        "display_name": "Sarah Closer",
+        "matched_calendar_invitee_email": "sarah@acmecoaching.com"
+      },
+      "text": "Hello? John, are you there? I think we might have a connection issue. I'll wait a couple more minutes.",
+      "timestamp": "00:00:05"
+    },
+    {
+      "speaker": {
+        "display_name": "Sarah Closer",
+        "matched_calendar_invitee_email": "sarah@acmecoaching.com"
+      },
+      "text": "Okay, it looks like John might not be joining. I'll give it another minute and then end the recording.",
+      "timestamp": "00:02:30"
+    },
+    {
+      "speaker": {
+        "display_name": "Sarah Closer",
+        "matched_calendar_invitee_email": "sarah@acmecoaching.com"
+      },
+      "text": "Alright, going to end this. John was a no-show.",
+      "timestamp": "00:05:00"
+    }
+  ],
+  "default_summary": "Sarah waited for John who did not attend the meeting."
+}

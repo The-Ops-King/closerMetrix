@@ -1,0 +1,24 @@
+# Secrets & credentials — NEVER include in Docker image
+.env
+.env.*
+service-account.json
+client_secret.json
+*.pem
+*.key
+
+# Git & dev tooling
+.git
+.gitignore
+.gcloudignore
+.claude/
+
+# Tests & docs (not needed in production)
+tests/
+coverage/
+docs/
+scripts/
+*.md
+
+# OS & editor files
+.DS_Store
+*.log

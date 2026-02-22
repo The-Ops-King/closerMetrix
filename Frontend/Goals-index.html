@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CloserMetrix — Pacing & Goals</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: 'Inter', sans-serif;
+    background: #212022;
+    color: #e8ecf1;
+    min-height: 100vh;
+    padding: 20px;
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+
+const C = {
+  pageBg: "#212022", cardBg: "#2c3139", cardBorder: "#3a3a3b",
+  sectionBg: "#2f2f30", headerBg: "#1a1a1b",
+  textPrimary: "#e8ecf1", textSecondary: "#8899aa", textMuted: "#5a5a5b",
+  blue: "#2579c0", green: "#4caf51", orange: "#ff8f00",
+  red: "#ef5350", yellow: "#fed450", purple: "#9f45b1", white: "#ffffff",
+  teal: "#4dd0e0",
+};
+
+const fmtDollar = (n) => {
+  if (n == null || isNaN(n)) return "$0";
+  return "$" + Math.round(n).toLocaleString();
+};
+
+const fmtPct = (n) => {
+  if (n == null || isNaN(n) || !isFinite(n)) return "\u2014";
+  return (n * 100).toFixed(1) + "%";
+};
+
+const parseCurrency = (str) => {
+  if (!str) return 0;
+  const cleaned = str.replace(/[^0-9.]/g, "");
+  return parseFloat(cleaned) || 0;
+};
+
+const paceColor = (pct) => {
+  if (pct == null || isNaN(pct) || !isFinite(pct)) return C.textMuted;
+  if (pct >= 0.95) return C.green;
+  if (pct >= 0.80) return C.orange;
+  return C.red;
+};
+
+const pctColor = (pct) => {
+  if (pct == null || isNaN(pct) || !isFinite(pct)) return C.textMuted;
+  if (pct >= 1.0) return C.green;
+  if (pct >= 0.5) return C.blue;
+  return C.orange;
+};
+
+const getWeekProgress = () => (new Date().getDay() + 1) / 7;
+const getMonthProgress = () => {
+  const now = new Date();
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  return now.getDate() / daysInMonth;
+};
+const getQuarterProgress = () => {
+  const now = new Date();
+  const m = now.getMonth();
+  const qStart = new Date(now.getFullYear(), Math.floor(m / 3) * 3, 1);
+  const qEnd = new Date(now.getFullYear(), Math.floor(m / 3) * 3 + 3, 1);
+  return (now - qStart) / (qEnd - qStart);
+};
+const getYearProgress = () => {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 1);
+  const end = new Date(now.getFullYear() + 1, 0, 1);
+  return (now - start) / (end - start);
+};
+
+function Scorecard({ label, value, color = C.white }) {
+  return (
+    <div style={{
+      background: C.cardBg, border: `1px solid ${C.cardBorder}`, borderRadius: 8,
+      padding: "18px 16px", display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center", flex: 1, minWidth: 0,
+    }}>
+      <div style={{
+        fontSize: 13, fontWeight: 600, color, textTransform: "uppercase",
+        letterSpacing: 0.5, marginBottom: 6, textAlign: "center",
+        lineHeight: 1.2, opacity: 0.85,
+      }}>{label}</div>
+      <div style={{
+        fontSize: 28, fontWeight: 700, color, lineHeight: 1.1, whiteSpace: "nowrap",
+      }}>{value}</div>
+    </div>
+  );
+}
+
+function Divider() {
+  return <div style={{ height: 1, background: C.cardBorder, margin: "10px 0" }} />;
+}
+
+function App() {
+  const params = new URLSearchParams(window.location.search);
+  const clientId = params.get("client_id") || "";
+  const clientName = params.get("client_name") || "Your Business";
+  const fetchUrl = params.get("fetch") || "";
+  const updateUrl = params.get("webhook") || "";
+
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState(null);
+
+  const [wtdRevenue, setWtdRevenue] = React.useState(0);
+  const [mtdRevenue, setMtdRevenue] = React.useState(0);
+  const [qtdRevenue, setQtdRevenue] = React.useState(0);
+  const [ytdRevenue, setYtdRevenue] = React.useState(0);
+
+  const [monthly, setMonthly] = React.useState("");
+  const [quarterly, setQuarterly] = React.useState("");
+  const [yearly, setYearly] = React.useState("");
+
+  const [manualQ, setManualQ] = React.useState(false);
+  const [manualY, setManualY] = React.useState(false);
+  const [manualM, setManualM] = React.useState(false);
+
+  const [sending, setSending] = React.useState({});
+  const [success, setSuccess] = React.useState({});
+
+  React.useEffect(() => {
+    if (!fetchUrl || !clientId) {
+      setLoading(false);
+      setError("Missing fetch URL or client_id in URL params");
+      return;
+    }
+    fetch(`${fetchUrl}?client_id=${clientId}`)
+      .then(res => res.json())
+      .then(data => {
+        const mg = parseFloat(data.monthly_goal) || 0;
+        const qg = parseFloat(data.quarterly_goal) || 0;
+        const yg = parseFloat(data.yearly_goal) || 0;
+        setMonthly(mg); setQuarterly(qg); setYearly(yg);
+        setManualM(true); setManualQ(true); setManualY(true);
+        setWtdRevenue(parseFloat(data.wtd_revenue) || 0);
+        setMtdRevenue(parseFloat(data.mtd_revenue) || 0);
+        setQtdRevenue(parseFloat(data.qtd_revenue) || 0);
+        setYtdRevenue(parseFloat(data.ytd_revenue) || 0);
+        setLoading(false);
+      })
+      .catch(err => {
+        setError("Failed to load data: " + err.message);
+        setLoading(false);
+      });
+  }, []);
+
+  const handleMonthlyChange = (val) => {
+    const num = parseCurrency(val);
+    setMonthly(num || "");
+    setManualM(true);
+    if (!manualQ) setQuarterly(num * 3);
+    if (!manualY) setYearly(num * 12);
+  };
+  const handleQuarterlyChange = (val) => {
+    const num = parseCurrency(val);
+    setQuarterly(num || "");
+    setManualQ(true);
+    if (!manualM) setMonthly(Math.round(num / 3));
+    if (!manualY) setYearly(num * 4);
+  };
+  const handleYearlyChange = (val) => {
+    const num = parseCurrency(val);
+    setYearly(num || "");
+    setManualY(true);
+    if (!manualM) setMonthly(Math.round(num / 12));
+    if (!manualQ) setQuarterly(Math.round(num / 4));
+  };
+  const resetLocks = () => { setManualM(false); setManualQ(false); setManualY(false); };
+
+  const sendUpdate = async (fields) => {
+    const key = Object.keys(fields).join(",");
+    setSending(s => ({ ...s, [key]: true }));
+    setSuccess(s => ({ ...s, [key]: false }));
+    const payload = { client_id: clientId, client_name: clientName, ...fields, updated_at: new Date().toISOString() };
+
+    if (!updateUrl) {
+      setTimeout(() => {
+        setSending(s => ({ ...s, [key]: false }));
+        setSuccess(s => ({ ...s, [key]: true }));
+        setTimeout(() => setSuccess(s => ({ ...s, [key]: false })), 3000);
+      }, 800);
+      console.log("Goal update (no webhook):", payload);
+      return;
+    }
+
+    try {
+      await fetch(updateUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      setSending(s => ({ ...s, [key]: false }));
+      setSuccess(s => ({ ...s, [key]: true }));
+      setTimeout(() => setSuccess(s => ({ ...s, [key]: false })), 3000);
+    } catch (err) {
+      setSending(s => ({ ...s, [key]: false }));
+    }
+  };
+
+  // Pacing calcs
+  const weeklyGoal = (Number(monthly) || 0) / 4;
+  const mGoal = Number(monthly) || 0;
+  const qGoal = Number(quarterly) || 0;
+  const yGoal = Number(yearly) || 0;
+
+  const wtdPct = weeklyGoal > 0 ? wtdRevenue / weeklyGoal : null;
+  const mtdPct = mGoal > 0 ? mtdRevenue / mGoal : null;
+  const qtdPct = qGoal > 0 ? qtdRevenue / qGoal : null;
+  const ytdPct = yGoal > 0 ? ytdRevenue / yGoal : null;
+
+  const wtdPace = (getWeekProgress() > 0 && wtdPct !== null) ? wtdPct / getWeekProgress() : null;
+  const mtdPace = (getMonthProgress() > 0 && mtdPct !== null) ? mtdPct / getMonthProgress() : null;
+  const qtdPace = (getQuarterProgress() > 0 && qtdPct !== null) ? qtdPct / getQuarterProgress() : null;
+  const ytdPace = (getYearProgress() > 0 && ytdPct !== null) ? ytdPct / getYearProgress() : null;
+
+  const goalInput = (label, value, onChange, onUpdate, fieldKey, color) => {
+    const isUpdating = sending[fieldKey];
+    const isSuccess = success[fieldKey];
+    return (
+      <div style={{ marginBottom: 18 }}>
+        <label style={{
+          display: "block", fontSize: 14, fontWeight: 600, color,
+          textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6,
+        }}>{label}</label>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ position: "relative", flex: 1 }}>
+            <span style={{
+              position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)",
+              color: C.textMuted, fontSize: 18, fontWeight: 600, pointerEvents: "none",
+            }}>$</span>
+            <input
+              type="text"
+              value={value ? Number(value).toLocaleString() : ""}
+              onChange={(e) => onChange(e.target.value.replace(/[^0-9]/g, ""))}
+              placeholder="0"
+              style={{
+                width: "100%", background: C.pageBg, border: `1px solid ${C.cardBorder}`,
+                borderRadius: 6, padding: "14px 14px 14px 30px", color: C.textPrimary,
+                fontSize: 20, fontWeight: 600, fontFamily: "Inter, sans-serif", outline: "none",
+              }}
+              onFocus={(e) => e.target.style.borderColor = color}
+              onBlur={(e) => e.target.style.borderColor = C.cardBorder}
+            />
+          </div>
+          <button onClick={onUpdate} disabled={isUpdating || !value} style={{
+            background: isSuccess ? C.green : "transparent",
+            border: `1px solid ${isSuccess ? C.green : color}`,
+            borderRadius: 6, padding: "14px 16px", color: isSuccess ? "#fff" : color,
+            fontSize: 13, fontWeight: 600, fontFamily: "Inter, sans-serif",
+            cursor: isUpdating || !value ? "not-allowed" : "pointer",
+            whiteSpace: "nowrap", textTransform: "uppercase", letterSpacing: 0.3,
+            opacity: !value ? 0.4 : 1, minWidth: 90,
+          }}>
+            {isUpdating ? "..." : isSuccess ? "\u2713 Saved" : "Update"}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const allKey = "monthly_goal,quarterly_goal,yearly_goal";
+
+  if (loading) {
+    return (
+      <div style={{ textAlign: "center", padding: 80, color: C.textSecondary }}>
+        <div style={{ fontSize: 18, fontWeight: 600 }}>Loading pacing data...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div style={{ textAlign: "center", padding: 80, color: C.red }}>
+        <div style={{ fontSize: 16 }}>{error}</div>
+      </div>
+    );
+  }
+
+  const pacingRow = (label, goal, actual, pct, pace, goalColor) => (
+    <div style={{ display: "flex", gap: 12 }}>
+      <Scorecard label={`${label} Goal`} value={fmtDollar(goal)} color={goalColor} />
+      <Scorecard label={`${label} Rev`} value={fmtDollar(actual)} color={C.blue} />
+      <Scorecard label="% to Goal" value={fmtPct(pct)} color={pctColor(pct)} />
+      <Scorecard label="On Pace" value={fmtPct(pace)} color={paceColor(pace)} />
+    </div>
+  );
+
+  return (
+    <div style={{ width: "100%", padding: "0 10px" }}>
+      {/* Header */}
+      {/*// <div style={{*/
+      //   background: C.headerBg, borderRadius: "8px 8px 0 0", padding: "16px 24px",
+      //   display: "flex", alignItems: "center", justifyContent: "space-between",
+      //   borderBottom: `1px solid ${C.cardBorder}`,
+      // }}>
+      //   <div>
+      //     <div style={{ fontSize: 16, fontWeight: 700, color: C.teal, letterSpacing: 1, textTransform: "uppercase" }}>
+      //       CloserMetrix
+      //     </div>
+      //     <div style={{ fontSize: 13, color: C.textSecondary, marginTop: 2 }}>Revenue Pacing & Goals</div>
+      //   </div>
+      //   {clientName !== "Your Business" && (
+      //     <div style={{
+      //       fontSize: 14, color: C.textSecondary, background: C.sectionBg,
+      //       padding: "6px 14px", borderRadius: 4, fontWeight: 500,
+      //     }}>{clientName}</div>
+      //   )}
+      // </div>
+
+      /* Pacing Title */}
+      <div style={{
+        background: C.sectionBg, padding: "12px 24px", textAlign: "center",
+        borderRadius: "8px 8px 0 0", borderBottom: `1px solid ${C.cardBorder}`,
+      }}>
+        <span style={{ fontSize: 28, fontWeight: 700, color: C.textPrimary, textTransform: "uppercase", letterSpacing: 2 }}>
+          Pacing
+        </span>
+      </div>
+
+      {/* Main */}
+      <div style={{
+        background: C.pageBg, border: `1px solid ${C.cardBorder}`, borderTop: "none",
+        borderRadius: "0 0 8px 8px", padding: 20, display: "flex", gap: 20,
+      }}>
+        {/* LEFT: Pacing */}
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+          {pacingRow("Weekly", weeklyGoal, wtdRevenue, wtdPct, wtdPace, C.purple)}
+          <Divider />
+          {pacingRow("Monthly", mGoal, mtdRevenue, mtdPct, mtdPace, C.purple)}
+          <Divider />
+          {pacingRow("Quarterly", qGoal, qtdRevenue, qtdPct, qtdPace, C.purple)}
+          <Divider />
+          {pacingRow("Yearly", yGoal, ytdRevenue, ytdPct, ytdPace, C.purple)}
+
+          <div style={{ fontSize: 11, color: C.textMuted, marginTop: 14, textAlign: "center" }}>
+            Revenue data as of {new Date().toLocaleString()}
+          </div>
+        </div>
+
+        {/* RIGHT: Goals */}
+        <div style={{
+          width: 380, flexShrink: 0, background: C.cardBg,
+          border: `1px solid ${C.cardBorder}`, borderRadius: 8, padding: 24,
+          display: "flex", flexDirection: "column", justifyContent: "center",
+        }}>
+          <div style={{
+            fontSize: 18, fontWeight: 700, color: C.textPrimary,
+            textTransform: "uppercase", letterSpacing: 1, textAlign: "center", marginBottom: 6,
+          }}>Set Revenue Goals</div>
+          <p style={{ fontSize: 13, color: C.textSecondary, marginBottom: 20, lineHeight: 1.5, textAlign: "center" }}>
+            Enter a goal — others auto-calculate.{" "}
+            <span onClick={resetLocks} style={{ color: C.teal, cursor: "pointer", textDecoration: "underline" }}>Reset</span>
+          </p>
+
+          {goalInput("Monthly Goal", monthly, handleMonthlyChange,
+            () => sendUpdate({ monthly_goal: Number(monthly) }), "monthly_goal", C.orange)}
+          {goalInput("Quarterly Goal", quarterly, handleQuarterlyChange,
+            () => sendUpdate({ quarterly_goal: Number(quarterly) }), "quarterly_goal", C.yellow)}
+          {goalInput("Yearly Goal", yearly, handleYearlyChange,
+            () => sendUpdate({ yearly_goal: Number(yearly) }), "yearly_goal", C.green)}
+
+          <div style={{ height: 1, background: C.cardBorder, margin: "6px 0 20px" }} />
+
+          <button
+            onClick={() => sendUpdate({
+              monthly_goal: Number(monthly),
+              quarterly_goal: Number(quarterly),
+              yearly_goal: Number(yearly),
+            })}
+            disabled={sending[allKey] || (!monthly && !quarterly && !yearly)}
+            style={{
+              width: "100%", background: success[allKey] ? C.green : C.teal,
+              border: "none", borderRadius: 8, padding: "16px",
+              color: "#fff", fontSize: 16, fontWeight: 700, fontFamily: "Inter, sans-serif",
+              cursor: sending[allKey] || (!monthly && !quarterly && !yearly) ? "not-allowed" : "pointer",
+              textTransform: "uppercase", letterSpacing: 0.5,
+              opacity: (!monthly && !quarterly && !yearly) ? 0.4 : 1,
+            }}
+          >
+            {sending[allKey] ? "Updating..." : success[allKey] ? "\u2713 All Saved" : "Update All Goals"}
+          </button>
+
+          <p style={{ fontSize: 11, color: C.textMuted, textAlign: "center", marginTop: 12 }}>
+            Pacing updates instantly &bull; Dashboard syncs within 1 hour
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

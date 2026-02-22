@@ -1,0 +1,45 @@
+# CloserMetrix API — Auto-Deploy to Cloud Run
+#
+# Triggers on every push to main. Builds the Docker image via Cloud Build
+# and deploys to Cloud Run automatically.
+#
+# REQUIRED GITHUB SECRET:
+#   GCP_SA_KEY — JSON key for a GCP service account with these roles:
+#     - Cloud Build Editor (roles/cloudbuild.builds.editor)
+#     - Service Account User (roles/iam.serviceAccountUser)
+#     - Storage Admin (roles/storage.admin) — for uploading build source
+#
+# To set up:
+#   1. In GCP Console → IAM → Service Accounts → create or use existing
+#   2. Download JSON key
+#   3. In GitHub repo → Settings → Secrets → Actions → New repository secret
+#   4. Name: GCP_SA_KEY, Value: paste the entire JSON key contents
+
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy via Cloud Build
+        run: |
+          gcloud builds submit \
+            --config cloudbuild.yaml \
+            --substitutions=COMMIT_SHA=$(git rev-parse --short HEAD) \
+            --project=closer-automation

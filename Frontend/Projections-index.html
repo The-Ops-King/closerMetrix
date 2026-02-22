@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CloserMetrix Projections</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #212022; font-family: 'Google Sans', 'Segoe UI', system-ui, sans-serif; }
+    #root { min-height: 100vh; }
+    .loading-screen {
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh; color: #8899aa; font-size: 16px;
+      flex-direction: column; gap: 12px;
+    }
+    .loading-spinner {
+      width: 32px; height: 32px; border: 3px solid #3a3a3b; border-top-color: #2579c0; border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error-screen {
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh; color: #ef5350; font-size: 16px;
+      flex-direction: column; gap: 12px; padding: 40px; text-align: center;
+    }
+    .error-screen code {
+      background: #1e2a3a; padding: 12px 20px; border-radius: 6px;
+      font-size: 13px; color: #8899aa; max-width: 600px; word-break: break-all;
+    }
+    input[type="date"] {
+      background: #212022; color: #e8ecf1; border: 1px solid #3a3a3b;;
+      padding: 6px 10px; border-radius: 4px; font-size: 13px;
+      font-family: inherit; cursor: pointer;
+    }
+    input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.7); cursor: pointer; }
+    select {
+      background: #212022; color: #e8ecf1; border: 1px solid #3a3a3b;;
+      padding: 6px 10px; border-radius: 4px; font-size: 13px;
+      font-family: inherit; cursor: pointer; min-width: 140px;
+    }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+</head>
+<body>
+  <div id="root">
+    <div class="loading-screen">
+      <div class="loading-spinner"></div>
+      Loading projections...
+    </div>
+  </div>
+
+  <script type="text/babel">
+    const API_URL = "https://projections-api-607906164358.us-west2.run.app";
+    const { useState, useMemo, useEffect, useCallback } = React;
+
+    function getClientId() {
+      return new URLSearchParams(window.location.search).get("clientId") || "";
+    }
+
+    const fmt = (n) => Math.abs(n).toLocaleString("en-US", { maximumFractionDigits: 0 });
+    const fmtP = (n) => (n * 100).toFixed(1) + "%";
+    const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+const C = {
+  pageBg: "#212022", cardBg: "#2c3139", cardBorder: "#3a3a3b",
+  sectionBg: "#2f2f30", headerBg: "#1a1a1b",
+  textPrimary: "#e8ecf1", textSecondary: "#8899aa", textMuted: "#5a5a5b",
+  blue: "#2579c0", green: "#4caf51", orange: "#ff8f00",
+  red: "#ef5350", yellow: "#fed450", purple: "#9f45b1", white: "#ffffff",
+};
+
+    function Card({ label, value, color = C.white, sub }) {
+      return (
+        <div style={{
+          background: C.cardBg, border: `1px solid ${C.cardBorder}`, borderRadius: 6,
+          padding: "10px 10px 8px", display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center", minWidth: 0, flex: 1,
+        }}>
+          <div style={{
+            fontSize: 13, fontWeight: 600, color, textTransform: "uppercase",
+            letterSpacing: 0.5, marginBottom: 4, textAlign: "center",
+            lineHeight: 1.2, opacity: 0.85, minHeight: 24, display: "flex", alignItems: "center",
+          }}>{label}</div>
+          <div style={{ fontSize: 28, fontWeight: 700, color, lineHeight: 1.1, whiteSpace: "nowrap" }}>{value}</div>
+          <div style={{ fontSize: 10, color: C.textSecondary, marginTop: 3, minHeight: 14 }}>{sub || "\u00A0"}</div>
+        </div>
+      );
+    }
+
+    function Delta({ value, label, isDollar = false }) {
+      const num = Math.round(value);
+      const positive = num >= 0;
+      const zero = num === 0;
+      const display = zero ? (isDollar ? "$0" : "0") : isDollar
+        ? (positive ? "+$" : "-$") + fmt(num) : (positive ? "+" : "-") + fmt(num);
+      const col = zero ? C.textMuted : positive ? C.green : C.red;
+      const bg = zero ? "rgba(100,120,140,0.08)" : positive ? "rgba(102,187,106,0.1)" : "rgba(239,83,80,0.1)";
+      const bdr = zero ? "rgba(100,120,140,0.15)" : positive ? "rgba(102,187,106,0.25)" : "rgba(239,83,80,0.25)";
+      const arrow = zero ? "–" : positive ? "▲" : "▼";
+      return (
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
+          padding: "5px 8px", background: bg, border: `1px solid ${bdr}`, borderRadius: 5,
+        }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: col, whiteSpace: "nowrap" }}>
+            {arrow} {display}
+          </span>
+          <span style={{ fontSize: 10, color: C.textSecondary, whiteSpace: "nowrap" }}>{label}</span>
+        </div>
+      );
+    }
+
+    function Slider({ label, value, onChange, range, step, unit, color, formatVal }) {
+      const min = -range, max = range;
+      const pct = ((value - min) / (max - min)) * 100;
+      const displayVal = formatVal ? formatVal(value) : value;
+      const fillLeft = value >= 0 ? 50 : pct;
+      const fillWidth = value >= 0 ? pct - 50 : 50 - pct;
+      return (
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: C.textSecondary, textTransform: "uppercase", letterSpacing: 0.5 }}>{label}</span>
+            <span style={{ fontSize: 16, fontWeight: 700, color }}>{value > 0 ? "+" : ""}{displayVal}{unit}</span>
+          </div>
+          <div style={{ position: "relative", height: 28, display: "flex", alignItems: "center" }}>
+            <div style={{ position: "absolute", width: "100%", height: 6, background: C.headerBg, borderRadius: 3 }} />
+            <div style={{ position: "absolute", left: "50%", width: 2, height: 14, background: C.textMuted, borderRadius: 1, transform: "translateX(-1px)" }} />
+            <div style={{
+              position: "absolute", left: `${fillLeft}%`, width: `${fillWidth}%`, height: 6,
+              background: value === 0 ? "transparent" : value < 0 ? C.red : color,
+              borderRadius: 3, transition: "all 0.05s", opacity: 0.7,
+            }} />
+            <input type="range" min={min} max={max} step={step} value={value}
+              onChange={(e) => onChange(Number(e.target.value))}
+              style={{ position: "absolute", width: "100%", height: 28, opacity: 0, cursor: "pointer", margin: 0 }}
+            />
+            <div style={{
+              position: "absolute", left: `calc(${pct}% - 9px)`, width: 18, height: 18,
+              background: color, borderRadius: "50%", boxShadow: `0 0 10px ${color}44`,
+              pointerEvents: "none", transition: "left 0.05s",
+            }} />
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: C.textMuted, marginTop: 2 }}>
+            <span>{formatVal ? formatVal(-range) : -range}{unit}</span>
+            <span>0{unit}</span>
+            <span>+{formatVal ? formatVal(range) : range}{unit}</span>
+          </div>
+        </div>
+      );
+    }
+
+    function SectionHeader({ children }) {
+      return (
+        <div style={{ background: C.sectionBg, borderRadius: 8, padding: "16px 0", textAlign: "center", marginBottom: 20 }}>
+          <h2 style={{ margin: 0, fontSize: 32, fontWeight: 700, color: C.white, letterSpacing: -0.5 }}>{children}</h2>
+        </div>
+      );
+    }
+
+    function SubHeader({ children }) {
+      return (
+        <div style={{ textAlign: "center", marginBottom: 14, marginTop: 28 }}>
+          <h3 style={{ margin: 0, fontSize: 20, fontWeight: 600, color: C.textPrimary }}>{children}</h3>
+        </div>
+      );
+    }
+
+    function ImpactRow({ label, value, isDollar = false }) {
+      const num = Math.round(value);
+      const positive = num >= 0;
+      const zero = num === 0;
+      const display = zero ? (isDollar ? "$0" : "0") : isDollar
+        ? (positive ? "+$" : "-$") + fmt(num) : (positive ? "+" : "-") + fmt(num);
+      const col = zero ? C.textMuted : positive ? C.green : C.red;
+      return (
+        <div style={{
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          padding: "8px 12px", background: C.pageBg, borderRadius: 4,
+        }}>
+          <span style={{ fontSize: 13, color: C.textSecondary }}>{label}</span>
+          <span style={{ fontSize: 16, fontWeight: 700, color: col }}>{display}</span>
+        </div>
+      );
+    }
+
+    function Toggle({ checked, onChange, labelOn, labelOff }) {
+      return (
+        <div onClick={() => onChange(!checked)}
+          style={{ display: "inline-flex", alignItems: "center", gap: 8, cursor: "pointer", userSelect: "none", minWidth: 240, justifyContent: "center" }}>
+          <div style={{
+            width: 36, height: 20, borderRadius: 10, position: "relative", flexShrink: 0,
+            background: checked ? C.blue : C.cardBorder, transition: "background 0.2s",
+          }}>
+            <div style={{
+              width: 16, height: 16, borderRadius: 8, background: C.white,
+              position: "absolute", top: 2, left: checked ? 18 : 2,
+              transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+            }} />
+          </div>
+          <span style={{ fontSize: 11, color: C.textSecondary, minWidth: 190 }}>
+            {checked ? labelOn : labelOff}
+          </span>
+        </div>
+      );
+    }
+
+    function Projections({ baseline: b }) {
+      const [showRateAdj, setShowRateAdj] = useState(0);
+      const [closeRateAdj, setCloseRateAdj] = useState(0);
+      const [dealSizeAdj, setDealSizeAdj] = useState(0);
+      const [prospectsAdj, setProspectsAdj] = useState(0);
+      const [showFullMonth, setShowFullMonth] = useState(true);
+      const [showFullYear, setShowFullYear] = useState(true);
+
+      const p = useMemo(() => {
+        const adjShowRate = clamp(b.showRate + showRateAdj / 100, 0, 1);
+        const adjCloseRate = clamp(b.closeRate + closeRateAdj / 100, 0, 1);
+        const adjDealSize = Math.max(0, b.avgDealSize + dealSizeAdj);
+        const cashRatio = b.avgCashCollected / b.avgDealSize;
+        const adjCashPer = Math.max(0, adjDealSize * cashRatio);
+        const adjProspects = Math.max(0, b.prospectsBookedPerMonth + prospectsAdj);
+
+        const dailySched = b.callsScheduled / b.daysInPeriod;
+        const dailyHeld = b.currentCallsHeld / b.daysInPeriod;
+        const dailyCloses = b.currentCloses / b.daysInPeriod;
+        const dailyRev = b.currentRevenue / b.daysInPeriod;
+        const dailyCash = b.currentCash / b.daysInPeriod;
+
+        const pR = adjProspects / b.prospectsBookedPerMonth;
+        const sR = adjShowRate / b.showRate;
+        const cR = adjCloseRate / b.closeRate;
+        const dR = adjDealSize / b.avgDealSize;
+        const caR = adjCashPer / b.avgCashCollected;
+
+        const daysRemainingMonth = b.daysInCurrentMonth - b.dayOfMonth;
+        const cm = b.daysInCurrentMonth;
+
+        const fmBase = { s: dailySched * cm, h: dailyHeld * cm, c: dailyCloses * cm, r: dailyRev * cm, ca: dailyCash * cm };
+        const fmAdj = {
+          s: Math.round(fmBase.s * pR), h: Math.round(fmBase.h * pR * sR),
+          c: Math.round(fmBase.c * pR * sR * cR), r: Math.round(fmBase.r * pR * sR * cR * dR),
+          ca: Math.round(fmBase.ca * pR * sR * cR * caR),
+        };
+        const fmB = { s: Math.round(fmBase.s), h: Math.round(fmBase.h), c: Math.round(fmBase.c), r: Math.round(fmBase.r), ca: Math.round(fmBase.ca) };
+
+        const rmRemBase = { s: dailySched * daysRemainingMonth, h: dailyHeld * daysRemainingMonth, c: dailyCloses * daysRemainingMonth, r: dailyRev * daysRemainingMonth, ca: dailyCash * daysRemainingMonth };
+        const rmRemAdj = {
+          s: Math.round(rmRemBase.s * pR), h: Math.round(rmRemBase.h * pR * sR),
+          c: Math.round(rmRemBase.c * pR * sR * cR), r: Math.round(rmRemBase.r * pR * sR * cR * dR),
+          ca: Math.round(rmRemBase.ca * pR * sR * cR * caR),
+        };
+        const rmRemB = { s: Math.round(rmRemBase.s), h: Math.round(rmRemBase.h), c: Math.round(rmRemBase.c), r: Math.round(rmRemBase.r), ca: Math.round(rmRemBase.ca) };
+
+        const mtdFull = {
+          s: b.mtdCallsScheduled + rmRemAdj.s, h: b.mtdCallsHeld + rmRemAdj.h,
+          c: b.mtdCloses + rmRemAdj.c, r: b.mtdRevenue + rmRemAdj.r, ca: b.mtdCash + rmRemAdj.ca,
+        };
+        const mtdFullBase = {
+          s: b.mtdCallsScheduled + rmRemB.s, h: b.mtdCallsHeld + rmRemB.h,
+          c: b.mtdCloses + rmRemB.c, r: b.mtdRevenue + rmRemB.r, ca: b.mtdCash + rmRemB.ca,
+        };
+
+        const daysRemainingYear = b.daysInYear - b.dayOfYear;
+
+        const yrRemBase = { s: dailySched * daysRemainingYear, h: dailyHeld * daysRemainingYear, c: dailyCloses * daysRemainingYear, r: dailyRev * daysRemainingYear, ca: dailyCash * daysRemainingYear };
+        const yrRemAdj = {
+          s: Math.round(yrRemBase.s * pR), h: Math.round(yrRemBase.h * pR * sR),
+          c: Math.round(yrRemBase.c * pR * sR * cR), r: Math.round(yrRemBase.r * pR * sR * cR * dR),
+          ca: Math.round(yrRemBase.ca * pR * sR * cR * caR),
+        };
+        const yrRemB = { s: Math.round(yrRemBase.s), h: Math.round(yrRemBase.h), c: Math.round(yrRemBase.c), r: Math.round(yrRemBase.r), ca: Math.round(yrRemBase.ca) };
+
+        const yrFull = {
+          s: b.ytdCallsScheduled + yrRemAdj.s, h: b.ytdCallsHeld + yrRemAdj.h,
+          c: b.ytdCloses + yrRemAdj.c, r: b.ytdRevenue + yrRemAdj.r, ca: b.ytdCash + yrRemAdj.ca,
+        };
+        const yrFullBase = {
+          s: b.ytdCallsScheduled + yrRemB.s, h: b.ytdCallsHeld + yrRemB.h,
+          c: b.ytdCloses + yrRemB.c, r: b.ytdRevenue + yrRemB.r, ca: b.ytdCash + yrRemB.ca,
+        };
+
+        return {
+          adjShowRate, adjCloseRate, adjDealSize, adjProspects,
+          daysRemainingMonth, daysRemainingYear,
+          fm: fmAdj, fmD: { s: fmAdj.s - fmB.s, h: fmAdj.h - fmB.h, c: fmAdj.c - fmB.c, r: fmAdj.r - fmB.r, ca: fmAdj.ca - fmB.ca },
+          mtd: mtdFull, mtdD: { s: mtdFull.s - mtdFullBase.s, h: mtdFull.h - mtdFullBase.h, c: mtdFull.c - mtdFullBase.c, r: mtdFull.r - mtdFullBase.r, ca: mtdFull.ca - mtdFullBase.ca },
+          yr: yrRemAdj, yrD: { s: yrRemAdj.s - yrRemB.s, h: yrRemAdj.h - yrRemB.h, c: yrRemAdj.c - yrRemB.c, r: yrRemAdj.r - yrRemB.r, ca: yrRemAdj.ca - yrRemB.ca },
+          yf: yrFull, yfD: { s: yrFull.s - yrFullBase.s, h: yrFull.h - yrFullBase.h, c: yrFull.c - yrFullBase.c, r: yrFull.r - yrFullBase.r, ca: yrFull.ca - yrFullBase.ca },
+        };
+      }, [showRateAdj, closeRateAdj, dealSizeAdj, prospectsAdj, b]);
+
+      const hasChanges = showRateAdj !== 0 || closeRateAdj !== 0 || dealSizeAdj !== 0 || prospectsAdj !== 0;
+
+      const eom = showFullMonth
+        ? { data: p.mtd, delta: p.mtdD, sub: `MTD actuals + ${p.daysRemainingMonth} days projected` }
+        : { data: p.fm, delta: p.fmD, sub: `Full month projected (${b.daysInCurrentMonth} days)` };
+
+      const eoy = showFullYear
+        ? { data: p.yf, delta: p.yfD, sub: `YTD actuals + ${p.daysRemainingYear} days projected` }
+        : { data: p.yr, delta: p.yrD, sub: `${p.daysRemainingYear} days remaining` };
+
+      const ProjCol = ({ title, toggleChecked, onToggle, toggleOn, toggleOff, sub, data, delta, period }) => (
+        <div style={{ flex: 1 }}>
+          <div style={{ textAlign: "center", marginBottom: 12, minHeight: 62 }}>
+            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: C.textPrimary }}>{title}</h3>
+            <div style={{ marginTop: 6, display: "flex", justifyContent: "center" }}>
+              <Toggle checked={toggleChecked} onChange={onToggle} labelOn={toggleOn} labelOff={toggleOff} />
+            </div>
+            <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2 }}>{sub}</div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 6 }}>
+            <Card label="Calls Scheduled" value={fmt(data.s)} color={C.blue} />
+            <Card label="Calls Held" value={fmt(data.h)} color={C.blue} />
+            <Card label="Projected Closes" value={fmt(data.c)} color={C.green} />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 6 }}>
+            <Card label="Projected Revenue" value={"$" + fmt(data.r)} color={C.orange} />
+            <Card label="Projected Cash" value={"$" + fmt(data.ca)} color={C.orange} />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 4 }}>
+            <Delta value={delta.s} label={`sched / ${period}`} />
+            <Delta value={delta.h} label={`held / ${period}`} />
+            <Delta value={delta.c} label={`closes / ${period}`} />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+            <Delta value={delta.r} label={`rev / ${period}`} isDollar />
+            <Delta value={delta.ca} label={`cash / ${period}`} isDollar />
+          </div>
+        </div>
+      );
+
+      return (
+        <div>
+          <SubHeader>Your Current Baseline</SubHeader>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 10, marginBottom: 8 }}>
+            <Card label="Prospects / Month" value={fmt(b.prospectsBookedPerMonth)} color={C.blue} />
+            <Card label="Show Rate" value={fmtP(b.showRate)} color={C.green} />
+            <Card label="Close Rate" value={fmtP(b.closeRate)} color={C.green} />
+            <Card label="Avg Deal Size" value={"$" + fmt(b.avgDealSize)} color={C.orange} />
+            <Card label="Avg Cash Collected" value={"$" + fmt(b.avgCashCollected)} color={C.orange} />
+            <Card label="Avg Calls to Close" value={b.avgCallsToClose.toFixed(1)} color={C.white} />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 6 }}>
+            <Card label="Monthly Revenue" value={"$" + fmt(b.currentRevenue)} color={C.orange} />
+            <Card label="Monthly Cash" value={"$" + fmt(b.currentCash)} color={C.orange} />
+            <Card label="Monthly Closes" value={fmt(b.currentCloses)} color={C.green} />
+          </div>
+          <div style={{ fontSize: 11, color: C.textMuted, textAlign: "center", marginBottom: 28 }}>
+            Rates based on: {b.dateRange} ({b.daysInPeriod} days)
+          </div>
+
+          <SubHeader>Adjust Your Numbers</SubHeader>
+          <div style={{
+            background: C.cardBg, border: `1px solid ${C.cardBorder}`,
+            borderRadius: 8, padding: "16px 28px 12px", marginBottom: 8,
+          }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px 40px" }}>
+              <Slider label="Show Rate" value={showRateAdj} onChange={setShowRateAdj}
+                range={15} step={0.5} unit="%" color={C.green} />
+              <Slider label="Close Rate" value={closeRateAdj} onChange={setCloseRateAdj}
+                range={15} step={0.5} unit="%" color={C.blue} />
+              <Slider label="Avg Deal Size" value={dealSizeAdj} onChange={setDealSizeAdj}
+                range={5000} step={100} unit="" color={C.orange}
+                formatVal={(v) => (v >= 0 ? "$" : "-$") + fmt(Math.abs(v))} />
+              <Slider label="Prospects Booked / Month" value={prospectsAdj} onChange={setProspectsAdj}
+                range={500} step={10} unit="" color={C.purple} />
+            </div>
+            <div style={{ textAlign: "center", marginTop: 12, minHeight: 28 }}>
+              <button
+                onClick={() => { if (hasChanges) { setShowRateAdj(0); setCloseRateAdj(0); setDealSizeAdj(0); setProspectsAdj(0); } }}
+                style={{
+                  background: "transparent", border: `1px solid ${C.cardBorder}`,
+                  color: hasChanges ? C.textSecondary : C.textMuted,
+                  padding: "6px 16px", borderRadius: 4, fontSize: 12,
+                  cursor: hasChanges ? "pointer" : "default",
+                  opacity: hasChanges ? 1 : 0.35, transition: "opacity 0.2s",
+                }}>Reset All Sliders</button>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 12 }}>
+            <Card label={hasChanges ? "Adjusted Show Rate" : "Actual Show Rate"}
+              value={fmtP(p.adjShowRate)} color={C.green}
+              sub={hasChanges ? `was ${fmtP(b.showRate)}` : "\u00A0"} />
+            <Card label={hasChanges ? "Adjusted Close Rate" : "Actual Close Rate"}
+              value={fmtP(p.adjCloseRate)} color={C.blue}
+              sub={hasChanges ? `was ${fmtP(b.closeRate)}` : "\u00A0"} />
+            <Card label={hasChanges ? "Adjusted Deal Size" : "Actual Deal Size"}
+              value={"$" + fmt(p.adjDealSize)} color={C.orange}
+              sub={hasChanges ? `was $${fmt(b.avgDealSize)}` : "\u00A0"} />
+            <Card label={hasChanges ? "Adjusted Prospects / Mo" : "Actual Prospects / Mo"}
+              value={fmt(p.adjProspects)} color={C.purple}
+              sub={hasChanges ? `was ${fmt(b.prospectsBookedPerMonth)}` : "\u00A0"} />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginTop: 28 }}>
+            <ProjCol
+              title="End of Month Projection"
+              toggleChecked={showFullMonth} onToggle={setShowFullMonth}
+              toggleOn="MTD actuals + projected remaining" toggleOff="Full month projected"
+              sub={eom.sub} data={eom.data} delta={eom.delta} period="mo"
+            />
+            <ProjCol
+              title="End of Year Projection"
+              toggleChecked={showFullYear} onToggle={setShowFullYear}
+              toggleOn="YTD actuals + projected remaining" toggleOff="Remaining only"
+              sub={eoy.sub} data={eoy.data} delta={eoy.delta} period="yr"
+            />
+          </div>
+
+          <SubHeader>Impact Summary</SubHeader>
+          <div style={{
+            background: C.cardBg, border: `1px solid ${C.cardBorder}`,
+            borderRadius: 8, padding: "20px 28px", marginBottom: 20,
+          }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.textSecondary, marginBottom: 12, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                  Monthly Impact
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <ImpactRow label="Additional Closes" value={eom.delta.c} />
+                  <ImpactRow label="Additional Revenue" value={eom.delta.r} isDollar />
+                  <ImpactRow label="Additional Cash" value={eom.delta.ca} isDollar />
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.textSecondary, marginBottom: 12, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                  Yearly Impact {!showFullYear && "(Remaining)"}
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <ImpactRow label="Additional Closes" value={eoy.delta.c} />
+                  <ImpactRow label="Additional Revenue" value={eoy.delta.r} isDollar />
+                  <ImpactRow label="Additional Cash" value={eoy.delta.ca} isDollar />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ textAlign: "center", fontSize: 11, color: C.textMuted, paddingTop: 10, paddingBottom: 12 }}>
+            Projections are estimates based on current baseline metrics. Actual results may vary.
+          </div>
+        </div>
+      );
+    }
+
+    // ============================================================
+    // App — manages filters, loading, and data fetching
+    // ============================================================
+    function App() {
+      const clientId = getClientId();
+      const [closers, setClosers] = useState([]);
+      const [selectedCloser, setSelectedCloser] = useState("");
+      const [startDate, setStartDate] = useState("");
+      const [endDate, setEndDate] = useState("");
+      const [minDate, setMinDate] = useState("");
+      const [maxDate, setMaxDate] = useState("");
+      const [baseline, setBaseline] = useState(null);
+      const [error, setError] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [fetching, setFetching] = useState(false);
+
+      useEffect(() => {
+        if (!clientId) {
+          setError("Missing clientId in URL. Use ?clientId=your_id or ?clientId=all");
+          setLoading(false);
+          return;
+        }
+
+        Promise.all([
+          fetch(`${API_URL}?action=closers&clientId=${clientId}`).then(r => r.json()),
+          fetch(`${API_URL}?action=daterange&clientId=${clientId}`).then(r => r.json()),
+        ]).then(([closersData, dateData]) => {
+          setClosers(closersData.closers || []);
+          const min = dateData.min_date || "";
+          const max = dateData.max_date || "";
+          setMinDate(min);
+          setMaxDate(max);
+          const maxD = new Date(max + "T00:00:00Z");
+          const defaultStart = new Date(maxD);
+          defaultStart.setDate(defaultStart.getDate() - 90);
+          const startStr = defaultStart.toISOString().slice(0, 10);
+          const effectiveStart = startStr < min ? min : startStr;
+          setStartDate(effectiveStart);
+          setEndDate(max);
+          return fetchBaseline(effectiveStart, max, "");
+        }).catch(err => {
+          setError(err.message);
+          setLoading(false);
+        });
+      }, []);
+
+      const fetchBaseline = useCallback((sd, ed, closer) => {
+        setFetching(true);
+        let url = `${API_URL}?clientId=${clientId}&startDate=${sd}&endDate=${ed}`;
+        if (closer) url += `&closerId=${closer}`;
+
+        return fetch(url)
+          .then(r => r.json())
+          .then(data => {
+            if (data.error) throw new Error(data.error);
+            setBaseline(data);
+            setLoading(false);
+            setFetching(false);
+          })
+          .catch(err => {
+            setError(err.message);
+            setLoading(false);
+            setFetching(false);
+          });
+      }, [clientId]);
+
+      const handleApply = () => {
+        if (startDate && endDate) {
+          fetchBaseline(startDate, endDate, selectedCloser);
+        }
+      };
+
+      if (!clientId) {
+        return (
+          <div className="error-screen">
+            <div style={{ fontSize: 24, fontWeight: 700 }}>⚠️ Missing Client</div>
+            <div>Use ?clientId=your_id or ?clientId=all</div>
+          </div>
+        );
+      }
+
+      if (loading) {
+        return (
+          <div className="loading-screen">
+            <div className="loading-spinner"></div>
+            Loading projections...
+          </div>
+        );
+      }
+
+      if (error) {
+        return (
+          <div className="error-screen">
+            <div style={{ fontSize: 24, fontWeight: 700 }}>⚠️ Error</div>
+            <div>{error}</div>
+          </div>
+        );
+      }
+
+      return (
+        <div style={{
+          background: C.pageBg, minHeight: "100vh",
+          fontFamily: "'Google Sans', 'Segoe UI', system-ui, sans-serif",
+          color: C.white, padding: "24px 32px", maxWidth: 1400, margin: "0 auto",
+        }}>
+          {/* Header with filters */}
+          <div style={{
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+            marginBottom: 24, background: C.headerBg, padding: "14px 24px", borderRadius: 8,
+            flexWrap: "wrap", gap: 12,
+          }}>
+            <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: -0.3 }}>
+              CloserMetrix <span style={{ color: C.blue }}>INSIGHT</span>
+            </h1>
+            <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontSize: 11, color: C.textSecondary, textTransform: "uppercase" }}>Closer</span>
+                <select value={selectedCloser} onChange={e => setSelectedCloser(e.target.value)}>
+                  <option value="">All Closers</option>
+                  {closers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontSize: 11, color: C.textSecondary, textTransform: "uppercase" }}>From</span>
+                <input type="date" value={startDate} min={minDate} max={endDate}
+                  onChange={e => setStartDate(e.target.value)} />
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontSize: 11, color: C.textSecondary, textTransform: "uppercase" }}>To</span>
+                <input type="date" value={endDate} min={startDate} max={maxDate}
+                  onChange={e => setEndDate(e.target.value)} />
+              </div>
+              <button onClick={handleApply} disabled={fetching}
+                style={{
+                  background: fetching ? C.cardBorder : C.blue, color: C.headerBg,
+                  border: "none", padding: "7px 18px", borderRadius: 4,
+                  fontSize: 13, fontWeight: 700, cursor: fetching ? "default" : "pointer",
+                  opacity: fetching ? 0.6 : 1,
+                }}>
+                {fetching ? "Loading..." : "Apply"}
+              </button>
+            </div>
+          </div>
+
+          <SectionHeader>Projections</SectionHeader>
+
+          {/* Overlay while fetching new data */}
+          <div style={{ position: "relative", opacity: fetching ? 0.4 : 1, transition: "opacity 0.3s" }}>
+            {baseline ? <Projections baseline={baseline} /> : (
+              <div className="loading-screen" style={{ minHeight: 400 }}>
+                <div className="loading-spinner"></div>
+                Loading data...
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

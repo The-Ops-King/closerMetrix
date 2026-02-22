@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+client/node_modules/
+
+# Build output
+client/dist/
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# GCP service account keys — NEVER commit these
+*.json
+!package.json
+!package-lock.json
+!client/package.json
+!client/package-lock.json
+!tsconfig.json
+
+# Screenshots / images
+*.png
+*.jpg
+*.jpeg
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*

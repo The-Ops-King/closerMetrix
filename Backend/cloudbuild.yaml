@@ -1,0 +1,72 @@
+# CloserMetrix API — Cloud Build Configuration
+#
+# Builds the Docker image and deploys to Cloud Run.
+#
+# Usage:
+#   gcloud builds submit --config cloudbuild.yaml --substitutions=COMMIT_SHA=$(git rev-parse --short HEAD)
+#
+# Prerequisites:
+#   - GCP project: closer-automation
+#   - Cloud Run service name: closermetrix-api
+#   - Artifact Registry repo: us-central1-docker.pkg.dev/closer-automation/closermetrix
+#   - Secrets in Secret Manager: ADMIN_API_KEY, ANTHROPIC_API_KEY, GOOGLE_CALENDAR_CREDENTIALS
+#   - Service account with BigQuery and Calendar API access
+
+steps:
+  # Build the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-api:$COMMIT_SHA'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-api:latest'
+      - '.'
+
+  # Push the image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-api:$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-api:latest'
+
+  # Deploy to Cloud Run
+  # Secrets are pulled from GCP Secret Manager at runtime.
+  # Non-sensitive config is set as plain env vars.
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'closermetrix-api'
+      - '--image'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-api:$COMMIT_SHA'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--memory'
+      - '512Mi'
+      - '--cpu'
+      - '1'
+      - '--min-instances'
+      - '1'
+      - '--max-instances'
+      - '10'
+      - '--timeout'
+      - '300s'
+      # ── Secrets from GCP Secret Manager ──
+      - '--set-secrets'
+      - 'ADMIN_API_KEY=ADMIN_API_KEY:latest,ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,GOOGLE_CALENDAR_CREDENTIALS=GOOGLE_CALENDAR_CREDENTIALS:latest'
+      # ── Non-sensitive environment variables ──
+      - '--set-env-vars'
+      - 'GCP_PROJECT_ID=closer-automation,BQ_DATASET=CloserAutomation,NODE_ENV=production,BASE_URL=https://closermetrix-api-b4x4dur6ha-uc.a.run.app,AI_MODEL=claude-sonnet-4-5-20250929,AI_MAX_TOKENS=8000,AI_INPUT_COST_PER_MILLION=3.00,AI_OUTPUT_COST_PER_MILLION=15.00,TRANSCRIPT_TIMEOUT_MINUTES=5,GHOST_CHECK_INTERVAL_MINUTES=5,FATHOM_POLL_INTERVALS=30:60:120:300:600:900,GCP_LOCATION=us-central1,CLOUD_TASKS_QUEUE=closermetrix-processing'
+
+images:
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-api:$COMMIT_SHA'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-api:latest'

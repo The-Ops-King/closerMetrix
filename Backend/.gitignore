@@ -1,0 +1,14 @@
+node_modules/
+coverage/
+.DS_Store
+*.log
+
+# Secrets & credentials — NEVER commit
+.env
+.env.*
+service-account.json
+client_secret.json
+*.pem
+*.key
+*credentials*.json
+.gcp-local-key.json

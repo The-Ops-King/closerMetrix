@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+
+# Build output
+Frontend/client/dist/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# GCP service account keys — NEVER commit
+service-account.json
+client_secret.json
+*.pem
+*.key
+*credentials*.json
+.gcp-local-key.json
+
+# Screenshots / images at root
+/*.png
+/*.jpg
+/*.jpeg
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage/

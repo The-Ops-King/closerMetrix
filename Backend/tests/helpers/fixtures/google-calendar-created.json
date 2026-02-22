@@ -1,0 +1,35 @@
+{
+  "id": "event_abc123",
+  "status": "confirmed",
+  "summary": "Discovery Call with John Smith",
+  "start": {
+    "dateTime": "2026-02-20T15:00:00-05:00",
+    "timeZone": "America/New_York"
+  },
+  "end": {
+    "dateTime": "2026-02-20T16:00:00-05:00",
+    "timeZone": "America/New_York"
+  },
+  "organizer": {
+    "email": "sarah@acmecoaching.com",
+    "displayName": "Sarah Closer",
+    "self": true
+  },
+  "creator": {
+    "email": "sarah@acmecoaching.com",
+    "displayName": "Sarah Closer"
+  },
+  "attendees": [
+    {
+      "email": "sarah@acmecoaching.com",
+      "displayName": "Sarah Closer",
+      "organizer": true,
+      "responseStatus": "accepted"
+    },
+    {
+      "email": "john@example.com",
+      "displayName": "John Smith",
+      "responseStatus": "needsAction"
+    }
+  ]
+}
