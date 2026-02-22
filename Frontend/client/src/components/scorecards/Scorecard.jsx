@@ -99,6 +99,7 @@ export default function Scorecard({
   onClick = null,
   subtitle = null,
   subtitleColor = null,
+  reserveSubtitleSpace = false,
 }) {
   injectStyles();
 
@@ -256,19 +257,21 @@ export default function Scorecard({
       )}
 
       {/* Subtitle — optional text below value (e.g. "On Pace", "was 73.2%") */}
-      {subtitle && hasValue && (
+      {/* When reserveSubtitleSpace is true, always renders to prevent height shifts */}
+      {(subtitle || reserveSubtitleSpace) && hasValue && (
         <Typography
           sx={{
             color: subtitleColor || COLORS.text.muted,
             fontSize: '0.75rem',
             fontWeight: 600,
             mt: '8px',
+            visibility: subtitle ? 'visible' : 'hidden',
             opacity: revealed ? 1 : 0,
             transform: revealed ? 'translateY(0)' : 'translateY(8px)',
             transition: 'opacity 0.4s ease-out 0.1s, transform 0.4s ease-out 0.1s',
           }}
         >
-          {subtitle}
+          {subtitle || '\u00A0'}
         </Typography>
       )}
     </Box>

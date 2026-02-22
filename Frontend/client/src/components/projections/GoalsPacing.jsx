@@ -25,11 +25,12 @@ import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
 import Snackbar from '@mui/material/Snackbar';
 import InputAdornment from '@mui/material/InputAdornment';
-import Divider from '@mui/material/Divider';
+
 import { COLORS } from '../../theme/constants';
 import { useAuth } from '../../context/AuthContext';
 import { apiPut } from '../../utils/api';
 import Scorecard from '../scorecards/Scorecard';
+import SectionHeader from '../SectionHeader';
 
 // ── Helpers ────────────────────────────────────────────────────
 
@@ -115,23 +116,12 @@ function PacingRow({ periodLabel, actual, goal, timeProgress }) {
   const hasGoal = goal > 0;
 
   return (
-    <Box sx={{ py: 1.5 }}>
+    <Box>
       {/* Period label */}
-      <Typography
-        sx={{
-          fontSize: '0.8rem',
-          fontWeight: 700,
-          color: COLORS.neon.cyan,
-          textTransform: 'uppercase',
-          letterSpacing: '0.08em',
-          mb: 1,
-        }}
-      >
-        {periodLabel}
-      </Typography>
+      <SectionHeader title={periodLabel} color={COLORS.neon.cyan} size="sm" />
 
       {/* 4 cards in a row */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' }, gap: 1.25 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' }, gap: 1.5, mt: 1 }}>
         <Scorecard
           label={`${periodLabel} Goal`}
           value={hasGoal ? goal : NaN}
@@ -362,55 +352,31 @@ export default function GoalsPacing({ goals, actuals, calendar, onGoalsSaved }) 
   }
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
 
       {/* ── Section Header ── */}
-      <Box sx={{ backgroundColor: COLORS.bg.tertiary, borderRadius: 2, p: 2, textAlign: 'center' }}>
-        <Typography sx={{ fontSize: '1.5rem', fontWeight: 700, color: COLORS.text.primary }}>
-          Pacing & Goals
-        </Typography>
-      </Box>
+      <SectionHeader title="Pacing & Goals" color={COLORS.neon.teal} />
 
       {/* ── Pacing Rows — full width ── */}
-      <Box
-        sx={{
-          backgroundColor: COLORS.bg.secondary,
-          border: `1px solid ${COLORS.border.subtle}`,
-          borderRadius: 2,
-          padding: '16px 20px',
-        }}
-      >
-        {/* Weekly */}
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
         <PacingRow
           periodLabel="Weekly"
           actual={actuals.wtdRevenue || 0}
           goal={computedGoals.weekly}
           timeProgress={weekProgress}
         />
-
-        <Divider sx={{ borderColor: COLORS.border.subtle, my: 0.5 }} />
-
-        {/* Monthly */}
         <PacingRow
           periodLabel="Monthly"
           actual={actuals.mtdRevenue || 0}
           goal={computedGoals.monthly}
           timeProgress={monthProgress}
         />
-
-        <Divider sx={{ borderColor: COLORS.border.subtle, my: 0.5 }} />
-
-        {/* Quarterly */}
         <PacingRow
           periodLabel="Quarterly"
           actual={actuals.qtdRevenue || 0}
           goal={computedGoals.quarterly}
           timeProgress={quarterProgress}
         />
-
-        <Divider sx={{ borderColor: COLORS.border.subtle, my: 0.5 }} />
-
-        {/* Yearly */}
         <PacingRow
           periodLabel="Yearly"
           actual={actuals.ytdRevenue || 0}

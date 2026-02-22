@@ -30,6 +30,7 @@ import { DUMMY_PROJECTIONS } from '../../utils/dummyData';
 
 import ScenarioSlider from '../../components/projections/ScenarioSlider';
 import Scorecard from '../../components/scorecards/Scorecard';
+import SectionHeader from '../../components/SectionHeader';
 import GoalsPacing from '../../components/projections/GoalsPacing';
 import TierGate from '../../components/TierGate';
 
@@ -544,14 +545,10 @@ export default function ProjectionsPage() {
 
       {/* Projections content -- only renders when baseline data is available */}
       {b && p && (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
 
           {/* ======== Section 1: Your Current Baseline ======== */}
-          <Box sx={{ backgroundColor: COLORS.bg.tertiary, borderRadius: 2, p: 2, textAlign: 'center', mb: 1 }}>
-            <Typography sx={{ fontSize: '1.5rem', fontWeight: 700, color: COLORS.text.primary }}>
-              Your Current Baseline
-            </Typography>
-          </Box>
+          <SectionHeader title="Your Current Baseline" color={COLORS.neon.cyan} />
 
           {/* Baseline cards -- 6 across: core rates and averages */}
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(6, 1fr)' }, gap: 1.25 }}>
@@ -576,11 +573,7 @@ export default function ProjectionsPage() {
           </Typography>
 
           {/* ======== Section 2: Adjust Your Numbers ======== */}
-          <Box sx={{ backgroundColor: COLORS.bg.tertiary, borderRadius: 2, p: 2, textAlign: 'center' }}>
-            <Typography sx={{ fontSize: '1.5rem', fontWeight: 700, color: COLORS.text.primary }}>
-              Adjust Your Numbers
-            </Typography>
-          </Box>
+          <SectionHeader title="Adjust Your Numbers" color={COLORS.neon.green} />
 
           {/* 4 Sliders in a 2x2 grid inside a card */}
           <Box
@@ -664,6 +657,7 @@ export default function ProjectionsPage() {
               format="percent"
               glowColor={COLORS.neon.green}
               subtitle={hasChanges ? `was ${fmtP(b.showRate)}` : undefined}
+              reserveSubtitleSpace
             />
             <Scorecard
               label={hasChanges ? 'Adjusted Close Rate' : 'Actual Close Rate'}
@@ -671,6 +665,7 @@ export default function ProjectionsPage() {
               format="percent"
               glowColor={COLORS.neon.cyan}
               subtitle={hasChanges ? `was ${fmtP(b.closeRate)}` : undefined}
+              reserveSubtitleSpace
             />
             <Scorecard
               label={hasChanges ? 'Adjusted Deal Size' : 'Actual Deal Size'}
@@ -678,6 +673,7 @@ export default function ProjectionsPage() {
               format="currency"
               glowColor={COLORS.neon.amber}
               subtitle={hasChanges ? `was $${fmt(b.avgDealSize)}` : undefined}
+              reserveSubtitleSpace
             />
             <Scorecard
               label={hasChanges ? 'Adjusted Prospects / Mo' : 'Actual Prospects / Mo'}
@@ -685,11 +681,12 @@ export default function ProjectionsPage() {
               format="number"
               glowColor={COLORS.neon.purple}
               subtitle={hasChanges ? `was ${fmt(b.prospectsBookedPerMonth)}` : undefined}
+              reserveSubtitleSpace
             />
           </Box>
 
           {/* ======== Section 3: EOM + EOY Projections Side by Side ======== */}
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3, mt: 2 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 1.5 }}>
             <ProjCol
               title="End of Month Projection"
               toggleChecked={showFullMonth}
@@ -715,11 +712,7 @@ export default function ProjectionsPage() {
           </Box>
 
           {/* ======== Section 4: Impact Summary ======== */}
-          <Box sx={{ backgroundColor: COLORS.bg.tertiary, borderRadius: 2, p: 2, textAlign: 'center', mt: 2 }}>
-            <Typography sx={{ fontSize: '1.5rem', fontWeight: 700, color: COLORS.text.primary }}>
-              Impact Summary
-            </Typography>
-          </Box>
+          <SectionHeader title="Impact Summary" color={COLORS.neon.amber} />
 
           <Box
             sx={{
@@ -729,7 +722,7 @@ export default function ProjectionsPage() {
               padding: '20px 28px',
             }}
           >
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2.5 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 1.5 }}>
               {/* Monthly impact column */}
               <Box>
                 <Typography
@@ -786,7 +779,7 @@ export default function ProjectionsPage() {
             }}
           >
             <Typography sx={{ color: COLORS.text.muted, fontSize: '0.8rem' }}>
-              Projections are estimates based on current baseline metrics
+              Last updated: {new Date().toLocaleString()}
             </Typography>
             <Typography sx={{ color: COLORS.text.muted, fontSize: '0.8rem' }}>
               Data refreshes every 5 minutes
