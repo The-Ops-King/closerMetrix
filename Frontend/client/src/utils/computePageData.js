@@ -108,9 +108,39 @@ function weekStart(dateStr) {
   return `${yr}-${mo}-${dd}`;
 }
 
+/** Get the next Monday on or after a YYYY-MM-DD date string */
+function nextMonday(dateStr) {
+  const d = new Date(dateStr + 'T12:00:00');
+  const day = d.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+  if (day === 1) return dateStr; // already Monday
+  const daysUntilMon = day === 0 ? 1 : (8 - day);
+  d.setDate(d.getDate() + daysUntilMon);
+  const yr = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yr}-${mo}-${dd}`;
+}
+
 /** Get month start for a YYYY-MM-DD */
 function monthStart(dateStr) {
   return dateStr.substring(0, 7) + '-01';
+}
+
+/**
+ * Auto-select chart granularity based on the date range span.
+ * Keeps charts readable: daily for short ranges, monthly for long ones.
+ *   ≤14 days  → daily
+ *   15-90 days → weekly
+ *   >90 days  → monthly
+ */
+function autoGranularity(explicit, dateStart, dateEnd) {
+  if (explicit && explicit !== 'auto') return explicit;
+  if (!dateStart || !dateEnd) return 'weekly';
+  const ms = new Date(dateEnd) - new Date(dateStart);
+  const days = Math.round(ms / 86400000);
+  if (days <= 14) return 'daily';
+  if (days <= 90) return 'weekly';
+  return 'monthly';
 }
 
 /** Group items into time buckets. Returns Map<bucketDate, items[]> */
@@ -121,24 +151,33 @@ function groupByTime(items, dateField, granularity) {
     : granularity === 'daily' ? (d) => d
     : weekStart;
 
-  // For weekly bucketing, find the earliest item date so we can clip
-  // week-start dates that fall before the filter range.
-  // e.g. Feb 1 (Sunday) → weekStart = Jan 26 (Monday) — clip to Feb 1.
-  let clipDate = null;
+  // For weekly bucketing: if the date range starts mid-week, merge
+  // the partial first week into the first full Monday bucket.
+  // e.g. Feb 1 (Sunday) → weekStart = Jan 26 (Monday) → merge into Feb 2 (next Monday)
+  // This prevents a tiny 1-day bucket followed by a full 7-day bucket.
+  let mergeTarget = null;
   if (granularity === 'weekly') {
+    let earliest = null;
     for (const item of items) {
       const d = item[dateField];
-      if (!clipDate || d < clipDate) clipDate = d;
+      if (!earliest || d < earliest) earliest = d;
+    }
+    if (earliest) {
+      const ws = weekStart(earliest);
+      if (ws < earliest) {
+        // Range starts mid-week — merge partial-week items into first full Monday
+        mergeTarget = nextMonday(earliest);
+      }
     }
   }
 
   const map = new Map();
   for (const item of items) {
     let bucket = bucketFn(item[dateField]);
-    // Clip: if the Monday falls before the earliest item in our range,
-    // merge into a bucket keyed by that earliest date instead
-    if (clipDate && bucket < clipDate) {
-      bucket = clipDate;
+    // If this item's week-start falls before our merge target,
+    // put it in the first full-week bucket instead
+    if (mergeTarget && bucket < mergeTarget) {
+      bucket = mergeTarget;
     }
     if (!map.has(bucket)) map.set(bucket, []);
     map.get(bucket).push(item);
@@ -192,7 +231,7 @@ const isFollowUp = c => c.callType !== 'First Call' && c.callType !== '';
 const isClosed = c => c.callOutcome === 'Closed - Won';
 const isDeposit = c => c.callOutcome === 'Deposit';
 const isLost = c => c.callOutcome === 'Lost';
-const isDQ = c => c.callOutcome === 'DQ';
+const isDQ = c => c.callOutcome === 'DQ' || c.callOutcome === 'Disqualified';
 const isNotPitched = c => c.callOutcome === 'Not Pitched';
 const isFollowUpOutcome = c => c.callOutcome === 'Follow Up' || c.callOutcome === 'Follow-Up';
 const isGhost = c => c.attendance.includes('Ghost') || c.attendance.includes('No Show');
@@ -216,7 +255,11 @@ function m(label, value, format, glowColor) {
 export function computePageData(section, rawData, filters) {
   if (!rawData || !rawData.calls) return null;
 
-  const { dateStart, dateEnd, closerId, granularity = 'weekly' } = filters;
+  const { dateStart, dateEnd, closerId, granularity: rawGranularity } = filters;
+
+  // Auto-select granularity based on date range span if set to 'auto' or default
+  const granularity = autoGranularity(rawGranularity, dateStart, dateEnd);
+
   const calls = filterCalls(rawData.calls, dateStart, dateEnd, closerId);
   const objections = filterObjections(rawData.objections || [], dateStart, dateEnd, closerId);
   const closeCycles = filterCloseCycles(rawData.closeCycles || [], dateStart, dateEnd, closerId);
@@ -292,6 +335,9 @@ function computeOverview(calls, granularity, rawData, prev) {
       scheduledCloseRate: m('Scheduled \u2192 Close Rate', round(sd(closed.length, calls.length), 3), 'percent', 'blue'),
       callsLost: m('Calls Lost', lost.length, 'number', 'red'),
       lostPct: m('Lost %', round(sd(lost.length, held.length), 3), 'percent', 'red'),
+      avgCallDuration: m('Average Call Duration', round(sd(held.reduce((acc, c) => acc + (c.durationMinutes || 0), 0), held.length), 1), 'duration', 'amber'),
+      activeFollowUp: m('Active Follow Up', calls.filter(c => isShow(c) && isFollowUpOutcome(c)).length, 'number', 'purple'),
+      disqualified: m('# Disqualified', held.filter(isDQ).length, 'number', 'muted'),
     },
   };
 
@@ -340,6 +386,15 @@ function computeOverview(calls, granularity, rawData, prev) {
     s.scheduledCloseRate = withDelta(s.scheduledCloseRate, sd(closed.length, calls.length), sd(pClosed.length, pc.length), dl, 'up');
     s.callsLost = withDelta(s.callsLost, lost.length, pLost.length, dl, 'down');
     s.lostPct = withDelta(s.lostPct, sd(lost.length, held.length), sd(pLost.length, pHeld.length), dl, 'down');
+    const avgDur = sd(held.reduce((acc, c) => acc + (c.durationMinutes || 0), 0), held.length);
+    const pAvgDur = sd(pHeld.reduce((acc, c) => acc + (c.durationMinutes || 0), 0), pHeld.length);
+    s.avgCallDuration = withDelta(s.avgCallDuration, avgDur, pAvgDur, dl, 'up');
+    const activefu = calls.filter(c => isShow(c) && isFollowUpOutcome(c)).length;
+    const pActivefu = pc.filter(c => isShow(c) && isFollowUpOutcome(c)).length;
+    s.activeFollowUp = withDelta(s.activeFollowUp, activefu, pActivefu, dl, 'down');
+    const dqCount = held.filter(isDQ).length;
+    const pDqCount = pHeld.filter(isDQ).length;
+    s.disqualified = withDelta(s.disqualified, dqCount, pDqCount, dl, 'down');
   }
 
   // Time-series charts

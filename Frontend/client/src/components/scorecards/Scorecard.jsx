@@ -87,6 +87,63 @@ function injectStyles() {
   stylesInjected = true;
 }
 
+/**
+ * Hook that animates a number from 0 to `target` over `duration` ms
+ * using an ease-out curve. Returns the current animated value.
+ */
+function useCountUp(target, format, duration = 700) {
+  const [display, setDisplay] = useState(null);
+  const rafRef = useRef(null);
+  const prevTarget = useRef(null);
+
+  useEffect(() => {
+    // No target yet — stay in loading state
+    if (target == null || target === undefined) {
+      setDisplay(null);
+      prevTarget.current = null;
+      return;
+    }
+
+    // Target arrived (or changed) — animate from 0 to target
+    const startTime = performance.now();
+    // For percentages, the raw value is 0-1 scale; we animate the raw number
+    const from = 0;
+    const to = target;
+
+    // If the value is 0, just show it immediately
+    if (to === 0) {
+      setDisplay(formatMetric(0, format));
+      prevTarget.current = target;
+      return;
+    }
+
+    function tick(now) {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      // Ease-out cubic: decelerates toward the end
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const current = from + (to - from) * eased;
+      setDisplay(formatMetric(current, format));
+
+      if (progress < 1) {
+        rafRef.current = requestAnimationFrame(tick);
+      } else {
+        // Ensure we land exactly on the final formatted value
+        setDisplay(formatMetric(to, format));
+      }
+    }
+
+    rafRef.current = requestAnimationFrame(tick);
+    prevTarget.current = target;
+
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [target, format, duration]);
+
+  return display;
+}
+
 export default function Scorecard({
   label,
   value,
@@ -107,6 +164,9 @@ export default function Scorecard({
   const [revealed, setRevealed] = useState(hasValue);
   const prevHasValue = useRef(hasValue);
 
+  // Animated count-up value
+  const animatedValue = useCountUp(hasValue ? value : null, format);
+
   useEffect(() => {
     if (hasValue && !prevHasValue.current) {
       setRevealed(false);
@@ -117,7 +177,7 @@ export default function Scorecard({
     prevHasValue.current = hasValue;
   }, [hasValue]);
 
-  const displayValue = formatMetric(value, format);
+  const displayValue = animatedValue != null ? animatedValue : formatMetric(value, format);
   const deltaColor = getDeltaColor(delta, desiredDirection);
 
   return (
@@ -173,17 +233,23 @@ export default function Scorecard({
       {/* Value — large, colored, centered */}
       <Box sx={{ position: 'relative', minHeight: 36 }}>
         {!hasValue ? (
-          <Box
+          <Typography
             sx={{
-              height: 28,
-              width: '60%',
-              margin: '0 auto',
-              borderRadius: 1,
-              background: 'linear-gradient(90deg, #111 0%, #222 50%, #111 100%)',
-              backgroundSize: '400px 100%',
+              color: COLORS.text.muted,
+              fontSize: '1rem',
+              fontWeight: 500,
+              letterSpacing: '0.05em',
+              lineHeight: 2.75,
               animation: 'scorecard-shimmer 1.5s ease-in-out infinite',
+              backgroundImage: `linear-gradient(90deg, ${COLORS.text.muted} 0%, ${COLORS.text.secondary} 50%, ${COLORS.text.muted} 100%)`,
+              backgroundSize: '200px 100%',
+              backgroundClip: 'text',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
             }}
-          />
+          >
+            Loading...
+          </Typography>
         ) : (
           <Typography
             sx={{

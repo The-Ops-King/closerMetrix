@@ -48,13 +48,13 @@ export default function TronLineChart({
   stacked = false,
 }) {
   /**
-   * Parse date strings into Date objects for the X axis.
-   * MUI X Charts v7 xAxis with scaleType 'time' expects Date objects.
+   * Format date strings into display labels for the X axis.
+   * We use scaleType 'point' (not 'time') so that tick labels always
+   * match exactly to actual data bucket dates — no MUI auto-generated
+   * intermediate ticks that don't correspond to real data points.
    */
-  const xAxisData = useMemo(
-    // Append T12:00:00 so JS parses as LOCAL noon, not UTC midnight.
-    // Without this, 'YYYY-MM-DD' is parsed as UTC, shifting dates back 1 day in US timezones.
-    () => data.map((d) => new Date(d.date + 'T12:00:00')),
+  const xAxisLabels = useMemo(
+    () => data.map((d) => formatDateLabel(new Date(d.date + 'T12:00:00'))),
     [data]
   );
 
@@ -79,7 +79,7 @@ export default function TronLineChart({
       color: COLOR_MAP[s.color] || s.color || COLORS.neon.cyan,
       area: showArea,
       ...(stacked ? { stack: 'total', stackOrder: 'none' } : {}),
-      showMark: false,
+      showMark: data.length <= 2,
       curve: 'catmullRom',
       valueFormatter: tooltipFmt,
     }));
@@ -94,12 +94,16 @@ export default function TronLineChart({
       series={chartSeries}
       xAxis={[
         {
-          data: xAxisData,
-          scaleType: 'time',
-          valueFormatter: formatDateLabel,
-          // Only show ticks at actual data points, cap at 8 labels to prevent bunching
-          tickInterval: (value) => xAxisData.some((d) => d.getTime() === value.getTime()),
-          tickNumber: Math.min(xAxisData.length, 8),
+          data: xAxisLabels,
+          scaleType: 'point',
+          // Thin labels when there are too many points (e.g. daily over 30 days)
+          // Show at most ~8 labels to prevent bunching
+          ...(xAxisLabels.length > 8 ? {
+            tickLabelInterval: (_value, index) => {
+              const step = Math.ceil(xAxisLabels.length / 8);
+              return index % step === 0;
+            },
+          } : {}),
           tickLabelStyle: {
             fill: COLORS.text.secondary,
             fontSize: 12,
@@ -174,10 +178,12 @@ export default function TronLineChart({
           filter: 'drop-shadow(0 0 4px rgba(77, 212, 232, 0.4))',
         },
 
-        // Mark dots on hover
+        // Mark dots — visible on hover, or always when ≤2 data points
         '& .MuiMarkElement-root': {
           fill: COLORS.bg.secondary,
           strokeWidth: 2,
+          r: 5,
+          filter: 'drop-shadow(0 0 4px rgba(77, 212, 232, 0.6))',
         },
 
         // Tooltip — dark glass panel

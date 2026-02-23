@@ -117,56 +117,66 @@ export default function ChartWrapper({
         </Box>
       )}
 
-      {/* ── LOADING STATE ── */}
+      {/* ── LOADING STATE — animated bar skeleton with staggered pulse ── */}
       {!locked && loading && (
-        <Box sx={{ height, display: 'flex', flexDirection: 'column', gap: 1 }}>
-          <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end', height: '100%' }}>
-            <Skeleton
-              variant="rectangular"
-              width={40}
-              height="80%"
-              sx={{
-                bgcolor: COLORS.bg.elevated,
-                borderRadius: '4px',
-                animation: 'pulse 1.5s ease-in-out infinite',
-                '@keyframes pulse': {
-                  '0%': { opacity: 0.4 },
-                  '50%': { opacity: 0.7 },
-                  '100%': { opacity: 0.4 },
-                },
-              }}
-            />
-            <Skeleton
-              variant="rectangular"
-              sx={{
-                flex: 1,
-                height: '100%',
-                bgcolor: COLORS.bg.elevated,
-                borderRadius: '4px',
-                animation: 'pulse 1.5s ease-in-out 0.2s infinite',
-                '@keyframes pulse': {
-                  '0%': { opacity: 0.4 },
-                  '50%': { opacity: 0.7 },
-                  '100%': { opacity: 0.4 },
-                },
-              }}
-            />
-          </Box>
-          <Skeleton
-            variant="rectangular"
-            height={20}
+        <Box sx={{ height, display: 'flex', flexDirection: 'column' }}>
+          <Box
             sx={{
-              bgcolor: COLORS.bg.elevated,
-              borderRadius: '4px',
-              ml: '48px',
-              animation: 'pulse 1.5s ease-in-out 0.4s infinite',
-              '@keyframes pulse': {
-                '0%': { opacity: 0.4 },
-                '50%': { opacity: 0.7 },
-                '100%': { opacity: 0.4 },
-              },
+              flex: 1,
+              display: 'flex',
+              alignItems: 'flex-end',
+              justifyContent: 'center',
+              gap: '6px',
+              px: 4,
+              pb: 4,
+            }}
+          >
+            {[40, 65, 50, 80, 55, 70, 45, 75, 60, 85, 50, 68].map((h, i) => (
+              <Box
+                key={i}
+                sx={{
+                  flex: 1,
+                  maxWidth: 32,
+                  height: `${h}%`,
+                  borderRadius: '3px 3px 0 0',
+                  background: `linear-gradient(180deg, ${hexToRgba(accentColor, 0.2)} 0%, ${hexToRgba(accentColor, 0.05)} 100%)`,
+                  border: `1px solid ${hexToRgba(accentColor, 0.1)}`,
+                  borderBottom: 'none',
+                  animation: 'chart-bar-pulse 2s ease-in-out infinite',
+                  animationDelay: `${i * 0.1}s`,
+                  '@keyframes chart-bar-pulse': {
+                    '0%, 100%': { opacity: 0.3, transform: 'scaleY(1)' },
+                    '50%': { opacity: 0.7, transform: 'scaleY(1.05)' },
+                  },
+                  transformOrigin: 'bottom',
+                }}
+              />
+            ))}
+          </Box>
+          {/* Fake x-axis line */}
+          <Box
+            sx={{
+              height: '1px',
+              mx: 4,
+              background: `linear-gradient(90deg, transparent, ${hexToRgba(accentColor, 0.15)}, transparent)`,
             }}
           />
+          <Typography
+            sx={{
+              color: COLORS.text.muted,
+              fontSize: '0.8rem',
+              textAlign: 'center',
+              mt: 1.5,
+              letterSpacing: '0.05em',
+              animation: 'chart-bar-pulse 2s ease-in-out infinite',
+              '@keyframes chart-bar-pulse': {
+                '0%, 100%': { opacity: 0.3 },
+                '50%': { opacity: 0.7 },
+              },
+            }}
+          >
+            Loading data...
+          </Typography>
         </Box>
       )}
 

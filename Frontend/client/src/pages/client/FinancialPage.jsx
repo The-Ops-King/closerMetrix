@@ -148,8 +148,11 @@ const DEMO_CHARTS = generateDemoChartData();
  * Decorates with the glow color for the Scorecard component.
  */
 function getMetric(apiMetrics, key, glowColor) {
-  const m = apiMetrics?.[key] || DEMO_METRICS[key];
-  if (!m) return { label: key, value: null, glowColor };
+  const m = apiMetrics?.[key];
+  if (!m) {
+    const demo = DEMO_METRICS[key];
+    return { label: demo?.label || key, format: demo?.format || 'number', value: null, glowColor };
+  }
   return { ...m, glowColor };
 }
 
