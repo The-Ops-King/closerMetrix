@@ -110,7 +110,6 @@ router.post('/', async (req, res) => {
       plan_tier: req.body.plan_tier,
       status: 'active',
       closer_count: 0,
-      webhook_secret: webhookSecret,
       calendar_source: req.body.calendar_source || 'google_calendar',
       transcript_provider: req.body.transcript_provider || 'fathom',
       script_template: req.body.script_template || null,
