@@ -12,14 +12,15 @@ const VIEW = bq.table('v_calls_joined_flat_prefixed');
 
 /**
  * Build the WHERE clause for the main view, with optional closer filter.
+ * Supports multiple closer IDs passed as a comma-separated string.
  *
- * @param {string|null} closerId - If truthy, adds calls_closer_id filter
+ * @param {string|null} closerId - Comma-separated closer IDs, or single ID
  * @returns {string} SQL WHERE clause
  */
 function buildBaseWhere(closerId) {
   return `WHERE clients_client_id = @clientId
     AND DATE(calls_appointment_date) BETWEEN DATE(@dateStart) AND DATE(@dateEnd)
-    ${closerId ? 'AND calls_closer_id = @closerId' : ''}`;
+    ${closerId ? 'AND calls_closer_id IN UNNEST(@closerIds)' : ''}`;
 }
 
 /**
@@ -36,7 +37,7 @@ function buildQueryContext(clientId, filters, tier) {
   const effectiveCloserId = tier === 'basic' ? null : closerId;
 
   const params = { clientId, dateStart, dateEnd };
-  if (effectiveCloserId) params.closerId = effectiveCloserId;
+  if (effectiveCloserId) params.closerIds = effectiveCloserId.split(',').map(id => id.trim());
 
   return {
     params,

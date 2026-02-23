@@ -4,6 +4,8 @@ WORKDIR /app/client
 COPY client/package*.json ./
 RUN npm ci
 COPY client/ .
+# shared/ is needed at build time — client imports from ../../../shared/
+COPY shared/ /app/shared/
 RUN npm run build
 
 # ===== Stage 2: Production Server =====

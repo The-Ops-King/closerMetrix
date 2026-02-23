@@ -74,11 +74,11 @@ async function queryBigQuery(clientId, filters, tier) {
   const mainView = bq.table('v_calls_joined_flat_prefixed');
 
   const effectiveCloserId = tier === 'basic' ? null : filters.closerId;
-  const closerFilter = effectiveCloserId ? 'AND closer_id = @closerId' : '';
-  const mainCloserFilter = effectiveCloserId ? 'AND calls_closer_id = @closerId' : '';
+  const closerFilter = effectiveCloserId ? 'AND closer_id IN UNNEST(@closerIds)' : '';
+  const mainCloserFilter = effectiveCloserId ? 'AND calls_closer_id IN UNNEST(@closerIds)' : '';
 
   const params = { clientId, dateStart: filters.dateStart, dateEnd: filters.dateEnd };
-  if (effectiveCloserId) params.closerId = effectiveCloserId;
+  if (effectiveCloserId) params.closerIds = effectiveCloserId.split(',').map(id => id.trim());
 
   // 1) Scorecard: avg/median calls & days to close, bucket counts
   const scorecardSql = `SELECT

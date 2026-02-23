@@ -126,7 +126,7 @@ async function queryBigQuery(clientId, filters, tier) {
   const { params, closerId: effectiveCloserId, where } = buildQueryContext(clientId, filters, tier);
   const VIEW = bq.table('v_calls_joined_flat_prefixed');
 
-  const closerFilter = effectiveCloserId ? 'AND calls_closer_id = @closerId' : '';
+  const closerFilter = effectiveCloserId ? 'AND calls_closer_id IN UNNEST(@closerIds)' : '';
 
   // Shared scorecard SELECT — used for both current and previous period
   const scorecardSql = `SELECT

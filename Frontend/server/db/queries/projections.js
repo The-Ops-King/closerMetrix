@@ -60,11 +60,12 @@ async function queryBigQuery(clientId, filters, tier) {
   const cycleView = bq.table('v_close_cycle_stats_dated');
 
   const effectiveCloserId = tier === 'basic' ? null : filters.closerId;
-  const closerFilter = effectiveCloserId ? 'AND calls_closer_id = @closerId' : '';
-  const cycleCloserFilter = effectiveCloserId ? 'AND closer_id = @closerId' : '';
+  const closerFilter = effectiveCloserId ? 'AND calls_closer_id IN UNNEST(@closerIds)' : '';
+  const cycleCloserFilter = effectiveCloserId ? 'AND closer_id IN UNNEST(@closerIds)' : '';
 
+  const closerIdsArr = effectiveCloserId ? effectiveCloserId.split(',').map(id => id.trim()) : null;
   const params = { clientId, dateStart: filters.dateStart, dateEnd: filters.dateEnd };
-  if (effectiveCloserId) params.closerId = effectiveCloserId;
+  if (closerIdsArr) params.closerIds = closerIdsArr;
 
   const dateWhere = `WHERE clients_client_id = @clientId
     AND DATE(calls_appointment_date) BETWEEN DATE(@dateStart) AND DATE(@dateEnd)
@@ -105,8 +106,8 @@ async function queryBigQuery(clientId, filters, tier) {
   const mtdStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
   const mtdEnd = now.toISOString().split('T')[0];
   const mtdParams = { clientId, dateStart: mtdStart, dateEnd: mtdEnd };
-  if (effectiveCloserId) mtdParams.closerId = effectiveCloserId;
-  const mtdCloserFilter = effectiveCloserId ? 'AND calls_closer_id = @closerId' : '';
+  if (closerIdsArr) mtdParams.closerIds = closerIdsArr;
+  const mtdCloserFilter = effectiveCloserId ? 'AND calls_closer_id IN UNNEST(@closerIds)' : '';
 
   const mtdSql = `SELECT
       COUNT(*) as calls_scheduled,
@@ -122,7 +123,7 @@ async function queryBigQuery(clientId, filters, tier) {
   // 3) YTD actuals
   const ytdStart = `${now.getFullYear()}-01-01`;
   const ytdParams = { clientId, dateStart: ytdStart, dateEnd: mtdEnd };
-  if (effectiveCloserId) ytdParams.closerId = effectiveCloserId;
+  if (closerIdsArr) ytdParams.closerIds = closerIdsArr;
 
   const ytdSql = `SELECT
       COUNT(*) as calls_scheduled,
@@ -141,12 +142,12 @@ async function queryBigQuery(clientId, filters, tier) {
   wtdStart.setDate(wtdStart.getDate() - dayOfWeek);
   const wtdStartStr = wtdStart.toISOString().split('T')[0];
   const wtdParams = { clientId, dateStart: wtdStartStr, dateEnd: mtdEnd };
-  if (effectiveCloserId) wtdParams.closerId = effectiveCloserId;
+  if (closerIdsArr) wtdParams.closerIds = closerIdsArr;
 
   const qMonth = Math.floor(now.getMonth() / 3) * 3;
   const qtdStart = `${now.getFullYear()}-${String(qMonth + 1).padStart(2, '0')}-01`;
   const qtdParams = { clientId, dateStart: qtdStart, dateEnd: mtdEnd };
-  if (effectiveCloserId) qtdParams.closerId = effectiveCloserId;
+  if (closerIdsArr) qtdParams.closerIds = closerIdsArr;
 
   const pacingSql = `SELECT
       SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_revenue_generated AS FLOAT64) ELSE 0 END) as revenue

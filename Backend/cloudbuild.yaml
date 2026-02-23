@@ -65,7 +65,7 @@ steps:
       - 'ADMIN_API_KEY=ADMIN_API_KEY:latest,ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,GOOGLE_CALENDAR_CREDENTIALS=GOOGLE_CALENDAR_CREDENTIALS:latest'
       # ── Non-sensitive environment variables ──
       - '--set-env-vars'
-      - 'GCP_PROJECT_ID=closer-automation,BQ_DATASET=CloserAutomation,NODE_ENV=production,BASE_URL=https://closermetrix-api-b4x4dur6ha-uc.a.run.app,AI_MODEL=claude-sonnet-4-5-20250929,AI_MAX_TOKENS=8000,AI_INPUT_COST_PER_MILLION=3.00,AI_OUTPUT_COST_PER_MILLION=15.00,TRANSCRIPT_TIMEOUT_MINUTES=5,GHOST_CHECK_INTERVAL_MINUTES=5,FATHOM_POLL_INTERVALS=30:60:120:300:600:900,GCP_LOCATION=us-central1,CLOUD_TASKS_QUEUE=closermetrix-processing'
+      - 'GCP_PROJECT_ID=closer-automation,BQ_DATASET=CloserAutomation,NODE_ENV=production,BASE_URL=https://api.closermetrix.com,AI_MODEL=claude-sonnet-4-5-20250929,AI_MAX_TOKENS=8000,AI_INPUT_COST_PER_MILLION=3.00,AI_OUTPUT_COST_PER_MILLION=15.00,TRANSCRIPT_TIMEOUT_MINUTES=120,GHOST_CHECK_INTERVAL_MINUTES=30,FATHOM_POLL_INTERVALS=30:60:120:300:600:900,GCP_LOCATION=us-central1,CLOUD_TASKS_QUEUE=closermetrix-processing'
 
 images:
   - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-api:$COMMIT_SHA'

@@ -66,10 +66,10 @@ async function queryBigQuery(clientId, filters, tier) {
   const CALLS = bq.table('Calls');
 
   const effectiveCloserId = tier === 'basic' ? null : filters.closerId;
-  const closerFilter = effectiveCloserId ? 'AND closer_id = @closerId' : '';
+  const closerFilter = effectiveCloserId ? 'AND closer_id IN UNNEST(@closerIds)' : '';
 
   const params = { clientId, dateStart: filters.dateStart, dateEnd: filters.dateEnd };
-  if (effectiveCloserId) params.closerId = effectiveCloserId;
+  if (effectiveCloserId) params.closerIds = effectiveCloserId.split(',').map(id => id.trim());
 
   const dateWhere = `WHERE client_id = @clientId
     AND DATE(appointment_date) BETWEEN DATE(@dateStart) AND DATE(@dateEnd)

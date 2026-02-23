@@ -64,15 +64,15 @@ async function queryBigQuery(clientId, filters, tier) {
   const callsObjCountView = bq.table('v_calls_with_objection_counts');
 
   const effectiveCloserId = tier === 'basic' ? null : filters.closerId;
-  const closerFilter = effectiveCloserId ? 'AND calls_closer_id = @closerId' : '';
-  const objCloserFilter = effectiveCloserId ? 'AND obj_closer_id = @closerId' : '';
+  const closerFilter = effectiveCloserId ? 'AND calls_closer_id IN UNNEST(@closerIds)' : '';
+  const objCloserFilter = effectiveCloserId ? 'AND obj_closer_id IN UNNEST(@closerIds)' : '';
 
   const typeFilter = filters.objectionType
     ? `AND obj_objection_type IN UNNEST(@objTypes)`
     : '';
 
   const params = { clientId, dateStart: filters.dateStart, dateEnd: filters.dateEnd };
-  if (effectiveCloserId) params.closerId = effectiveCloserId;
+  if (effectiveCloserId) params.closerIds = effectiveCloserId.split(',').map(id => id.trim());
   if (filters.objectionType) params.objTypes = filters.objectionType.split(',').map(s => s.trim());
 
   const dateWhere = `AND DATE(calls_appointment_date) BETWEEN DATE(@dateStart) AND DATE(@dateEnd)`;

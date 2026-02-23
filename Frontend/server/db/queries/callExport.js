@@ -107,8 +107,8 @@ async function queryBigQuery(clientId, filters, tier) {
     params.dateEnd = filters.dateEnd;
   }
   if (filters.closerId) {
-    conditions.push('calls_closer_id = @closerId');
-    params.closerId = filters.closerId;
+    conditions.push('calls_closer_id IN UNNEST(@closerIds)');
+    params.closerIds = filters.closerId.split(',').map(id => id.trim());
   }
 
   const whereClause = conditions.join(' AND ');

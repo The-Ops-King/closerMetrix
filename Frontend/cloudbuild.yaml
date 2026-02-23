@@ -1,0 +1,71 @@
+# CloserMetrix Dashboard — Cloud Build Configuration
+#
+# Builds the multi-stage Docker image (React build + Express server)
+# and deploys to Cloud Run.
+#
+# Usage:
+#   gcloud builds submit --config cloudbuild.yaml --substitutions=COMMIT_SHA=$(git rev-parse --short HEAD) --project=closer-automation
+#
+# Prerequisites:
+#   - GCP project: closer-automation
+#   - Cloud Run service name: closermetrix-dashboard
+#   - Artifact Registry repo: us-central1-docker.pkg.dev/closer-automation/closermetrix
+#   - Secrets in Secret Manager: ADMIN_API_KEY
+#   - Service account with BigQuery access
+
+steps:
+  # Build the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-dashboard:$COMMIT_SHA'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-dashboard:latest'
+      - '.'
+
+  # Push the image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-dashboard:$COMMIT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-dashboard:latest'
+
+  # Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'closermetrix-dashboard'
+      - '--image'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-dashboard:$COMMIT_SHA'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--memory'
+      - '512Mi'
+      - '--cpu'
+      - '1'
+      - '--min-instances'
+      - '1'
+      - '--max-instances'
+      - '10'
+      - '--timeout'
+      - '300s'
+      # ── Secrets from GCP Secret Manager ──
+      - '--set-secrets'
+      - 'ADMIN_API_KEY=ADMIN_API_KEY:latest'
+      # ── Non-sensitive environment variables ──
+      - '--set-env-vars'
+      - 'NODE_ENV=production,GCP_PROJECT_ID=closer-automation,BQ_DATASET=CloserAutomation,BACKEND_API_URL=https://api.closermetrix.com'
+
+images:
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-dashboard:$COMMIT_SHA'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-dashboard:latest'
