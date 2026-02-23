@@ -24,29 +24,74 @@ function sd(a, b) { return b === 0 ? 0 : a / b; }
 /** Round to N decimal places */
 function round(v, d = 2) { return Math.round(v * Math.pow(10, d)) / Math.pow(10, d); }
 
-/** Filter calls by date range and optional closer */
+/** Compute the previous period matching the current date range duration */
+function computePreviousPeriod(dateStart, dateEnd) {
+  const start = new Date(dateStart + 'T12:00:00');
+  const end = new Date(dateEnd + 'T12:00:00');
+  const durationMs = end - start;
+  const daysInRange = Math.round(durationMs / 86400000);
+
+  const prevEnd = new Date(start);
+  prevEnd.setDate(prevEnd.getDate() - 1);
+  const prevStart = new Date(prevEnd);
+  prevStart.setDate(prevStart.getDate() - daysInRange);
+
+  const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+
+  let deltaLabel;
+  if (daysInRange <= 8) deltaLabel = 'vs prev week';
+  else if (daysInRange <= 32) deltaLabel = 'vs prev period';
+  else if (daysInRange <= 95) deltaLabel = 'vs prev quarter';
+  else deltaLabel = 'vs prev period';
+
+  return { prevStart: fmt(prevStart), prevEnd: fmt(prevEnd), deltaLabel };
+}
+
+/** Percentage change between current and previous values. Returns null if no comparison. */
+function calcDelta(current, previous) {
+  if (previous == null || previous === 0) return null;
+  return round(((current - previous) / Math.abs(previous)) * 100, 1);
+}
+
+/** Add delta fields to an existing metric object */
+function withDelta(metric, current, previous, deltaLabel, desiredDirection = 'up') {
+  const delta = calcDelta(current, previous);
+  if (delta == null) return metric;
+  return { ...metric, delta, deltaLabel, desiredDirection };
+}
+
+/** Parse closerId (comma-separated string or null) into an array for filtering */
+function parseCloserIds(closerId) {
+  if (!closerId) return null;
+  return closerId.split(',').map(id => id.trim());
+}
+
+/** Filter calls by date range and optional closer(s) */
 function filterCalls(calls, dateStart, dateEnd, closerId) {
+  const ids = parseCloserIds(closerId);
   return calls.filter(c => {
     if (c.appointmentDate < dateStart || c.appointmentDate > dateEnd) return false;
-    if (closerId && c.closerId !== closerId) return false;
+    if (ids && !ids.includes(c.closerId)) return false;
     return true;
   });
 }
 
-/** Filter objections by date range and optional closer */
+/** Filter objections by date range and optional closer(s) */
 function filterObjections(objections, dateStart, dateEnd, closerId) {
+  const ids = parseCloserIds(closerId);
   return objections.filter(o => {
     if (o.appointmentDate < dateStart || o.appointmentDate > dateEnd) return false;
-    if (closerId && o.closerId !== closerId) return false;
+    if (ids && !ids.includes(o.closerId)) return false;
     return true;
   });
 }
 
-/** Filter close cycles by date range and optional closer */
+/** Filter close cycles by date range and optional closer(s) */
 function filterCloseCycles(cycles, dateStart, dateEnd, closerId) {
+  const ids = parseCloserIds(closerId);
   return cycles.filter(c => {
     if (c.closeDate < dateStart || c.closeDate > dateEnd) return false;
-    if (closerId && c.closerId !== closerId) return false;
+    if (ids && !ids.includes(c.closerId)) return false;
     return true;
   });
 }
@@ -176,16 +221,23 @@ export function computePageData(section, rawData, filters) {
   const objections = filterObjections(rawData.objections || [], dateStart, dateEnd, closerId);
   const closeCycles = filterCloseCycles(rawData.closeCycles || [], dateStart, dateEnd, closerId);
 
+  // Compute previous period for delta comparisons
+  const { prevStart, prevEnd, deltaLabel } = computePreviousPeriod(dateStart, dateEnd);
+  const prevCalls = filterCalls(rawData.calls, prevStart, prevEnd, closerId);
+  const prevObjections = filterObjections(rawData.objections || [], prevStart, prevEnd, closerId);
+  const prevCloseCycles = filterCloseCycles(rawData.closeCycles || [], prevStart, prevEnd, closerId);
+  const prev = { calls: prevCalls, objections: prevObjections, closeCycles: prevCloseCycles, deltaLabel };
+
   switch (section) {
-    case 'overview': return computeOverview(calls, granularity, rawData);
-    case 'financial': return computeFinancial(calls, granularity);
-    case 'attendance': return computeAttendance(calls, granularity);
-    case 'call-outcomes': return computeCallOutcomes(calls, granularity);
-    case 'sales-cycle': return computeSalesCycle(calls, closeCycles);
-    case 'objections': return computeObjections(calls, objections, granularity);
+    case 'overview': return computeOverview(calls, granularity, rawData, prev);
+    case 'financial': return computeFinancial(calls, granularity, prev);
+    case 'attendance': return computeAttendance(calls, granularity, prev);
+    case 'call-outcomes': return computeCallOutcomes(calls, granularity, prev);
+    case 'sales-cycle': return computeSalesCycle(calls, closeCycles, prev);
+    case 'objections': return computeObjections(calls, objections, granularity, prev);
     case 'projections': return computeProjections(calls, closeCycles, rawData, filters);
-    case 'violations': return computeViolations(calls, granularity);
-    case 'adherence': return computeAdherence(calls, granularity);
+    case 'violations': return computeViolations(calls, granularity, prev);
+    case 'adherence': return computeAdherence(calls, granularity, prev);
     default: return null;
   }
 }
@@ -195,7 +247,7 @@ export function computePageData(section, rawData, filters) {
 // OVERVIEW PAGE
 // ─────────────────────────────────────────────────────────────
 
-function computeOverview(calls, granularity, rawData) {
+function computeOverview(calls, granularity, rawData, prev) {
   const held = calls.filter(isShow);
   const closed = calls.filter(c => isShow(c) && isClosed(c));
   const deposits = calls.filter(c => isShow(c) && isDeposit(c));
@@ -242,6 +294,53 @@ function computeOverview(calls, granularity, rawData) {
       lostPct: m('Lost %', round(sd(lost.length, held.length), 3), 'percent', 'red'),
     },
   };
+
+  // Add period-over-period deltas to key scorecards
+  if (prev && prev.calls.length > 0) {
+    const dl = prev.deltaLabel;
+    const pc = prev.calls;
+    const pHeld = pc.filter(isShow);
+    const pClosed = pHeld.filter(isClosed);
+    const pLost = pHeld.filter(isLost);
+    const pFirstCalls = pc.filter(isFirstCall);
+    const pFirstHeld = pFirstCalls.filter(isShow);
+    const pRevenue = sum(pHeld, 'revenueGenerated', hasRevenue);
+    const pCash = sum(pHeld, 'cashCollected', hasRevenue);
+
+    // Previous period violation count
+    let pViolationCount = 0;
+    for (const c of pHeld) {
+      if (!c.keyMoments) continue;
+      try {
+        const km = typeof c.keyMoments === 'string' ? JSON.parse(c.keyMoments) : c.keyMoments;
+        if (Array.isArray(km)) {
+          pViolationCount += km.filter(m => m.type === 'risk' || m.type === 'violation' || m.type === 'compliance').length;
+        }
+      } catch (e) { /* ignore */ }
+    }
+
+    // Previous period 1-call close %
+    const pCycles = prev.closeCycles || [];
+    const pOneCallCloses = pCycles.filter(c => c.callsToClose === 1).length;
+    const pOneCallPct = sd(pOneCallCloses, pCycles.length);
+
+    const s = sections.atAGlance;
+    s.revenue = withDelta(s.revenue, revenue, pRevenue, dl, 'up');
+    s.cashCollected = withDelta(s.cashCollected, cash, pCash, dl, 'up');
+    s.cashPerCall = withDelta(s.cashPerCall, sd(cash, held.length), sd(pCash, pHeld.length), dl, 'up');
+    s.avgDealSize = withDelta(s.avgDealSize, sd(revenue, closed.length), sd(pRevenue, pClosed.length), dl, 'up');
+    s.closedDeals = withDelta(s.closedDeals, closed.length, pClosed.length, dl, 'up');
+    s.potentialViolations = withDelta(s.potentialViolations, violationCount, pViolationCount, dl, 'down');
+    s.oneCallClosePct = withDelta(s.oneCallClosePct, oneCallPct, pOneCallPct, dl, 'up');
+    s.callsPerDeal = withDelta(s.callsPerDeal, sd(held.length, closed.length), sd(pHeld.length, pClosed.length), dl, 'down');
+    s.prospectsBooked = withDelta(s.prospectsBooked, firstCalls.length, pFirstCalls.length, dl, 'up');
+    s.prospectsHeld = withDelta(s.prospectsHeld, firstHeld.length, pFirstHeld.length, dl, 'up');
+    s.showRate = withDelta(s.showRate, sd(held.length, calls.length), sd(pHeld.length, pc.length), dl, 'up');
+    s.closeRate = withDelta(s.closeRate, sd(closed.length, held.length), sd(pClosed.length, pHeld.length), dl, 'up');
+    s.scheduledCloseRate = withDelta(s.scheduledCloseRate, sd(closed.length, calls.length), sd(pClosed.length, pc.length), dl, 'up');
+    s.callsLost = withDelta(s.callsLost, lost.length, pLost.length, dl, 'down');
+    s.lostPct = withDelta(s.lostPct, sd(lost.length, held.length), sd(pLost.length, pHeld.length), dl, 'down');
+  }
 
   // Time-series charts
   const timeBuckets = groupByTime(calls, 'appointmentDate', granularity);
@@ -329,7 +428,7 @@ function computeOverview(calls, granularity, rawData) {
 // FINANCIAL PAGE
 // ─────────────────────────────────────────────────────────────
 
-function computeFinancial(calls, granularity) {
+function computeFinancial(calls, granularity, prev) {
   const held = calls.filter(isShow);
   const closed = held.filter(isClosed);
   const deposits = held.filter(isDeposit);
@@ -354,6 +453,28 @@ function computeFinancial(calls, granularity) {
       refundAmount: m('$ of Refunds', 0, 'currency', 'red'),
     },
   };
+
+  // Add period-over-period deltas
+  if (prev && prev.calls.length > 0) {
+    const dl = prev.deltaLabel;
+    const pc = prev.calls;
+    const pHeld = pc.filter(isShow);
+    const pClosed = pHeld.filter(isClosed);
+    const pRevDeals = pHeld.filter(hasRevenue);
+    const pRevenue = sum(pRevDeals, 'revenueGenerated');
+    const pCash = sum(pRevDeals, 'cashCollected');
+    const pClosedRev = sum(pClosed, 'revenueGenerated');
+    const pClosedCash = sum(pClosed, 'cashCollected');
+
+    const s = sections.revenue;
+    s.revenue = withDelta(s.revenue, totalRevenue, pRevenue, dl, 'up');
+    s.cashCollected = withDelta(s.cashCollected, totalCash, pCash, dl, 'up');
+    s.cashPerCall = withDelta(s.cashPerCall, sd(totalCash, held.length), sd(pCash, pHeld.length), dl, 'up');
+    s.revenuePerCall = withDelta(s.revenuePerCall, sd(totalRevenue, held.length), sd(pRevenue, pHeld.length), dl, 'up');
+    s.avgDealRevenue = withDelta(s.avgDealRevenue, sd(closedRevenue, closed.length), sd(pClosedRev, pClosed.length), dl, 'up');
+    s.avgCashPerDeal = withDelta(s.avgCashPerDeal, sd(closedCash, closed.length), sd(pClosedCash, pClosed.length), dl, 'up');
+    s.collectedPct = withDelta(s.collectedPct, sd(totalCash, totalRevenue), sd(pCash, pRevenue), dl, 'up');
+  }
 
   // Time-series
   const timeBuckets = groupByTime(calls, 'appointmentDate', granularity);
@@ -432,7 +553,7 @@ function computeFinancial(calls, granularity) {
 // ATTENDANCE PAGE
 // ─────────────────────────────────────────────────────────────
 
-function computeAttendance(calls, granularity) {
+function computeAttendance(calls, granularity, prev) {
   const held = calls.filter(isShow);
   const firstCalls = calls.filter(isFirstCall);
   const followUps = calls.filter(isFollowUp);
@@ -492,6 +613,47 @@ function computeAttendance(calls, granularity) {
       lostPotential: m('Lost Potential Revenue', round(noShows.length * sd(held.filter(isClosed).length, held.length) * sd(sum(held.filter(isClosed), 'revenueGenerated'), held.filter(isClosed).length)), 'currency'),
     },
   };
+
+  // Add period-over-period deltas
+  if (prev && prev.calls.length > 0) {
+    const dl = prev.deltaLabel;
+    const pc = prev.calls;
+    const pHeld = pc.filter(isShow);
+    const pFirst = pc.filter(isFirstCall);
+    const pFirstHeld = pFirst.filter(isShow);
+    const pFU = pc.filter(isFollowUp);
+    const pFUHeld = pFU.filter(isShow);
+    const pNoShows = pc.filter(isNoShow);
+
+    // Column scheduled/held counts — up is good
+    sections.uniqueProspects.scheduled = withDelta(sections.uniqueProspects.scheduled, firstCalls.length, pFirst.length, dl, 'up');
+    sections.uniqueProspects.held = withDelta(sections.uniqueProspects.held, firstHeld.length, pFirstHeld.length, dl, 'up');
+    sections.totalCalls.scheduled = withDelta(sections.totalCalls.scheduled, calls.length, pc.length, dl, 'up');
+    sections.totalCalls.held = withDelta(sections.totalCalls.held, held.length, pHeld.length, dl, 'up');
+    sections.firstCalls.scheduled = withDelta(sections.firstCalls.scheduled, firstCalls.length, pFirst.length, dl, 'up');
+    sections.firstCalls.held = withDelta(sections.firstCalls.held, firstHeld.length, pFirstHeld.length, dl, 'up');
+    sections.followUpCalls.scheduled = withDelta(sections.followUpCalls.scheduled, followUps.length, pFU.length, dl, 'up');
+    sections.followUpCalls.held = withDelta(sections.followUpCalls.held, followUpHeld.length, pFUHeld.length, dl, 'up');
+
+    // Show rates — up is good
+    sections.uniqueProspects.showRate = withDelta(sections.uniqueProspects.showRate, sd(firstHeld.length, firstCalls.length), sd(pFirstHeld.length, pFirst.length), dl, 'up');
+    sections.totalCalls.showRate = withDelta(sections.totalCalls.showRate, sd(held.length, calls.length), sd(pHeld.length, pc.length), dl, 'up');
+    sections.firstCalls.showRate = withDelta(sections.firstCalls.showRate, sd(firstHeld.length, firstCalls.length), sd(pFirstHeld.length, pFirst.length), dl, 'up');
+    sections.followUpCalls.showRate = withDelta(sections.followUpCalls.showRate, sd(followUpHeld.length, followUps.length), sd(pFUHeld.length, pFU.length), dl, 'up');
+
+    // Calls not taken — down is good
+    const pGhosted = pc.filter(isGhost);
+    const pCanceled = pc.filter(isCanceled);
+    const pRescheduled = pc.filter(isRescheduled);
+    sections.callsNotTaken.notTaken = withDelta(sections.callsNotTaken.notTaken, noShows.length, pNoShows.length, dl, 'down');
+    sections.callsNotTaken.ghosted = withDelta(sections.callsNotTaken.ghosted, ghosted.length, pGhosted.length, dl, 'down');
+    sections.callsNotTaken.cancelled = withDelta(sections.callsNotTaken.cancelled, canceled.length, pCanceled.length, dl, 'down');
+    sections.callsNotTaken.rescheduled = withDelta(sections.callsNotTaken.rescheduled, rescheduled.length, pRescheduled.length, dl, 'down');
+    sections.callsNotTaken.notTakenPct = withDelta(sections.callsNotTaken.notTakenPct, sd(noShows.length, calls.length), sd(pNoShows.length, pc.length), dl, 'down');
+    sections.callsNotTaken.ghostedPct = withDelta(sections.callsNotTaken.ghostedPct, sd(ghosted.length, noShows.length), sd(pGhosted.length, pNoShows.length), dl, 'down');
+    sections.callsNotTaken.cancelledPct = withDelta(sections.callsNotTaken.cancelledPct, sd(canceled.length, noShows.length), sd(pCanceled.length, pNoShows.length), dl, 'down');
+    sections.callsNotTaken.rescheduledPct = withDelta(sections.callsNotTaken.rescheduledPct, sd(rescheduled.length, noShows.length), sd(pRescheduled.length, pNoShows.length), dl, 'down');
+  }
 
   // Time-series
   const timeBuckets = groupByTime(calls, 'appointmentDate', granularity);
@@ -597,7 +759,7 @@ function computeAttendance(calls, granularity) {
 // CALL OUTCOMES PAGE
 // ─────────────────────────────────────────────────────────────
 
-function computeCallOutcomes(calls, granularity) {
+function computeCallOutcomes(calls, granularity, prev) {
   const held = calls.filter(isShow);
   const firstCalls = calls.filter(isFirstCall);
   const followUps = calls.filter(isFollowUp);
@@ -689,6 +851,54 @@ function computeCallOutcomes(calls, granularity) {
       notPitchedRate: m('Not Pitched Rate', round(sd(notPitched.length, held.length), 3), 'percent'),
     },
   };
+
+  // Add period-over-period deltas
+  if (prev && prev.calls.length > 0) {
+    const dl = prev.deltaLabel;
+    const pc = prev.calls;
+    const pHeld = pc.filter(isShow);
+    const pClosed = pHeld.filter(isClosed);
+    const pDeposits = pHeld.filter(isDeposit);
+    const pLost = pHeld.filter(isLost);
+
+    // Compute previous period sub-groups
+    const pFirstHeld = pc.filter(c => isFirstCall(c) && isShow(c));
+    const pFirstClosed = pFirstHeld.filter(isClosed);
+    const pFUHeld = pc.filter(c => isFollowUp(c) && isShow(c));
+    const pFUClosed = pFUHeld.filter(isClosed);
+    const pFollowUpOutcome = pHeld.filter(isFollowUpOutcome);
+    const pDQ = pHeld.filter(isDQ);
+    const pNotPitched = pHeld.filter(isNotPitched);
+    const pFirstLost = pFirstHeld.filter(isLost);
+    const pFULost = pFUHeld.filter(isLost);
+
+    // Health section — closes/deposits up, lost/dq/notPitched down
+    sections.health.closes.count = withDelta(sections.health.closes.count, closed.length, pClosed.length, dl, 'up');
+    sections.health.closes.closeRate = withDelta(sections.health.closes.closeRate, sd(closed.length, held.length), sd(pClosed.length, pHeld.length), dl, 'up');
+    sections.health.deposits.count = withDelta(sections.health.deposits.count, deposits.length, pDeposits.length, dl, 'up');
+    sections.health.followUps.count = withDelta(sections.health.followUps.count, followUpOutcome.length, pFollowUpOutcome.length, dl, 'up');
+    sections.health.lost.count = withDelta(sections.health.lost.count, lost.length, pLost.length, dl, 'down');
+    sections.health.disqualified.count = withDelta(sections.health.disqualified.count, dq.length, pDQ.length, dl, 'down');
+    sections.health.notPitched.count = withDelta(sections.health.notPitched.count, notPitched.length, pNotPitched.length, dl, 'down');
+
+    // Closed-Won section
+    sections.closedWon.firstCallCloses = withDelta(sections.closedWon.firstCallCloses, firstClosed.length, pFirstClosed.length, dl, 'up');
+    sections.closedWon.firstCallCloseRate = withDelta(sections.closedWon.firstCallCloseRate, sd(firstClosed.length, firstHeld.length), sd(pFirstClosed.length, pFirstHeld.length), dl, 'up');
+    sections.closedWon.followUpCloses = withDelta(sections.closedWon.followUpCloses, followUpClosed.length, pFUClosed.length, dl, 'up');
+    sections.closedWon.followUpCloseRate = withDelta(sections.closedWon.followUpCloseRate, sd(followUpClosed.length, followUpHeld.length), sd(pFUClosed.length, pFUHeld.length), dl, 'up');
+
+    // Follow-Up section
+    const pFU = pc.filter(isFollowUp);
+    sections.followUp.scheduled = withDelta(sections.followUp.scheduled, followUps.length, pFU.length, dl, 'up');
+    sections.followUp.held = withDelta(sections.followUp.held, followUpHeld.length, pFUHeld.length, dl, 'up');
+    sections.followUp.showRate = withDelta(sections.followUp.showRate, sd(followUpHeld.length, followUps.length), sd(pFUHeld.length, pFU.length), dl, 'up');
+
+    // Lost section
+    sections.lost.firstCallLost = withDelta(sections.lost.firstCallLost, firstLost.length, pFirstLost.length, dl, 'down');
+    sections.lost.firstCallLostRate = withDelta(sections.lost.firstCallLostRate, sd(firstLost.length, firstHeld.length), sd(pFirstLost.length, pFirstHeld.length), dl, 'down');
+    sections.lost.followUpLost = withDelta(sections.lost.followUpLost, followUpLost.length, pFULost.length, dl, 'down');
+    sections.lost.followUpLostRate = withDelta(sections.lost.followUpLostRate, sd(followUpLost.length, followUpHeld.length), sd(pFULost.length, pFUHeld.length), dl, 'down');
+  }
 
   // Time-series
   const timeBuckets = groupByTime(calls, 'appointmentDate', granularity);
@@ -955,7 +1165,7 @@ function computeCallOutcomes(calls, granularity) {
 // SALES CYCLE PAGE
 // ─────────────────────────────────────────────────────────────
 
-function computeSalesCycle(calls, closeCycles) {
+function computeSalesCycle(calls, closeCycles, prev) {
   const callsToClose = closeCycles.map(c => c.callsToClose).filter(v => v > 0);
   const daysToClose = closeCycles.map(c => c.daysToClose).filter(v => v >= 0);
 
@@ -987,6 +1197,33 @@ function computeSalesCycle(calls, closeCycles) {
       medianDaysToClose: m('Median Days to Close', median(daysToClose), 'decimal', 'purple'),
     },
   };
+
+  // Add period-over-period deltas
+  if (prev && prev.closeCycles.length > 0) {
+    const dl = prev.deltaLabel;
+    const pCycles = prev.closeCycles;
+    const pCallsToClose = pCycles.map(c => c.callsToClose).filter(v => v > 0);
+    const pDaysToClose = pCycles.map(c => c.daysToClose).filter(v => v >= 0);
+    const pOneCall = pCallsToClose.filter(v => v === 1).length;
+    const pTwoCall = pCallsToClose.filter(v => v === 2).length;
+    const pThreePlus = pCallsToClose.filter(v => v >= 3).length;
+    const pTotal = pCallsToClose.length;
+
+    // Calls to close counts
+    sections.callsToClose.oneCallCloses = withDelta(sections.callsToClose.oneCallCloses, oneCall, pOneCall, dl, 'up');
+    sections.callsToClose.twoCallCloses = withDelta(sections.callsToClose.twoCallCloses, twoCall, pTwoCall, dl, 'up');
+    sections.callsToClose.threeCallCloses = withDelta(sections.callsToClose.threeCallCloses, threePlus, pThreePlus, dl, 'up');
+    sections.callsToClose.oneCallClosePct = withDelta(sections.callsToClose.oneCallClosePct, sd(oneCall, total), sd(pOneCall, pTotal), dl, 'up');
+    sections.callsToClose.twoCallClosePct = withDelta(sections.callsToClose.twoCallClosePct, sd(twoCall, total), sd(pTwoCall, pTotal), dl, 'up');
+    sections.callsToClose.threeCallClosePct = withDelta(sections.callsToClose.threeCallClosePct, sd(threePlus, total), sd(pThreePlus, pTotal), dl, 'down');
+
+    // Averages and medians — lower is better
+    sections.callsToClose.avgCallsToClose = withDelta(sections.callsToClose.avgCallsToClose, avg(closeCycles, 'callsToClose'), avg(pCycles, 'callsToClose'), dl, 'down');
+    sections.callsToClose.medianCallsToClose = withDelta(sections.callsToClose.medianCallsToClose, median(callsToClose), median(pCallsToClose), dl, 'down');
+    sections.callsToClose.callsNeededPerDeal = withDelta(sections.callsToClose.callsNeededPerDeal, sd(calls.length, closed.length), sd(prev.calls.length, prev.calls.filter(isShow).filter(isClosed).length), dl, 'down');
+    sections.daysToClose.avgDaysToClose = withDelta(sections.daysToClose.avgDaysToClose, avg(closeCycles, 'daysToClose'), avg(pCycles, 'daysToClose'), dl, 'down');
+    sections.daysToClose.medianDaysToClose = withDelta(sections.daysToClose.medianDaysToClose, median(daysToClose), median(pDaysToClose), dl, 'down');
+  }
 
   // Distribution pie
   const callsDistribution = [
@@ -1069,7 +1306,7 @@ function computeSalesCycle(calls, closeCycles) {
 // OBJECTIONS PAGE
 // ─────────────────────────────────────────────────────────────
 
-function computeObjections(calls, objections, granularity) {
+function computeObjections(calls, objections, granularity, prev) {
   const held = calls.filter(isShow);
   const callsWithObj = new Set(objections.map(o => o.callId));
   const resolvedObj = objections.filter(o => o.resolved);
@@ -1092,6 +1329,22 @@ function computeObjections(calls, objections, granularity) {
       lostToObj: m('Lost to Objections', lostWithObj.length, 'number', 'red'),
     },
   };
+
+  // Add period-over-period deltas
+  if (prev && prev.calls.length > 0 && prev.objections.length > 0) {
+    const dl = prev.deltaLabel;
+    const pObj = prev.objections;
+    const pHeld = prev.calls.filter(isShow);
+    const pCallsWithObj = new Set(pObj.map(o => o.callId));
+    const pResolved = pObj.filter(o => o.resolved);
+    const pLostWithObj = pHeld.filter(c => isLost(c) && pCallsWithObj.has(c.callId));
+
+    const s = sections.summary;
+    s.objectionsFaced = withDelta(s.objectionsFaced, objections.length, pObj.length, dl, 'down');
+    s.resolutionRate = withDelta(s.resolutionRate, sd(resolvedObj.length, objections.length), sd(pResolved.length, pObj.length), dl, 'up');
+    s.pctCallsWithObj = withDelta(s.pctCallsWithObj, sd(callsWithObj.size, held.length), sd(pCallsWithObj.size, pHeld.length), dl, 'down');
+    s.lostToObj = withDelta(s.lostToObj, lostWithObj.length, pLostWithObj.length, dl, 'down');
+  }
 
   // By type
   const byType = {};
@@ -1355,7 +1608,7 @@ function computeProjections(calls, closeCycles, rawData, filters) {
 // VIOLATIONS PAGE
 // ─────────────────────────────────────────────────────────────
 
-function computeViolations(calls, granularity) {
+function computeViolations(calls, granularity, prev) {
   const held = calls.filter(isShow);
 
   // Parse key_moments for risk flags
@@ -1429,6 +1682,33 @@ function computeViolations(calls, granularity) {
     },
   };
 
+  // Add period-over-period deltas (fewer flags is better)
+  if (prev && prev.calls.length > 0) {
+    const dl = prev.deltaLabel;
+    const pHeld = prev.calls.filter(isShow);
+    // Parse risk flags from prev calls
+    let pFlagCount = 0;
+    const pCallsWithRisk = new Set();
+    for (const c of pHeld) {
+      if (!c.keyMoments) continue;
+      let moments;
+      try { moments = typeof c.keyMoments === 'string' ? JSON.parse(c.keyMoments) : c.keyMoments; } catch { continue; }
+      if (!Array.isArray(moments)) continue;
+      for (const moment of moments) {
+        const cat = moment.risk_category || moment.category;
+        if (cat && riskCategories.some(rc => cat.toLowerCase().includes(rc.toLowerCase()))) {
+          pFlagCount++;
+          pCallsWithRisk.add(c.appointmentDate + c.closerId);
+        }
+      }
+    }
+
+    const s = sections.overview;
+    s.flagCount = withDelta(s.flagCount, riskFlags.length, pFlagCount, dl, 'down');
+    s.uniqueCalls = withDelta(s.uniqueCalls, uniqueCallsWithRisk, pCallsWithRisk.size, dl, 'down');
+    s.pctCalls = withDelta(s.pctCalls, sd(uniqueCallsWithRisk, held.length), sd(pCallsWithRisk.size, pHeld.length), dl, 'down');
+  }
+
   // Time-series
   const timeBuckets = groupByTime(riskFlags.length > 0 ? riskFlags : [{ appointmentDate: new Date().toISOString().split('T')[0] }], 'date', granularity);
   const complianceOverTime = [];
@@ -1488,7 +1768,7 @@ function computeViolations(calls, granularity) {
 // ADHERENCE PAGE
 // ─────────────────────────────────────────────────────────────
 
-function computeAdherence(calls, granularity) {
+function computeAdherence(calls, granularity, prev) {
   const held = calls.filter(c => isShow(c) && c.overallCallScore > 0);
 
   // Score fields mapped to 8 radar axes
@@ -1522,6 +1802,18 @@ function computeAdherence(calls, granularity) {
     const key = axisKeys[i];
     const field = scoreMap[key];
     sections.bySection[key] = m(axes[i], round(avg(held, field), 1) || 0, 'score', 'cyan');
+  }
+
+  // Add period-over-period deltas (higher scores are better)
+  if (prev && prev.calls.length > 0) {
+    const dl = prev.deltaLabel;
+    const pHeld = prev.calls.filter(c => isShow(c) && c.overallCallScore > 0);
+    if (pHeld.length > 0) {
+      const pAdherence = round(avg(pHeld, 'scriptAdherenceScore'), 1);
+      const pObjHandling = round(avg(pHeld, 'objectionHandlingScore'), 1);
+      sections.overall.adherenceScore = withDelta(sections.overall.adherenceScore, overallAdherence || 0, pAdherence || 0, dl, 'up');
+      sections.overall.objHandlingScore = withDelta(sections.overall.objHandlingScore, objHandling || 0, pObjHandling || 0, dl, 'up');
+    }
   }
 
   // Radar data per closer

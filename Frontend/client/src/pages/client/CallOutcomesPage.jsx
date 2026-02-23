@@ -55,14 +55,15 @@ function HealthColumn({ title, color, col, hasCloseRate = false, desiredDirectio
         {title}
       </Typography>
       <Scorecard label="Total" value={col.count?.value} format="number"
-        delta={col.count?.delta} deltaLabel="vs prev period"
-        desiredDirection={desiredDirection} glowColor={color} />
+        delta={col.count?.delta} deltaLabel={col.count?.deltaLabel}
+        desiredDirection={col.count?.desiredDirection || desiredDirection} glowColor={color} />
       <Scorecard label="% of Total" value={col.pctOfTotal?.value} format="percent"
-        glowColor={color} />
+        delta={col.pctOfTotal?.delta} deltaLabel={col.pctOfTotal?.deltaLabel}
+        desiredDirection={col.pctOfTotal?.desiredDirection || desiredDirection} glowColor={color} />
       {hasCloseRate && (
         <Scorecard label="Close Rate" value={col.closeRate?.value} format="percent"
-          delta={col.closeRate?.delta} deltaLabel="vs prev period"
-          glowColor={color} />
+          delta={col.closeRate?.delta} deltaLabel={col.closeRate?.deltaLabel}
+          desiredDirection={col.closeRate?.desiredDirection || 'up'} glowColor={color} />
       )}
     </Box>
   );

@@ -64,6 +64,9 @@ function MetricColumn({ title, columnData, color }) {
         label={columnData.scheduled?.label || 'Scheduled'}
         value={columnData.scheduled?.value}
         format={columnData.scheduled?.format || 'number'}
+        delta={columnData.scheduled?.delta}
+        deltaLabel={columnData.scheduled?.deltaLabel}
+        desiredDirection={columnData.scheduled?.desiredDirection || 'up'}
         glowColor={color}
       />
 
@@ -72,6 +75,9 @@ function MetricColumn({ title, columnData, color }) {
         label={columnData.held?.label || 'Held'}
         value={columnData.held?.value}
         format={columnData.held?.format || 'number'}
+        delta={columnData.held?.delta}
+        deltaLabel={columnData.held?.deltaLabel}
+        desiredDirection={columnData.held?.desiredDirection || 'up'}
         glowColor={color}
       />
 
@@ -80,6 +86,9 @@ function MetricColumn({ title, columnData, color }) {
         label={columnData.showRate?.label || 'Show Rate'}
         value={columnData.showRate?.value}
         format={columnData.showRate?.format || 'percent'}
+        delta={columnData.showRate?.delta}
+        deltaLabel={columnData.showRate?.deltaLabel}
+        desiredDirection={columnData.showRate?.desiredDirection || 'up'}
         glowColor={color}
       />
     </Box>
@@ -380,24 +389,36 @@ export default function AttendancePage() {
                 label={sections.callsNotTaken?.notTaken?.label || 'Not Taken'}
                 value={sections.callsNotTaken?.notTaken?.value}
                 format="number"
+                delta={sections.callsNotTaken?.notTaken?.delta}
+                deltaLabel={sections.callsNotTaken?.notTaken?.deltaLabel}
+                desiredDirection="down"
                 glowColor={COLORS.text.primary}
               />
               <Scorecard
                 label={sections.callsNotTaken?.ghosted?.label || '# Ghosted'}
                 value={sections.callsNotTaken?.ghosted?.value}
                 format="number"
+                delta={sections.callsNotTaken?.ghosted?.delta}
+                deltaLabel={sections.callsNotTaken?.ghosted?.deltaLabel}
+                desiredDirection="down"
                 glowColor={COLORS.neon.amber}
               />
               <Scorecard
                 label={sections.callsNotTaken?.cancelled?.label || '# Canceled'}
                 value={sections.callsNotTaken?.cancelled?.value}
                 format="number"
+                delta={sections.callsNotTaken?.cancelled?.delta}
+                deltaLabel={sections.callsNotTaken?.cancelled?.deltaLabel}
+                desiredDirection="down"
                 glowColor={COLORS.neon.red}
               />
               <Scorecard
                 label={sections.callsNotTaken?.rescheduled?.label || '# Rescheduled'}
                 value={sections.callsNotTaken?.rescheduled?.value}
                 format="number"
+                delta={sections.callsNotTaken?.rescheduled?.delta}
+                deltaLabel={sections.callsNotTaken?.rescheduled?.deltaLabel}
+                desiredDirection="down"
                 glowColor={'#FF8C00'}
               />
             </Box>
@@ -415,24 +436,36 @@ export default function AttendancePage() {
                 label={sections.callsNotTaken?.notTakenPct?.label || '% Not Taken'}
                 value={sections.callsNotTaken?.notTakenPct?.value}
                 format="percent"
+                delta={sections.callsNotTaken?.notTakenPct?.delta}
+                deltaLabel={sections.callsNotTaken?.notTakenPct?.deltaLabel}
+                desiredDirection="down"
                 glowColor={COLORS.text.primary}
               />
               <Scorecard
                 label={sections.callsNotTaken?.ghostedPct?.label || '% Ghosted'}
                 value={sections.callsNotTaken?.ghostedPct?.value}
                 format="percent"
+                delta={sections.callsNotTaken?.ghostedPct?.delta}
+                deltaLabel={sections.callsNotTaken?.ghostedPct?.deltaLabel}
+                desiredDirection="down"
                 glowColor={COLORS.neon.amber}
               />
               <Scorecard
                 label={sections.callsNotTaken?.cancelledPct?.label || '% Canceled'}
                 value={sections.callsNotTaken?.cancelledPct?.value}
                 format="percent"
+                delta={sections.callsNotTaken?.cancelledPct?.delta}
+                deltaLabel={sections.callsNotTaken?.cancelledPct?.deltaLabel}
+                desiredDirection="down"
                 glowColor={COLORS.neon.red}
               />
               <Scorecard
                 label={sections.callsNotTaken?.rescheduledPct?.label || '% Rescheduled'}
                 value={sections.callsNotTaken?.rescheduledPct?.value}
                 format="percent"
+                delta={sections.callsNotTaken?.rescheduledPct?.delta}
+                deltaLabel={sections.callsNotTaken?.rescheduledPct?.deltaLabel}
+                desiredDirection="down"
                 glowColor={'#FF8C00'}
               />
             </Box>
