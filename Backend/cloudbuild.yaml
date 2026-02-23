@@ -3,7 +3,7 @@
 # Builds the Docker image and deploys to Cloud Run.
 #
 # Usage:
-#   gcloud builds submit --config cloudbuild.yaml --substitutions=COMMIT_SHA=$(git rev-parse --short HEAD)
+#   gcloud builds submit --config cloudbuild.yaml --substitutions=SHORT_SHA=$(git rev-parse --short HEAD)
 #
 # Prerequisites:
 #   - GCP project: closer-automation
@@ -18,7 +18,7 @@ steps:
     args:
       - 'build'
       - '-t'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-api:$COMMIT_SHA'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-api:$SHORT_SHA'
       - '-t'
       - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-api:latest'
       - '.'
@@ -27,7 +27,7 @@ steps:
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-api:$COMMIT_SHA'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-api:$SHORT_SHA'
 
   - name: 'gcr.io/cloud-builders/docker'
     args:
@@ -44,7 +44,7 @@ steps:
       - 'deploy'
       - 'closermetrix-api'
       - '--image'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-api:$COMMIT_SHA'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-api:$SHORT_SHA'
       - '--region'
       - 'us-central1'
       - '--platform'
@@ -68,5 +68,5 @@ steps:
       - 'GCP_PROJECT_ID=closer-automation,BQ_DATASET=CloserAutomation,NODE_ENV=production,BASE_URL=https://api.closermetrix.com,AI_MODEL=claude-sonnet-4-5-20250929,AI_MAX_TOKENS=8000,AI_INPUT_COST_PER_MILLION=3.00,AI_OUTPUT_COST_PER_MILLION=15.00,TRANSCRIPT_TIMEOUT_MINUTES=120,GHOST_CHECK_INTERVAL_MINUTES=30,FATHOM_POLL_INTERVALS=30:60:120:300:600:900,GCP_LOCATION=us-central1,CLOUD_TASKS_QUEUE=closermetrix-processing'
 
 images:
-  - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-api:$COMMIT_SHA'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-api:$SHORT_SHA'
   - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-api:latest'

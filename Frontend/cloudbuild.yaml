@@ -4,7 +4,7 @@
 # and deploys to Cloud Run.
 #
 # Usage:
-#   gcloud builds submit --config cloudbuild.yaml --substitutions=COMMIT_SHA=$(git rev-parse --short HEAD) --project=closer-automation
+#   gcloud builds submit --config cloudbuild.yaml --substitutions=SHORT_SHA=$(git rev-parse --short HEAD) --project=closer-automation
 #
 # Prerequisites:
 #   - GCP project: closer-automation
@@ -19,7 +19,7 @@ steps:
     args:
       - 'build'
       - '-t'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-dashboard:$COMMIT_SHA'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-dashboard:$SHORT_SHA'
       - '-t'
       - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-dashboard:latest'
       - '.'
@@ -28,7 +28,7 @@ steps:
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-dashboard:$COMMIT_SHA'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-dashboard:$SHORT_SHA'
 
   - name: 'gcr.io/cloud-builders/docker'
     args:
@@ -43,7 +43,7 @@ steps:
       - 'deploy'
       - 'closermetrix-dashboard'
       - '--image'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-dashboard:$COMMIT_SHA'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-dashboard:$SHORT_SHA'
       - '--region'
       - 'us-central1'
       - '--platform'
@@ -67,5 +67,5 @@ steps:
       - 'NODE_ENV=production,GCP_PROJECT_ID=closer-automation,BQ_DATASET=CloserAutomation,BACKEND_API_URL=https://api.closermetrix.com'
 
 images:
-  - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-dashboard:$COMMIT_SHA'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-dashboard:$SHORT_SHA'
   - 'us-central1-docker.pkg.dev/$PROJECT_ID/closermetrix/closermetrix-dashboard:latest'
