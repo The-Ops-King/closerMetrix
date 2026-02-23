@@ -29,7 +29,7 @@ const { generateTimeSeries } = require('./demoTimeSeries');
  * @returns {Promise<object>} { sections, charts }
  */
 async function getFinancialData(clientId, filters = {}, tier = 'insight') {
-  if (!bq.isAvailable()) {
+  if (!bq.isAvailable() || clientId.startsWith('demo_')) {
     logger.debug('Returning demo financial data');
     return getDemoData(tier, filters);
   }
@@ -47,11 +47,184 @@ async function getFinancialData(clientId, filters = {}, tier = 'insight') {
 
 /**
  * Run real BigQuery queries for financial data.
- * Placeholder -- will be filled with actual SQL when BQ credentials are available.
+ * Runs 3 queries in parallel: scorecard, time-series, per-closer.
  */
 async function queryBigQuery(clientId, filters, tier) {
-  // TODO: Real BQ queries when credentials available
-  return getDemoData(tier, filters);
+  const { buildQueryContext, timeBucket, runParallel, num, rate, VIEW } = require('./helpers');
+  const { params, where } = buildQueryContext(clientId, filters, tier);
+  const tb = timeBucket();
+
+  // 1) Scorecard aggregation
+  const scorecardSql = `SELECT
+      SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_revenue_generated AS FLOAT64) ELSE 0 END) as revenue,
+      SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_cash_collected AS FLOAT64) ELSE 0 END) as cash,
+      COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END) as calls_held,
+      COUNT(CASE WHEN calls_call_outcome = 'Closed - Won' THEN 1 END) as closed_deals,
+      SAFE_DIVIDE(
+        SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_revenue_generated AS FLOAT64) ELSE 0 END),
+        COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END)
+      ) as rev_per_call,
+      SAFE_DIVIDE(
+        SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_cash_collected AS FLOAT64) ELSE 0 END),
+        COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END)
+      ) as cash_per_call,
+      SAFE_DIVIDE(
+        SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_revenue_generated AS FLOAT64) ELSE 0 END),
+        COUNT(CASE WHEN calls_call_outcome = 'Closed - Won' THEN 1 END)
+      ) as avg_deal_revenue,
+      SAFE_DIVIDE(
+        SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_cash_collected AS FLOAT64) ELSE 0 END),
+        COUNT(CASE WHEN calls_call_outcome = 'Closed - Won' THEN 1 END)
+      ) as avg_cash_per_deal,
+      SAFE_DIVIDE(
+        COUNT(CASE WHEN calls_call_outcome = 'Closed - Won' AND CAST(calls_cash_collected AS FLOAT64) >= CAST(calls_revenue_generated AS FLOAT64) THEN 1 END),
+        COUNT(CASE WHEN calls_call_outcome = 'Closed - Won' THEN 1 END)
+      ) as pif_pct
+    FROM ${VIEW} ${where}`;
+
+  // 2) Time-series: revenue + cash by week
+  const tsSql = `SELECT
+      ${tb} as bucket,
+      SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_revenue_generated AS FLOAT64) ELSE 0 END) as revenue,
+      SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_cash_collected AS FLOAT64) ELSE 0 END) as cash,
+      COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END) as calls_held,
+      SAFE_DIVIDE(
+        SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_revenue_generated AS FLOAT64) ELSE 0 END),
+        COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END)
+      ) as rev_per_call,
+      SAFE_DIVIDE(
+        SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_cash_collected AS FLOAT64) ELSE 0 END),
+        COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END)
+      ) as cash_per_call
+    FROM ${VIEW} ${where}
+    GROUP BY bucket ORDER BY bucket`;
+
+  // 3) Per-closer: revenue, cash, deal size, calls held
+  const closerSql = `SELECT
+      closers_name as closer_name,
+      SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_revenue_generated AS FLOAT64) ELSE 0 END) as revenue,
+      SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_cash_collected AS FLOAT64) ELSE 0 END) as cash,
+      COUNT(CASE WHEN calls_call_outcome = 'Closed - Won' THEN 1 END) as closed_deals,
+      COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END) as calls_held,
+      SAFE_DIVIDE(
+        SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_revenue_generated AS FLOAT64) ELSE 0 END),
+        COUNT(CASE WHEN calls_call_outcome = 'Closed - Won' THEN 1 END)
+      ) as avg_deal_rev,
+      SAFE_DIVIDE(
+        SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_cash_collected AS FLOAT64) ELSE 0 END),
+        COUNT(CASE WHEN calls_call_outcome = 'Closed - Won' THEN 1 END)
+      ) as avg_deal_cash,
+      SAFE_DIVIDE(
+        SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_revenue_generated AS FLOAT64) ELSE 0 END),
+        COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END)
+      ) as rev_per_call,
+      SAFE_DIVIDE(
+        SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_cash_collected AS FLOAT64) ELSE 0 END),
+        COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END)
+      ) as cash_per_call
+    FROM ${VIEW} ${where}
+    GROUP BY closers_name ORDER BY revenue DESC`;
+
+  const [scRows, tsRows, clRows] = await runParallel([
+    bq.runQuery(scorecardSql, params),
+    bq.runQuery(tsSql, params),
+    bq.runQuery(closerSql, params),
+  ]);
+
+  const sc = (scRows && scRows[0]) || {};
+  const ts = tsRows || [];
+  const cl = clRows || [];
+
+  const revenue = num(sc.revenue);
+  const cash = num(sc.cash);
+
+  // Build time-series data
+  const timeData = ts.map(r => ({
+    date: r.bucket ? r.bucket.value : r.bucket,
+    revenue: num(r.revenue),
+    cash: num(r.cash),
+    revPerCall: num(r.rev_per_call),
+    cashPerCall: num(r.cash_per_call),
+  }));
+
+  // Build per-closer data
+  const closerData = cl.map(r => ({
+    label: r.closer_name,
+    revenue: num(r.revenue),
+    cash: num(r.cash),
+    uncollected: Math.max(0, num(r.revenue) - num(r.cash)),
+    avgCash: num(r.avg_deal_cash),
+    avgUncollected: Math.max(0, num(r.avg_deal_rev) - num(r.avg_deal_cash)),
+    revPerCall: num(r.rev_per_call),
+    cashPerCall: num(r.cash_per_call),
+  }));
+
+  return {
+    sections: {
+      revenue: {
+        revenue: { value: revenue, label: 'Revenue Generated', format: 'currency' },
+        cashCollected: { value: cash, label: 'Cash Collected', format: 'currency' },
+        revenuePerCall: { value: num(sc.rev_per_call), label: 'Revenue / Call', format: 'currency' },
+        cashPerCall: { value: num(sc.cash_per_call), label: 'Cash / Call', format: 'currency' },
+        collectedPct: { value: revenue > 0 ? cash / revenue : 0, label: '% Collected', format: 'percent' },
+        avgDealRevenue: { value: num(sc.avg_deal_revenue), label: 'Avg Revenue Per Deal', format: 'currency' },
+        avgCashPerDeal: { value: num(sc.avg_cash_per_deal), label: 'Avg Cash Per Deal', format: 'currency' },
+        pifPct: { value: rate(sc.pif_pct), label: '% PIFs', format: 'percent' },
+      },
+    },
+    charts: {
+      revenueOverTime: {
+        type: 'line',
+        label: 'Total Cash & Revenue Over Time',
+        series: [
+          { key: 'revenue', label: 'Revenue Generated', color: 'green' },
+          { key: 'cash', label: 'Cash Collected', color: 'cyan' },
+        ],
+        data: timeData,
+      },
+      perCallOverTime: {
+        type: 'line',
+        label: 'Cash & Revenue per Call Over Time',
+        series: [
+          { key: 'revPerCall', label: 'Revenue / Call', color: 'purple' },
+          { key: 'cashPerCall', label: 'Cash / Call', color: 'blue' },
+        ],
+        data: timeData,
+      },
+      revenueByCloserPie: {
+        type: 'pie',
+        label: '% of Revenue Generated by Closer',
+        data: closerData.map(c => ({ label: c.label, value: c.revenue, color: 'cyan' })),
+      },
+      revenueByCloserBar: {
+        type: 'bar',
+        label: 'Total Cash & Revenue per Closer',
+        series: [
+          { key: 'cash', label: 'Cash Collected', color: 'teal' },
+          { key: 'uncollected', label: 'Uncollected', color: 'green' },
+        ],
+        data: closerData.map(c => ({ date: c.label, cash: c.cash, uncollected: c.uncollected })),
+      },
+      avgPerDealByCloser: {
+        type: 'bar',
+        label: 'Avg Cash & Revenue per Closer',
+        series: [
+          { key: 'avgCash', label: 'Avg Cash', color: 'teal' },
+          { key: 'avgUncollected', label: 'Avg Uncollected', color: 'green' },
+        ],
+        data: closerData.map(c => ({ date: c.label, avgCash: c.avgCash, avgUncollected: c.avgUncollected })),
+      },
+      perCallByCloser: {
+        type: 'bar',
+        label: 'Cash & Revenue per Call by Closer',
+        series: [
+          { key: 'revPerCall', label: 'Revenue / Call', color: 'purple' },
+          { key: 'cashPerCall', label: 'Cash / Call', color: 'blue' },
+        ],
+        data: closerData.map(c => ({ date: c.label, revPerCall: c.revPerCall, cashPerCall: c.cashPerCall })),
+      },
+    },
+  };
 }
 
 // ================================================================

@@ -36,6 +36,7 @@ const transcriptService = require('./transcript/TranscriptService');
 const fathomAPI = require('./transcript/FathomAPI');
 const alertService = require('../utils/AlertService');
 const config = require('../config');
+const { toISO } = require('../utils/dateUtils');
 const logger = require('../utils/logger');
 
 class TimeoutService {
@@ -399,7 +400,7 @@ class TimeoutService {
             // Skip if this call already got a transcript from a previous match in this loop
             if (call._matched) continue;
 
-            const callTime = new Date(call.appointment_date);
+            const callTime = new Date(toISO(call.appointment_date));
             const timeDiffMinutes = Math.abs(meetingTime - callTime) / (1000 * 60);
 
             // Match if within 30 minutes

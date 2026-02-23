@@ -33,7 +33,7 @@ export function FilterProvider({ children }) {
   const [dateLabel, setDateLabel] = useState('This Month');
   const [closerIds, setCloserIds] = useState([]);
   const [objectionType, setObjectionType] = useState(null);
-  const [granularity, setGranularity] = useState('weekly');
+  const [granularity, setGranularity] = useState('daily');
   const [riskCategory, setRiskCategory] = useState(null);
 
   /**
@@ -44,7 +44,7 @@ export function FilterProvider({ children }) {
     setDateLabel('This Month');
     setCloserIds([]);
     setObjectionType(null);
-    setGranularity('weekly');
+    setGranularity('daily');
     setRiskCategory(null);
   }, []);
 

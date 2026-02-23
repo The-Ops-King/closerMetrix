@@ -4,8 +4,10 @@
  * All dates in CloserMetrix are stored in UTC. These helpers handle
  * conversion, formatting, and timezone operations.
  *
- * IMPORTANT: The Calls table stores appointment_date as a STRING in ISO format
- * (legacy decision). These utilities work with that constraint.
+ * NOTE: appointment_date is now a native TIMESTAMP in BigQuery.
+ * The BigQuery Node SDK returns TIMESTAMP values as objects like
+ * { value: '2026-02-16T15:00:00.000000Z' }. The toISO() helper
+ * normalizes these (and plain strings/Date objects) to ISO strings.
  */
 
 /**
@@ -64,10 +66,28 @@ function durationMinutes(startISO, endISO) {
   return (end - start) / (1000 * 60);
 }
 
+/**
+ * Normalizes a BigQuery TIMESTAMP value to an ISO string.
+ * BigQuery SDK returns TIMESTAMP as { value: '...' } objects.
+ * This also handles plain strings, Date objects, and null/undefined.
+ *
+ * @param {*} val — BigQuery TIMESTAMP object, string, Date, or null
+ * @returns {string} ISO string, or '' if null/undefined
+ */
+function toISO(val) {
+  if (!val) return '';
+  if (typeof val === 'object' && val !== null && val.value) {
+    return String(val.value);
+  }
+  if (val instanceof Date) return val.toISOString();
+  return String(val);
+}
+
 module.exports = {
   nowISO,
   nowTimestamp,
   diffMinutes,
   isPast,
   durationMinutes,
+  toISO,
 };

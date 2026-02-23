@@ -19,7 +19,7 @@ const callQueries = require('../db/queries/calls');
 const closerQueries = require('../db/queries/closers');
 const auditLogger = require('../utils/AuditLogger');
 const { generateId } = require('../utils/idGenerator');
-const { nowISO } = require('../utils/dateUtils');
+const { nowISO, toISO } = require('../utils/dateUtils');
 const logger = require('../utils/logger');
 
 /**
@@ -294,7 +294,7 @@ class CallStateManager {
 
     // Call is still pre-outcome (null, Scheduled, or Waiting for Outcome) — check if time, attendees, or title changed
     if (this._isPreOutcome(existing.attendance)) {
-      const dateChanged = existing.appointment_date !== newStartTime;
+      const dateChanged = toISO(existing.appointment_date) !== newStartTime;
       const prospectChanged = this._hasProspectChanged(existing, event, closer);
 
       if (dateChanged || prospectChanged) {
@@ -311,7 +311,7 @@ class CallStateManager {
     }
 
     // For Ghosted, No Recording — if date is different, create new
-    if (existing.appointment_date !== newStartTime) {
+    if (toISO(existing.appointment_date) !== newStartTime) {
       return { action: 'create_new', existingRecord: existing };
     }
 
@@ -409,13 +409,13 @@ class CallStateManager {
     const auditEntries = [];
 
     // Check for time change
-    if (existingRecord.appointment_date !== event.startTime) {
+    if (toISO(existingRecord.appointment_date) !== event.startTime) {
       updates.appointment_date = event.startTime;
       updates.appointment_end_date = event.endTime || null;
       updates.timezone = event.originalTimezone;
       auditEntries.push({
         fieldChanged: 'appointment_date',
-        oldValue: existingRecord.appointment_date,
+        oldValue: toISO(existingRecord.appointment_date),
         newValue: event.startTime,
       });
     }

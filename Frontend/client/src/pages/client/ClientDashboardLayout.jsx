@@ -10,7 +10,7 @@
  * If invalid: shows error state.
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Outlet, useParams } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -24,11 +24,13 @@ export default function ClientDashboardLayout() {
   const { token } = useParams();
   const { isAuthenticated, isLoading, error, tier, companyName, mode, validateClientToken } = useAuth();
 
-  // Validate token on mount — works for both real and demo tokens.
-  // The server handles demo tokens (demo-basic, demo-insight, demo-executive)
-  // and returns proper client records for them.
+  // Track which token we've already validated to prevent double-validation
+  // (React StrictMode re-invokes effects, which would flash a loading spinner).
+  const validatedTokenRef = useRef(null);
+
   useEffect(() => {
-    if (token) {
+    if (token && validatedTokenRef.current !== token) {
+      validatedTokenRef.current = token;
       validateClientToken(token);
     }
   }, [token, validateClientToken]);

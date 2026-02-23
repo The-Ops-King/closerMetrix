@@ -36,7 +36,7 @@ const { computeGranularity } = require('./demoTimeSeries');
  * @returns {Promise<object>} { sections, charts, tables }
  */
 async function getObjectionsData(clientId, filters = {}, tier = 'insight') {
-  if (!bq.isAvailable()) {
+  if (!bq.isAvailable() || clientId.startsWith('demo_')) {
     logger.debug('Returning demo objections data');
     return getDemoData(tier, filters);
   }
@@ -54,16 +54,202 @@ async function getObjectionsData(clientId, filters = {}, tier = 'insight') {
 
 /**
  * Run real BigQuery queries for objection data.
- * Placeholder -- will be filled with actual SQL when BQ credentials are available.
- *
- * The "% of calls with objections" metric requires a blended query:
- *   COUNT(DISTINCT obj_call_id) / COUNT(DISTINCT calls_call_id)
- *   WHERE calls_attendance = 'Show'
- * This uses v_calls_with_objections_filterable (LEFT JOIN so calls without objections included).
+ * Runs 3 queries in parallel: scorecard, by-type breakdown, per-closer + time-series.
  */
 async function queryBigQuery(clientId, filters, tier) {
-  // TODO: Real BQ queries when credentials available
-  return getDemoData();
+  const { runParallel, num, rate } = require('./helpers');
+
+  const objView = bq.table('v_objections_joined');
+  const callsObjView = bq.table('v_calls_with_objections_filterable');
+  const callsObjCountView = bq.table('v_calls_with_objection_counts');
+
+  const effectiveCloserId = tier === 'basic' ? null : filters.closerId;
+  const closerFilter = effectiveCloserId ? 'AND calls_closer_id = @closerId' : '';
+  const objCloserFilter = effectiveCloserId ? 'AND obj_closer_id = @closerId' : '';
+
+  const typeFilter = filters.objectionType
+    ? `AND obj_objection_type IN UNNEST(@objTypes)`
+    : '';
+
+  const params = { clientId, dateStart: filters.dateStart, dateEnd: filters.dateEnd };
+  if (effectiveCloserId) params.closerId = effectiveCloserId;
+  if (filters.objectionType) params.objTypes = filters.objectionType.split(',').map(s => s.trim());
+
+  const dateWhere = `AND DATE(calls_appointment_date) BETWEEN DATE(@dateStart) AND DATE(@dateEnd)`;
+
+  // 1) Scorecard: aggregate counts from calls_with_objection_counts + filterable view
+  const scorecardSql = `WITH calls_base AS (
+      SELECT *
+      FROM ${callsObjCountView}
+      WHERE calls_client_id = @clientId ${dateWhere} ${closerFilter}
+    )
+    SELECT
+      COUNT(*) as calls_held,
+      SUM(CAST(obj_count AS INT64)) as objections_faced,
+      COUNT(CASE WHEN has_objections = true THEN 1 END) as calls_with_obj,
+      SUM(CAST(obj_resolved_count AS INT64)) as resolved,
+      SUM(CAST(obj_not_resolved_count AS INT64)) as unresolved,
+      COUNT(CASE WHEN has_objections = false AND calls_call_outcome = 'Closed - Won' THEN 1 END) as objectionless_closes,
+      COUNT(CASE WHEN has_objections = true AND calls_call_outcome = 'Closed - Won' THEN 1 END) as closed_with_obj,
+      COUNT(CASE WHEN has_objections = true AND calls_call_outcome = 'Lost' THEN 1 END) as lost_to_obj
+    FROM calls_base
+    WHERE calls_attendance = 'Show'`;
+
+  // 2) By-type breakdown from objections_joined
+  const byTypeSql = `SELECT
+      obj_objection_type as type,
+      COUNT(*) as total,
+      COUNT(CASE WHEN obj_resolved = true THEN 1 END) as resolved,
+      SAFE_DIVIDE(COUNT(CASE WHEN obj_resolved = true THEN 1 END), COUNT(*)) as res_rate
+    FROM ${objView}
+    WHERE obj_client_id = @clientId ${dateWhere} ${objCloserFilter} ${typeFilter}
+    GROUP BY obj_objection_type
+    ORDER BY total DESC`;
+
+  // 3) By-closer breakdown
+  const byCloserSql = `SELECT
+      closers_name as closer,
+      COUNT(*) as total,
+      COUNT(CASE WHEN obj_resolved = true THEN 1 END) as resolved,
+      SAFE_DIVIDE(COUNT(CASE WHEN obj_resolved = true THEN 1 END), COUNT(*)) as res_rate
+    FROM ${objView}
+    WHERE obj_client_id = @clientId ${dateWhere} ${objCloserFilter} ${typeFilter}
+    GROUP BY closers_name
+    ORDER BY res_rate DESC`;
+
+  // 4) Time-series: objection trends by week
+  const tsSql = `SELECT
+      DATE_TRUNC(DATE(calls_appointment_date), WEEK) as bucket,
+      obj_objection_type as type,
+      COUNT(*) as cnt
+    FROM ${objView}
+    WHERE obj_client_id = @clientId ${dateWhere} ${objCloserFilter} ${typeFilter}
+    GROUP BY bucket, type
+    ORDER BY bucket`;
+
+  const [scRows, typeRows, closerRows, tsRows] = await runParallel([
+    bq.runQuery(scorecardSql, params),
+    bq.runQuery(byTypeSql, params),
+    bq.runQuery(byCloserSql, params),
+    bq.runQuery(tsSql, params),
+  ]);
+
+  const sc = (scRows && scRows[0]) || {};
+  const types = typeRows || [];
+  const closers = closerRows || [];
+  const trendRows = tsRows || [];
+
+  const callsHeld = num(sc.calls_held);
+  const objFaced = num(sc.objections_faced);
+  const callsWithObj = num(sc.calls_with_obj);
+  const resolved = num(sc.resolved);
+  const totalObj = resolved + num(sc.unresolved);
+
+  // Build trend data — top 3 types over time
+  const typeTotals = {};
+  trendRows.forEach(r => {
+    typeTotals[r.type] = (typeTotals[r.type] || 0) + num(r.cnt);
+  });
+  const top3Types = Object.entries(typeTotals)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([type]) => type);
+
+  const bucketMap = {};
+  trendRows.forEach(r => {
+    const date = r.bucket ? (r.bucket.value || r.bucket) : r.bucket;
+    if (!bucketMap[date]) bucketMap[date] = { date };
+    const key = r.type.replace(/[^a-zA-Z]/g, '');
+    bucketMap[date][key] = num(r.cnt);
+  });
+  const trendData = Object.values(bucketMap).sort((a, b) => a.date.localeCompare(b.date));
+  const trendSeries = top3Types.map(type => ({
+    key: type.replace(/[^a-zA-Z]/g, ''),
+    label: type,
+    color: TREND_COLORS[type] || 'cyan',
+  }));
+
+  // Stacked bar: resolved vs unresolved by type
+  const byTypeData = types.map(r => ({
+    date: r.type,
+    resolved: num(r.resolved),
+    unresolved: num(r.total) - num(r.resolved),
+  }));
+
+  // Unresolved pie
+  const unresolvedPie = types
+    .map(r => ({
+      label: r.type,
+      value: num(r.total) - num(r.resolved),
+      color: TYPE_COLORS[r.type] || 'muted',
+    }))
+    .filter(d => d.value > 0);
+
+  // Resolution by closer bar
+  const closerBarData = closers.map(r => ({
+    date: r.closer,
+    resRate: rate(r.res_rate),
+  }));
+
+  return {
+    sections: {
+      summary: {
+        callsHeld: { value: callsHeld, label: 'Calls Held', format: 'number', glowColor: 'blue' },
+        objectionsFaced: { value: objFaced, label: 'Objections Faced', format: 'number', glowColor: 'teal' },
+        callsWithObjections: { value: callsHeld > 0 ? callsWithObj / callsHeld : 0, label: '% Calls w/ Objections', format: 'percent', glowColor: 'amber' },
+        avgObjectionsPerCall: { value: callsWithObj > 0 ? objFaced / callsWithObj : 0, label: 'Avg Objections / Call', format: 'decimal', glowColor: 'amber' },
+        resolvedObjections: { value: resolved, label: 'Resolved', format: 'number', glowColor: 'green' },
+        resolutionRate: { value: totalObj > 0 ? resolved / totalObj : 0, label: 'Resolution Rate', format: 'percent', glowColor: 'purple' },
+        objectionlessCloses: { value: num(sc.objectionless_closes), label: 'Objectionless Closes', format: 'number', glowColor: 'green' },
+        closedWithObjections: { value: num(sc.closed_with_obj), label: 'Closed w/ Objections', format: 'number', glowColor: 'green' },
+        lostToObjections: { value: num(sc.lost_to_obj), label: 'Lost to Objections', format: 'number', glowColor: 'red' },
+      },
+    },
+    charts: {
+      objectionsByType: {
+        type: 'bar', label: 'Objections by Type (Resolved vs Unresolved)',
+        series: [
+          { key: 'resolved', label: 'Resolved', color: 'green' },
+          { key: 'unresolved', label: 'Unresolved', color: 'red' },
+        ],
+        data: byTypeData,
+      },
+      objectionTrends: {
+        type: 'line', label: 'Top 3 Objections Over Time',
+        series: trendSeries,
+        data: trendData,
+      },
+      unresolvedByType: {
+        type: 'pie', label: 'Unresolved Objections by Type',
+        data: unresolvedPie,
+      },
+      resolutionByCloser: {
+        type: 'bar', label: 'Resolution Rate by Closer',
+        series: [{ key: 'resRate', label: 'Resolution Rate', color: 'green' }],
+        data: closerBarData,
+      },
+    },
+    tables: {
+      byType: {
+        columns: ['Type', 'Total', 'Resolved', 'Resolution Rate'],
+        rows: types.map(r => ({
+          type: r.type,
+          total: num(r.total),
+          resolved: num(r.resolved),
+          resRate: rate(r.res_rate),
+        })),
+      },
+      byCloser: {
+        columns: ['Closer', 'Objections', 'Resolved', 'Resolution Rate'],
+        rows: closers.map(r => ({
+          closer: r.closer,
+          total: num(r.total),
+          resolved: num(r.resolved),
+          resRate: rate(r.res_rate),
+        })),
+      },
+    },
+  };
 }
 
 // ================================================================

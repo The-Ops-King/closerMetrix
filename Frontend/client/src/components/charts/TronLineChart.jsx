@@ -52,7 +52,9 @@ export default function TronLineChart({
    * MUI X Charts v7 xAxis with scaleType 'time' expects Date objects.
    */
   const xAxisData = useMemo(
-    () => data.map((d) => new Date(d.date)),
+    // Append T12:00:00 so JS parses as LOCAL noon, not UTC midnight.
+    // Without this, 'YYYY-MM-DD' is parsed as UTC, shifting dates back 1 day in US timezones.
+    () => data.map((d) => new Date(d.date + 'T12:00:00')),
     [data]
   );
 

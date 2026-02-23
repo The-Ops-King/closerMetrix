@@ -45,7 +45,7 @@ const NEON = {
  * @returns {Promise<object>} { sections, charts }
  */
 async function getSalesCycleData(clientId, filters = {}, tier = 'insight') {
-  if (!bq.isAvailable()) {
+  if (!bq.isAvailable() || clientId.startsWith('demo_')) {
     logger.debug('Returning demo sales cycle data');
     return getDemoData(tier, filters);
   }
@@ -63,14 +63,184 @@ async function getSalesCycleData(clientId, filters = {}, tier = 'insight') {
 
 /**
  * Run real BigQuery queries for sales cycle data.
- * Placeholder -- will be filled with actual SQL when BQ credentials are available.
- *
- * Primary data source: v_close_cycle_stats_dated view
- *   Fields: prospect_email, client_id, closer_id, close_date, days_to_close, calls_to_close
+ * Uses v_close_cycle_stats_dated view for per-prospect close cycle metrics.
+ * Also queries the main view for calls-needed-per-deal (total calls / total closes).
  */
 async function queryBigQuery(clientId, filters, tier) {
-  // TODO: Real BQ queries when credentials available
-  return getDemoData(tier, filters);
+  const { runParallel, num, rate } = require('./helpers');
+  const isInsightPlus = tier === 'insight' || tier === 'executive';
+
+  const cycleView = bq.table('v_close_cycle_stats_dated');
+  const mainView = bq.table('v_calls_joined_flat_prefixed');
+
+  const effectiveCloserId = tier === 'basic' ? null : filters.closerId;
+  const closerFilter = effectiveCloserId ? 'AND closer_id = @closerId' : '';
+  const mainCloserFilter = effectiveCloserId ? 'AND calls_closer_id = @closerId' : '';
+
+  const params = { clientId, dateStart: filters.dateStart, dateEnd: filters.dateEnd };
+  if (effectiveCloserId) params.closerId = effectiveCloserId;
+
+  // 1) Scorecard: avg/median calls & days to close, bucket counts
+  const scorecardSql = `SELECT
+      AVG(calls_to_close) as avg_calls,
+      APPROX_QUANTILES(calls_to_close, 2)[OFFSET(1)] as median_calls,
+      AVG(days_to_close) as avg_days,
+      APPROX_QUANTILES(days_to_close, 2)[OFFSET(1)] as median_days,
+      COUNT(*) as total_closed,
+      COUNT(CASE WHEN calls_to_close = 1 THEN 1 END) as one_call,
+      COUNT(CASE WHEN calls_to_close = 2 THEN 1 END) as two_call,
+      COUNT(CASE WHEN calls_to_close >= 3 THEN 1 END) as three_plus,
+      -- Days buckets
+      COUNT(CASE WHEN days_to_close = 0 THEN 1 END) as same_day,
+      COUNT(CASE WHEN days_to_close BETWEEN 1 AND 3 THEN 1 END) as days_1_3,
+      COUNT(CASE WHEN days_to_close BETWEEN 4 AND 7 THEN 1 END) as days_4_7,
+      COUNT(CASE WHEN days_to_close BETWEEN 8 AND 14 THEN 1 END) as days_8_14,
+      COUNT(CASE WHEN days_to_close BETWEEN 15 AND 30 THEN 1 END) as days_15_30,
+      COUNT(CASE WHEN days_to_close > 30 THEN 1 END) as days_30_plus
+    FROM ${cycleView}
+    WHERE client_id = @clientId
+      AND close_date BETWEEN @dateStart AND @dateEnd
+      ${closerFilter}`;
+
+  // 2) Calls needed per deal (total calls held / total closes) from main view
+  const callsPerDealSql = `SELECT
+      SAFE_DIVIDE(
+        COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END),
+        COUNT(CASE WHEN calls_call_outcome = 'Closed - Won' THEN 1 END)
+      ) as calls_needed_per_deal
+    FROM ${mainView}
+    WHERE clients_client_id = @clientId
+      AND DATE(calls_appointment_date) BETWEEN DATE(@dateStart) AND DATE(@dateEnd)
+      ${mainCloserFilter}`;
+
+  // 3) Per-closer (insight+)
+  const closerSql = isInsightPlus ? `SELECT
+      closer_id,
+      MAX(closer_name) as closer_name,
+      AVG(calls_to_close) as avg_calls,
+      AVG(days_to_close) as avg_days,
+      COUNT(CASE WHEN calls_to_close = 1 THEN 1 END) as one_call,
+      COUNT(CASE WHEN calls_to_close = 2 THEN 1 END) as two_call,
+      COUNT(CASE WHEN calls_to_close >= 3 THEN 1 END) as three_plus,
+      COUNT(CASE WHEN days_to_close = 0 THEN 1 END) as same_day,
+      COUNT(CASE WHEN days_to_close BETWEEN 1 AND 3 THEN 1 END) as days_1_3,
+      COUNT(CASE WHEN days_to_close BETWEEN 4 AND 7 THEN 1 END) as days_4_7,
+      COUNT(CASE WHEN days_to_close > 7 THEN 1 END) as days_8_plus
+    FROM ${cycleView}
+    WHERE client_id = @clientId
+      AND close_date BETWEEN @dateStart AND @dateEnd
+      ${closerFilter}
+    GROUP BY closer_id ORDER BY avg_calls` : null;
+
+  const queries = [
+    bq.runQuery(scorecardSql, params),
+    bq.runQuery(callsPerDealSql, params),
+  ];
+  if (closerSql) queries.push(bq.runQuery(closerSql, params));
+
+  const results = await runParallel(queries);
+  const sc = (results[0] && results[0][0]) || {};
+  const cpd = (results[1] && results[1][0]) || {};
+  const cl = results[2] || [];
+
+  const totalClosed = num(sc.total_closed) || 1;
+  const oneCall = num(sc.one_call);
+  const twoCall = num(sc.two_call);
+  const threePlus = num(sc.three_plus);
+
+  const result = {
+    sections: {
+      callsToClose: {
+        oneCallCloses: { value: oneCall, label: '1-Call Closes', format: 'number' },
+        oneCallClosePct: { value: oneCall / totalClosed, label: '1-Call Close %', format: 'percent' },
+        twoCallCloses: { value: twoCall, label: '2-Call Closes', format: 'number' },
+        twoCallClosePct: { value: twoCall / totalClosed, label: '2-Call Close %', format: 'percent' },
+        threeCallCloses: { value: threePlus, label: '3+ Call Closes', format: 'number' },
+        threeCallClosePct: { value: threePlus / totalClosed, label: '3+ Call Close %', format: 'percent' },
+        avgCallsToClose: { value: num(sc.avg_calls), label: 'Avg Calls to Close', format: 'decimal' },
+        medianCallsToClose: { value: num(sc.median_calls), label: 'Median Calls to Close', format: 'decimal' },
+        callsNeededPerDeal: { value: num(cpd.calls_needed_per_deal), label: 'Calls Needed per Deal', format: 'decimal' },
+      },
+      daysToClose: {
+        avgDaysToClose: { value: num(sc.avg_days), label: 'Avg Days to Close', format: 'decimal' },
+        medianDaysToClose: { value: num(sc.median_days), label: 'Median Days to Close', format: 'decimal' },
+      },
+    },
+    charts: {
+      salesCyclePie: {
+        type: 'pie', label: '1-Call vs Multi-Call Closes',
+        data: [
+          { label: '1-Call Close', value: oneCall, color: NEON.green },
+          { label: '2-Call Close', value: twoCall, color: NEON.cyan },
+          { label: '3+ Call Close', value: threePlus, color: NEON.amber },
+        ].filter(d => d.value > 0),
+      },
+      callsToCloseBar: {
+        type: 'bar', label: '# of Calls to Close',
+        series: [{ key: 'deals', label: 'Deals Closed', color: 'cyan' }],
+        data: [
+          { date: '1 Call', deals: oneCall },
+          { date: '2 Calls', deals: twoCall },
+          { date: '3+ Calls', deals: threePlus },
+        ],
+      },
+      daysToClosePie: {
+        type: 'pie', label: 'Days to Close Distribution',
+        data: [
+          { label: 'Same Day', value: num(sc.same_day), color: NEON.green },
+          { label: '1-3 Days', value: num(sc.days_1_3), color: NEON.cyan },
+          { label: '4-7 Days', value: num(sc.days_4_7), color: NEON.amber },
+          { label: '8-14 Days', value: num(sc.days_8_14), color: NEON.purple },
+          { label: '15-30 Days', value: num(sc.days_15_30), color: NEON.red },
+          { label: '30+ Days', value: num(sc.days_30_plus), color: NEON.muted },
+        ].filter(d => d.value > 0),
+      },
+      daysToCloseBar: {
+        type: 'bar', label: '# of Days to Close',
+        series: [{ key: 'deals', label: 'Deals Closed', color: 'amber' }],
+        data: [
+          { date: 'Same Day', deals: num(sc.same_day) },
+          { date: '1-3', deals: num(sc.days_1_3) },
+          { date: '4-7', deals: num(sc.days_4_7) },
+          { date: '8-14', deals: num(sc.days_8_14) },
+          { date: '15-30', deals: num(sc.days_15_30) },
+          { date: '30+', deals: num(sc.days_30_plus) },
+        ],
+      },
+    },
+  };
+
+  // Per-closer charts (Insight+ only)
+  if (isInsightPlus && cl.length > 0) {
+    result.charts.callsToCloseByCloser = {
+      type: 'bar', label: 'Calls to Close by Closer',
+      series: [
+        { key: 'oneCall', label: '1 Call', color: 'green' },
+        { key: 'twoCalls', label: '2 Calls', color: 'cyan' },
+        { key: 'threePlus', label: '3+', color: 'amber' },
+      ],
+      data: cl.map(r => ({
+        date: r.closer_name || r.closer_id,
+        oneCall: num(r.one_call), twoCalls: num(r.two_call), threePlus: num(r.three_plus),
+      })),
+    };
+    result.charts.daysToCloseByCloser = {
+      type: 'bar', label: 'Days to Close by Closer',
+      series: [
+        { key: 'sameDay', label: 'Same Day', color: 'green' },
+        { key: 'oneToThree', label: '1-3', color: 'cyan' },
+        { key: 'fourToSeven', label: '4-7', color: 'amber' },
+        { key: 'eightPlus', label: '8+', color: 'red' },
+      ],
+      data: cl.map(r => ({
+        date: r.closer_name || r.closer_id,
+        sameDay: num(r.same_day), oneToThree: num(r.days_1_3),
+        fourToSeven: num(r.days_4_7), eightPlus: num(r.days_8_plus),
+      })),
+    };
+  }
+
+  return result;
 }
 
 // ================================================================

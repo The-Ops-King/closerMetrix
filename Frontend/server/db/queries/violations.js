@@ -37,7 +37,7 @@ const { generateTimeSeries } = require('./demoTimeSeries');
  * @returns {Promise<object>} { sections, charts, tables }
  */
 async function getViolationsData(clientId, filters = {}, tier = 'executive') {
-  if (!bq.isAvailable()) {
+  if (!bq.isAvailable() || clientId.startsWith('demo_')) {
     logger.debug('Returning demo violations data');
     return getDemoData(tier, filters);
   }
@@ -55,17 +55,185 @@ async function getViolationsData(clientId, filters = {}, tier = 'executive') {
 
 /**
  * Run real BigQuery queries for violations/compliance data.
- * Placeholder -- will be filled with actual SQL when BQ credentials are available.
+ * Parses key_moments JSON from the Calls table to find risk-flagged entries.
  *
- * Expected queries:
- *   1. Aggregate risk flag counts by category from compliance fields in Calls table
- *   2. Per-closer risk flag breakdown
- *   3. Risk flags over time (weekly buckets)
- *   4. Detailed risk review rows with exact phrases and timestamps
+ * key_moments is a JSON array on each call. Risk entries have categories
+ * like "Claims", "Guarantees", "Earnings", "Pressure".
+ * Structure: [{ moment, category, timestamp, risk_level, explanation }]
  */
 async function queryBigQuery(clientId, filters, tier) {
-  // TODO: Real BQ queries when credentials available
-  return getDemoData();
+  const { runParallel, num, rate } = require('./helpers');
+  const CALLS = bq.table('Calls');
+
+  const effectiveCloserId = tier === 'basic' ? null : filters.closerId;
+  const closerFilter = effectiveCloserId ? 'AND closer_id = @closerId' : '';
+
+  const params = { clientId, dateStart: filters.dateStart, dateEnd: filters.dateEnd };
+  if (effectiveCloserId) params.closerId = effectiveCloserId;
+
+  const dateWhere = `WHERE client_id = @clientId
+    AND DATE(appointment_date) BETWEEN DATE(@dateStart) AND DATE(@dateEnd)
+    AND attendance = 'Show'
+    ${closerFilter}`;
+
+  // Extract risk entries from key_moments JSON
+  // Each risk entry has: moment (the phrase), category, timestamp, risk_level, explanation
+  const riskSql = `WITH calls_base AS (
+      SELECT
+        call_id, closer_id, closer_name, appointment_date, call_type,
+        recording_url, transcript_link, key_moments,
+        attendance
+      FROM ${CALLS}
+      ${dateWhere}
+      AND key_moments IS NOT NULL
+    ),
+    risk_entries AS (
+      SELECT
+        c.call_id, c.closer_id, c.closer_name, c.appointment_date, c.call_type,
+        c.recording_url, c.transcript_link,
+        JSON_VALUE(entry, '$.moment') as exact_phrase,
+        JSON_VALUE(entry, '$.category') as risk_category,
+        JSON_VALUE(entry, '$.timestamp') as risk_timestamp,
+        JSON_VALUE(entry, '$.explanation') as why_flagged,
+        JSON_VALUE(entry, '$.risk_level') as risk_level
+      FROM calls_base c,
+        UNNEST(JSON_EXTRACT_ARRAY(c.key_moments)) as entry
+      WHERE JSON_VALUE(entry, '$.category') IN ('Claims', 'Guarantees', 'Earnings', 'Pressure')
+    )
+    SELECT * FROM risk_entries ORDER BY appointment_date DESC`;
+
+  // Total held calls (for % calculation)
+  const totalHeldSql = `SELECT
+      COUNT(*) as total_held,
+      COUNT(CASE WHEN call_type = 'First Call' THEN 1 END) as first_calls,
+      COUNT(CASE WHEN call_type = 'Follow Up' THEN 1 END) as follow_ups
+    FROM ${CALLS}
+    ${dateWhere}`;
+
+  const [riskRows, totalRows] = await runParallel([
+    bq.runQuery(riskSql, params),
+    bq.runQuery(totalHeldSql, params),
+  ]);
+
+  const risks = riskRows || [];
+  const totals = (totalRows && totalRows[0]) || {};
+  const totalHeld = num(totals.total_held);
+  const firstCalls = num(totals.first_calls);
+  const followUps = num(totals.follow_ups);
+
+  // Aggregate risk flags
+  const uniqueCallIds = new Set(risks.map(r => r.call_id));
+  const riskFlagCount = risks.length;
+  const uniqueCallsWithRisk = uniqueCallIds.size;
+
+  // Category counts
+  const categoryCounts = { Claims: 0, Guarantees: 0, Earnings: 0, Pressure: 0 };
+  risks.forEach(r => {
+    if (categoryCounts[r.risk_category] !== undefined) categoryCounts[r.risk_category]++;
+  });
+
+  // FTC/SEC warnings (claims + guarantees + earnings)
+  const ftcSecWarnings = categoryCounts.Claims + categoryCounts.Guarantees + categoryCounts.Earnings;
+
+  // Risk by call type
+  const firstCallRisks = new Set(risks.filter(r => r.call_type === 'First Call').map(r => r.call_id)).size;
+  const followUpRisks = new Set(risks.filter(r => r.call_type === 'Follow Up').map(r => r.call_id)).size;
+
+  // Per-closer aggregation for bar chart
+  const closerMap = {};
+  risks.forEach(r => {
+    if (!closerMap[r.closer_name]) closerMap[r.closer_name] = 0;
+    closerMap[r.closer_name]++;
+  });
+  const closerData = Object.entries(closerMap)
+    .map(([name, count]) => ({ date: name, flags: count }))
+    .sort((a, b) => b.flags - a.flags);
+
+  // Time-series: risk flags by week
+  const weekMap = {};
+  const catWeekMap = {};
+  risks.forEach(r => {
+    const d = new Date(r.appointment_date);
+    const weekStart = new Date(d);
+    weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+    const key = weekStart.toISOString().split('T')[0];
+    weekMap[key] = (weekMap[key] || 0) + 1;
+    if (!catWeekMap[key]) catWeekMap[key] = { claims: 0, guarantees: 0, earnings: 0, pressure: 0 };
+    const cat = (r.risk_category || '').toLowerCase();
+    if (catWeekMap[key][cat] !== undefined) catWeekMap[key][cat]++;
+  });
+
+  const timeData = Object.entries(weekMap)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, flags]) => ({ date, flags }));
+
+  const trendData = Object.entries(catWeekMap)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, cats]) => ({ date, ...cats }));
+
+  // Risk review table rows
+  const tableRows = risks.slice(0, 50).map(r => ({
+    date: r.appointment_date ? r.appointment_date.split('T')[0] : '',
+    closer: r.closer_name,
+    closerId: r.closer_id,
+    callType: r.call_type,
+    riskCategory: r.risk_category,
+    timestamp: r.risk_timestamp || '',
+    exactPhrase: r.exact_phrase || '',
+    whyFlagged: r.why_flagged || '',
+    recordingUrl: r.recording_url || '',
+    transcriptUrl: r.transcript_link || '',
+  }));
+
+  return {
+    sections: {
+      overview: {
+        riskFlagCount: { value: riskFlagCount, label: 'Risk Flags (Total)', format: 'number', glowColor: 'red' },
+        uniqueCallsWithRisk: { value: uniqueCallsWithRisk, label: 'Unique Calls with Risk', format: 'number', glowColor: 'red' },
+        pctCallsWithRisk: { value: totalHeld > 0 ? uniqueCallsWithRisk / totalHeld : 0, label: '% Calls with Risk Flags', format: 'percent', glowColor: 'amber' },
+        avgFlaggedPerCall: { value: uniqueCallsWithRisk > 0 ? riskFlagCount / uniqueCallsWithRisk : 0, label: 'Avg Flagged / Call', format: 'decimal', glowColor: 'amber' },
+        ftcSecWarnings: { value: ftcSecWarnings, label: 'FTC / SEC Warnings', format: 'number', glowColor: 'magenta' },
+      },
+      riskCategories: {
+        claims: { value: categoryCounts.Claims, label: 'Claims', format: 'number', glowColor: 'red' },
+        guarantees: { value: categoryCounts.Guarantees, label: 'Guarantees', format: 'number', glowColor: 'amber' },
+        earnings: { value: categoryCounts.Earnings, label: 'Earnings / Income', format: 'number', glowColor: 'magenta' },
+        pressure: { value: categoryCounts.Pressure, label: 'Pressure / Urgency', format: 'number', glowColor: 'purple' },
+      },
+      riskByCallType: {
+        firstCallRisk: { value: firstCalls > 0 ? firstCallRisks / firstCalls : 0, label: 'First Call Infractions', format: 'percent', glowColor: 'red' },
+        followUpRisk: { value: followUps > 0 ? followUpRisks / followUps : 0, label: 'Follow-Up Infractions', format: 'percent', glowColor: 'red' },
+      },
+    },
+    charts: {
+      complianceOverTime: {
+        type: 'line', label: 'Compliance Issues Over Time',
+        series: [{ key: 'flags', label: 'Risk Flags', color: 'red' }],
+        data: timeData,
+      },
+      flagsByCloser: {
+        type: 'bar', label: 'Risk Flags by Closer',
+        series: [{ key: 'flags', label: 'Risk Flags', color: 'red' }],
+        data: closerData,
+      },
+      riskTrends: {
+        type: 'line', label: 'Risk Category Trends',
+        series: [
+          { key: 'claims', label: 'Claims', color: 'red' },
+          { key: 'guarantees', label: 'Guarantees', color: 'amber' },
+          { key: 'earnings', label: 'Earnings', color: 'magenta' },
+          { key: 'pressure', label: 'Pressure', color: 'purple' },
+        ],
+        data: trendData,
+      },
+    },
+    tables: {
+      riskReview: {
+        columns: ['Date', 'Closer', 'Call Type', 'Risk Category', 'Timestamp', 'Exact Phrase', 'Why Flagged', 'Recording', 'Transcript'],
+        rows: tableRows,
+      },
+    },
+  };
 }
 
 // ================================================================

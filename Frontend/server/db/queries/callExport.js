@@ -74,7 +74,7 @@ function filterRecords(records, filters) {
  * @returns {Promise<object>} { rows: Array<call record> }
  */
 async function getCallExportData(clientId, filters = {}, tier = 'basic') {
-  if (!bq.isAvailable()) {
+  if (!bq.isAvailable() || clientId.startsWith('demo_')) {
     logger.debug('Returning demo call export data');
     return getDemoData(filters);
   }
@@ -116,7 +116,7 @@ async function queryBigQuery(clientId, filters, tier) {
   const sql = `
     SELECT
       calls_call_id AS call_id,
-      calls_appointment_date AS date,
+      CAST(calls_appointment_date AS STRING) AS date,
       calls_call_type AS call_type,
       calls_attendance AS attendance,
       calls_call_outcome AS outcome,
@@ -130,7 +130,18 @@ async function queryBigQuery(clientId, filters, tier) {
     ORDER BY calls_appointment_date DESC
   `;
 
-  const [rows] = await bq.runQuery(sql, params);
+  const rows = await bq.runQuery(sql, params);
+
+  // Clean date to YYYY-MM-DD — handles TIMESTAMP objects and string timestamps
+  for (const row of rows) {
+    if (!row.date) continue;
+    if (typeof row.date === 'object' && row.date.value) {
+      row.date = String(row.date.value).split('T')[0];
+    } else if (typeof row.date === 'string') {
+      row.date = row.date.split(/[T ]/)[0];
+    }
+  }
+
   return { rows };
 }
 

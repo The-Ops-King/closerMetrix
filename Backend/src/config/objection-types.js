@@ -23,5 +23,6 @@ module.exports = [
   { key: 'authority',     label: 'Authority',            description: 'Not the decision maker, need approval from boss/board/partner' },
   { key: 'value',         label: 'Value',                description: 'Don\'t see the value, not sure it\'s worth it, ROI unclear' },
   { key: 'commitment',    label: 'Commitment',           description: 'Scared of long-term commitment, want flexibility, contract concerns' },
-  { key: 'other',         label: 'Other',                description: 'Anything not fitting the above categories' },
+  { key: 'program_fit',     label: 'Program Not a Fit',    description: 'Prospect feels the program isn\'t right for them, not what they\'re looking for, doesn\'t match their needs or goals' },
+  { key: 'other',           label: 'Other',                description: 'Anything not fitting the above categories' },
 ];

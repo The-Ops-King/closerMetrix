@@ -40,7 +40,7 @@ const NEON = {
  * @returns {Promise<object>} { sections, charts }
  */
 async function getCallOutcomesData(clientId, filters = {}, tier = 'insight') {
-  if (!bq.isAvailable()) {
+  if (!bq.isAvailable() || clientId.startsWith('demo_')) {
     logger.debug('Returning demo call outcomes data');
     return getDemoData(tier, filters);
   }
@@ -58,11 +58,275 @@ async function getCallOutcomesData(clientId, filters = {}, tier = 'insight') {
 
 /**
  * Run real BigQuery queries for call outcomes data.
- * Placeholder — will be filled with actual SQL when BQ credentials are available.
+ * Runs 3 queries in parallel: scorecard, time-series, per-closer.
  */
 async function queryBigQuery(clientId, filters, tier) {
-  // TODO: Real BQ queries when credentials available
-  return getDemoData(tier, filters);
+  const { buildQueryContext, timeBucket, runParallel, num, rate, VIEW } = require('./helpers');
+  const { params, where } = buildQueryContext(clientId, filters, tier);
+  const tb = timeBucket();
+  const isInsightPlus = tier === 'insight' || tier === 'executive';
+
+  // 1) Scorecard: all outcome counts and rates
+  const scorecardSql = `SELECT
+      -- Health at a glance
+      COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END) as held,
+      COUNT(CASE WHEN calls_call_outcome = 'Closed - Won' THEN 1 END) as closes,
+      COUNT(CASE WHEN calls_call_outcome = 'Deposit' THEN 1 END) as deposits,
+      COUNT(CASE WHEN calls_call_outcome = 'Follow Up' OR calls_call_outcome = 'Follow-Up' THEN 1 END) as follow_ups,
+      COUNT(CASE WHEN calls_call_outcome = 'Lost' THEN 1 END) as lost,
+      COUNT(CASE WHEN calls_call_outcome = 'Disqualified' THEN 1 END) as dq,
+      COUNT(CASE WHEN calls_call_outcome = 'Not Pitched' THEN 1 END) as not_pitched,
+      -- First call breakdowns
+      COUNT(CASE WHEN calls_call_type = 'First Call' AND calls_call_outcome = 'Closed - Won' THEN 1 END) as first_closes,
+      COUNT(CASE WHEN calls_call_type = 'First Call' AND calls_attendance = 'Show' THEN 1 END) as first_held,
+      COUNT(CASE WHEN calls_call_type = 'First Call' THEN 1 END) as first_scheduled,
+      COUNT(CASE WHEN calls_call_type = 'First Call' AND calls_call_outcome = 'Lost' THEN 1 END) as first_lost,
+      COUNT(CASE WHEN calls_call_type = 'First Call' AND calls_call_outcome = 'Disqualified' THEN 1 END) as first_dq,
+      -- Follow-up breakdowns
+      COUNT(CASE WHEN calls_call_type = 'Follow Up' AND calls_call_outcome = 'Closed - Won' THEN 1 END) as followup_closes,
+      COUNT(CASE WHEN calls_call_type = 'Follow Up' AND calls_attendance = 'Show' THEN 1 END) as followup_held,
+      COUNT(CASE WHEN calls_call_type = 'Follow Up' THEN 1 END) as followup_scheduled,
+      COUNT(CASE WHEN calls_call_type = 'Follow Up' AND calls_call_outcome = 'Lost' THEN 1 END) as followup_lost,
+      -- Close rates
+      SAFE_DIVIDE(COUNT(CASE WHEN calls_call_outcome = 'Closed - Won' THEN 1 END),
+                  COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END)) as close_rate,
+      SAFE_DIVIDE(COUNT(CASE WHEN calls_call_type = 'First Call' AND calls_call_outcome = 'Closed - Won' THEN 1 END),
+                  COUNT(CASE WHEN calls_call_type = 'First Call' AND calls_attendance = 'Show' THEN 1 END)) as first_close_rate,
+      SAFE_DIVIDE(COUNT(CASE WHEN calls_call_type = 'Follow Up' AND calls_call_outcome = 'Closed - Won' THEN 1 END),
+                  COUNT(CASE WHEN calls_call_type = 'Follow Up' AND calls_attendance = 'Show' THEN 1 END)) as followup_close_rate,
+      -- Deposit close rate
+      SAFE_DIVIDE(COUNT(CASE WHEN calls_call_outcome = 'Deposit' THEN 1 END),
+                  COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END)) as deposit_rate,
+      -- Lost reason breakdown
+      COUNT(CASE WHEN calls_call_outcome = 'Lost' AND calls_lost_reason = "Can't Afford" THEN 1 END) as lost_cant_afford,
+      COUNT(CASE WHEN calls_call_outcome = 'Lost' AND calls_lost_reason = 'Closer Error' THEN 1 END) as lost_closer_error,
+      COUNT(CASE WHEN calls_call_outcome = 'Lost' AND calls_lost_reason = 'Not Interested' THEN 1 END) as lost_not_interested,
+      COUNT(CASE WHEN calls_call_outcome = 'Lost' AND calls_lost_reason = 'Timing' THEN 1 END) as lost_timing,
+      COUNT(CASE WHEN calls_call_outcome = 'Lost' AND (calls_lost_reason IS NULL OR calls_lost_reason NOT IN ("Can't Afford", 'Closer Error', 'Not Interested', 'Timing')) THEN 1 END) as lost_other
+    FROM ${VIEW} ${where}`;
+
+  // 2) Time-series: outcomes over time
+  const tsSql = `SELECT
+      ${tb} as bucket,
+      COUNT(CASE WHEN calls_call_outcome = 'Closed - Won' THEN 1 END) as closed,
+      COUNT(CASE WHEN calls_call_outcome = 'Deposit' THEN 1 END) as deposit,
+      COUNT(CASE WHEN calls_call_outcome = 'Follow Up' OR calls_call_outcome = 'Follow-Up' THEN 1 END) as followUp,
+      COUNT(CASE WHEN calls_call_outcome = 'Lost' THEN 1 END) as lost,
+      COUNT(CASE WHEN calls_call_outcome = 'Disqualified' THEN 1 END) as disqualified,
+      COUNT(CASE WHEN calls_call_outcome = 'Not Pitched' THEN 1 END) as notPitched,
+      -- Close rates over time
+      COUNT(CASE WHEN calls_call_type = 'First Call' AND calls_call_outcome = 'Closed - Won' THEN 1 END) as first_call_closes,
+      COUNT(CASE WHEN calls_call_type = 'Follow Up' AND calls_call_outcome = 'Closed - Won' THEN 1 END) as followup_closes,
+      SAFE_DIVIDE(COUNT(CASE WHEN calls_call_type = 'First Call' AND calls_call_outcome = 'Closed - Won' THEN 1 END),
+                  COUNT(CASE WHEN calls_call_type = 'First Call' AND calls_attendance = 'Show' THEN 1 END)) as firstCallRate,
+      SAFE_DIVIDE(COUNT(CASE WHEN calls_call_type = 'Follow Up' AND calls_call_outcome = 'Closed - Won' THEN 1 END),
+                  COUNT(CASE WHEN calls_call_type = 'Follow Up' AND calls_attendance = 'Show' THEN 1 END)) as followUpRate
+    FROM ${VIEW} ${where}
+    GROUP BY bucket ORDER BY bucket`;
+
+  // 3) Per-closer outcome breakdown
+  const closerSql = isInsightPlus ? `SELECT
+      closers_name as closer_name,
+      COUNT(CASE WHEN calls_call_outcome = 'Closed - Won' THEN 1 END) as closed,
+      COUNT(CASE WHEN calls_call_outcome = 'Deposit' THEN 1 END) as deposit,
+      COUNT(CASE WHEN calls_call_outcome = 'Follow Up' OR calls_call_outcome = 'Follow-Up' THEN 1 END) as followUp,
+      COUNT(CASE WHEN calls_call_outcome = 'Lost' THEN 1 END) as lost,
+      COUNT(CASE WHEN calls_call_outcome = 'Disqualified' THEN 1 END) as disqualified,
+      COUNT(CASE WHEN calls_call_outcome = 'Not Pitched' THEN 1 END) as notPitched,
+      COUNT(CASE WHEN calls_call_type = 'First Call' AND calls_call_outcome = 'Closed - Won' THEN 1 END) as firstCall,
+      COUNT(CASE WHEN calls_call_type = 'Follow Up' AND calls_call_outcome = 'Closed - Won' THEN 1 END) as followUpClose,
+      SAFE_DIVIDE(COUNT(CASE WHEN calls_call_outcome = 'Closed - Won' THEN 1 END),
+                  COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END)) as close_rate,
+      SAFE_DIVIDE(COUNT(CASE WHEN calls_call_outcome = 'Lost' THEN 1 END),
+                  COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END)) as lost_rate,
+      SAFE_DIVIDE(COUNT(CASE WHEN calls_call_outcome = 'Disqualified' THEN 1 END),
+                  COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END)) as dq_rate,
+      SAFE_DIVIDE(COUNT(CASE WHEN calls_call_outcome = 'Not Pitched' THEN 1 END),
+                  COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END)) as not_pitched_rate
+    FROM ${VIEW} ${where}
+    GROUP BY closers_name ORDER BY closed DESC` : null;
+
+  const queries = [
+    bq.runQuery(scorecardSql, params),
+    bq.runQuery(tsSql, params),
+  ];
+  if (closerSql) queries.push(bq.runQuery(closerSql, params));
+
+  const results = await runParallel(queries);
+  const sc = (results[0] && results[0][0]) || {};
+  const ts = results[1] || [];
+  const cl = results[2] || [];
+
+  const held = num(sc.held);
+  const closes = num(sc.closes);
+  const deposits = num(sc.deposits);
+  const followUps = num(sc.follow_ups);
+  const lost = num(sc.lost);
+  const dq = num(sc.dq);
+  const notPitched = num(sc.not_pitched);
+  const total = held;
+
+  const timeData = ts.map(r => ({
+    date: r.bucket ? r.bucket.value : r.bucket,
+    closed: num(r.closed), deposit: num(r.deposit), followUp: num(r.followUp),
+    lost: num(r.lost), disqualified: num(r.disqualified), notPitched: num(r.notPitched),
+    firstCall: num(r.first_call_closes), followUpClose: num(r.followup_closes),
+    firstCallRate: rate(r.firstCallRate), followUpRate: rate(r.followUpRate),
+  }));
+
+  const result = {
+    sections: {
+      health: {
+        closes: {
+          count: { value: closes },
+          pctOfTotal: { value: total > 0 ? closes / total : 0 },
+          closeRate: { value: rate(sc.close_rate) },
+        },
+        deposits: {
+          count: { value: deposits },
+          pctOfTotal: { value: total > 0 ? deposits / total : 0 },
+          closeRate: { value: rate(sc.deposit_rate) },
+        },
+        followUps: {
+          count: { value: followUps },
+          pctOfTotal: { value: total > 0 ? followUps / total : 0 },
+        },
+        lost: {
+          count: { value: lost },
+          pctOfTotal: { value: total > 0 ? lost / total : 0 },
+        },
+        disqualified: {
+          count: { value: dq },
+          pctOfTotal: { value: total > 0 ? dq / total : 0 },
+        },
+        notPitched: {
+          count: { value: notPitched },
+          pctOfTotal: { value: total > 0 ? notPitched / total : 0 },
+        },
+      },
+      closedWon: {
+        firstCallCloses: { value: num(sc.first_closes) },
+        firstCallCloseRate: { value: rate(sc.first_close_rate) },
+        followUpCloses: { value: num(sc.followup_closes) },
+        followUpCloseRate: { value: rate(sc.followup_close_rate) },
+      },
+      lost: {
+        firstCallLost: { value: num(sc.first_lost) },
+        firstCallLostRate: { value: num(sc.first_held) > 0 ? num(sc.first_lost) / num(sc.first_held) : 0 },
+        followUpLost: { value: num(sc.followup_lost) },
+        followUpLostRate: { value: num(sc.followup_held) > 0 ? num(sc.followup_lost) / num(sc.followup_held) : 0 },
+      },
+      disqualified: {
+        firstCallDQ: { value: num(sc.first_dq) },
+        firstCallDQRate: { value: num(sc.first_held) > 0 ? num(sc.first_dq) / num(sc.first_held) : 0 },
+      },
+      notPitched: {
+        notPitched: { value: notPitched },
+        notPitchedRate: { value: total > 0 ? notPitched / total : 0 },
+      },
+    },
+    charts: {
+      outcomeBreakdown: {
+        type: 'pie', label: 'Call Outcomes Distribution',
+        data: [
+          { label: 'Closed - Won', value: closes, color: NEON.green },
+          { label: 'Deposit', value: deposits, color: NEON.amber },
+          { label: 'Follow Up', value: followUps, color: NEON.purple },
+          { label: 'Lost', value: lost, color: NEON.red },
+          { label: 'Disqualified', value: dq, color: NEON.muted },
+          { label: 'Not Pitched', value: notPitched, color: NEON.blue },
+        ].filter(d => d.value > 0),
+      },
+      outcomesOverTime: {
+        type: 'line', label: 'Outcomes Over Time',
+        series: [
+          { key: 'closed', label: 'Closed', color: 'green' },
+          { key: 'deposit', label: 'Deposit', color: 'amber' },
+          { key: 'followUp', label: 'Follow Up', color: 'purple' },
+          { key: 'lost', label: 'Lost', color: 'red' },
+          { key: 'disqualified', label: 'Disqualified', color: 'muted' },
+          { key: 'notPitched', label: 'Not Pitched', color: 'blue' },
+        ],
+        data: timeData,
+      },
+      closesOverTime: {
+        type: 'bar', label: 'Closes Over Time',
+        series: [
+          { key: 'firstCall', label: 'First Call Closes', color: 'green' },
+          { key: 'followUpClose', label: 'Follow-Up Closes', color: 'purple' },
+        ],
+        data: timeData,
+      },
+      closeRateOverTime: {
+        type: 'line', label: 'Close Rate Over Time',
+        series: [
+          { key: 'firstCallRate', label: 'First Call Close %', color: 'green' },
+          { key: 'followUpRate', label: 'Follow-Up Close %', color: 'purple' },
+        ],
+        data: timeData,
+      },
+      lostReasons: {
+        type: 'pie', label: 'Lost Reasons',
+        data: [
+          { label: "Can't Afford", value: num(sc.lost_cant_afford), color: NEON.amber },
+          { label: 'Closer Error', value: num(sc.lost_closer_error), color: NEON.red },
+          { label: 'Not Interested', value: num(sc.lost_not_interested), color: NEON.cyan },
+          { label: 'Timing', value: num(sc.lost_timing), color: NEON.purple },
+          { label: 'Other', value: num(sc.lost_other), color: NEON.muted },
+        ].filter(d => d.value > 0),
+      },
+    },
+  };
+
+  // Per-closer charts (Insight+ only)
+  if (isInsightPlus && cl.length > 0) {
+    result.charts.outcomeByCloser = {
+      type: 'bar', label: 'Call Outcome by Closer',
+      series: [
+        { key: 'closed', label: 'Closed', color: 'green' },
+        { key: 'deposit', label: 'Deposit', color: 'amber' },
+        { key: 'followUp', label: 'Follow Up', color: 'purple' },
+        { key: 'lost', label: 'Lost', color: 'red' },
+        { key: 'disqualified', label: 'Disqualified', color: 'muted' },
+        { key: 'notPitched', label: 'Not Pitched', color: 'blue' },
+      ],
+      data: cl.map(r => ({
+        label: r.closer_name,
+        closed: num(r.closed), deposit: num(r.deposit), followUp: num(r.followUp),
+        lost: num(r.lost), disqualified: num(r.disqualified), notPitched: num(r.notPitched),
+      })),
+    };
+    result.charts.closesByCloser = {
+      type: 'bar', label: 'Closes by Closer',
+      series: [
+        { key: 'firstCall', label: 'First Call', color: 'green' },
+        { key: 'followUp', label: 'Follow-Up', color: 'purple' },
+      ],
+      data: cl.map(r => ({
+        label: r.closer_name, firstCall: num(r.firstCall), followUp: num(r.followUpClose),
+      })).sort((a, b) => (b.firstCall + b.followUp) - (a.firstCall + a.followUp)),
+    };
+    result.charts.lostRateByCloser = {
+      type: 'bar', label: 'Lost Rate by Closer',
+      series: [{ key: 'lostRate', label: 'Lost Rate', color: 'red' }],
+      data: cl.map(r => ({ label: r.closer_name, lostRate: rate(r.lost_rate) }))
+        .sort((a, b) => a.lostRate - b.lostRate),
+    };
+    result.charts.dqByCloser = {
+      type: 'bar', label: 'DQ Rate by Closer',
+      series: [{ key: 'dqRate', label: 'DQ Rate', color: 'muted' }],
+      data: cl.map(r => ({ label: r.closer_name, dqRate: rate(r.dq_rate) }))
+        .sort((a, b) => b.dqRate - a.dqRate),
+    };
+    result.charts.notPitchedByCloser = {
+      type: 'bar', label: 'Not Pitched by Closer',
+      series: [{ key: 'notPitchedRate', label: 'Not Pitched Rate', color: 'blue' }],
+      data: cl.map(r => ({ label: r.closer_name, notPitchedRate: rate(r.not_pitched_rate) }))
+        .sort((a, b) => b.notPitchedRate - a.notPitchedRate),
+    };
+  }
+
+  return result;
 }
 
 // ================================================================

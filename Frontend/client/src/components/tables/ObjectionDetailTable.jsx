@@ -34,18 +34,22 @@ import SectionHeader from '../SectionHeader';
 import DateRangeFilter from '../filters/DateRangeFilter';
 
 const OBJECTION_TYPES = [
-  'Financial', 'Think About It', 'Spouse/Partner', 'Timing',
-  'Already Tried', 'Not Interested', 'Other',
+  'Financial', 'Spouse/Partner', 'Think About It', 'Timing',
+  'Trust/Credibility', 'Already Tried', 'DIY', 'Not Ready',
+  'Competitor', 'Authority', 'Value', 'Commitment',
+  'Program Not a Fit', 'Other',
 ];
 
-const CALL_OUTCOMES = ['Closed - Won', 'Follow-Up', 'Lost', 'DQ'];
+const CALL_OUTCOMES = ['Closed - Won', 'Deposit', 'Follow Up', 'Lost', 'Not Pitched', 'Disqualified'];
 
 /** Color mapping for call outcomes */
 const OUTCOME_COLORS = {
   'Closed - Won': COLORS.neon.green,
-  'Follow-Up': COLORS.neon.purple,
+  'Deposit': COLORS.neon.amber,
+  'Follow Up': COLORS.neon.purple,
   'Lost': COLORS.neon.red,
-  'DQ': COLORS.text.muted,
+  'Not Pitched': COLORS.neon.blue,
+  'Disqualified': COLORS.text.muted,
 };
 
 /** Format an ISO date to "Feb 15, 2026" */

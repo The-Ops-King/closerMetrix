@@ -98,7 +98,7 @@ function seededRandom(seed) {
  */
 async function getOverviewData(clientId, filters = {}, tier = 'basic') {
   // If BQ is unavailable, return demo data
-  if (!bq.isAvailable()) {
+  if (!bq.isAvailable() || clientId.startsWith('demo_')) {
     logger.debug('Returning demo overview data');
     return getDemoData(filters);
   }
@@ -122,87 +122,199 @@ async function getOverviewData(clientId, filters = {}, tier = 'basic') {
  * for the previous period to compute deltas.
  */
 async function queryBigQuery(clientId, filters, tier) {
-  const { dateStart, dateEnd, closerId } = filters;
+  const { buildQueryContext, timeBucket, runParallel, num, rate } = require('./helpers');
+  const { params, closerId: effectiveCloserId, where } = buildQueryContext(clientId, filters, tier);
+  const VIEW = bq.table('v_calls_joined_flat_prefixed');
 
-  // For Basic tier, always ignore closerId
-  const effectiveCloserId = tier === 'basic' ? null : closerId;
+  const closerFilter = effectiveCloserId ? 'AND calls_closer_id = @closerId' : '';
 
-  const closerFilter = effectiveCloserId
-    ? 'AND calls_closer_id = @closerId'
-    : '';
-
-  // Shared SQL for both current and previous period queries
-  const selectSql = `SELECT
+  // Shared scorecard SELECT — used for both current and previous period
+  const scorecardSql = `SELECT
+      COUNT(*) as total_booked,
       COUNT(CASE WHEN calls_call_type = 'First Call' THEN 1 END) as prospects_booked,
       COUNT(CASE WHEN calls_call_type = 'First Call' AND calls_attendance = 'Show' THEN 1 END) as prospects_held,
       COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END) as calls_held,
+      COUNT(CASE WHEN calls_call_type = 'Follow Up' THEN 1 END) as follow_ups_scheduled,
+      COUNT(CASE WHEN calls_call_type = 'Follow Up' AND calls_attendance = 'Show' THEN 1 END) as follow_ups_held,
       COUNT(CASE WHEN calls_call_outcome = 'Closed - Won' THEN 1 END) as closed_deals,
-      SAFE_DIVIDE(
-        COUNT(CASE WHEN calls_call_type = 'First Call' AND calls_attendance = 'Show' THEN 1 END),
-        COUNT(CASE WHEN calls_call_type = 'First Call' THEN 1 END)
-      ) as show_rate,
-      SAFE_DIVIDE(
-        COUNT(CASE WHEN calls_call_outcome = 'Closed - Won' THEN 1 END),
-        COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END)
-      ) as close_rate,
+      COUNT(CASE WHEN calls_call_outcome = 'Lost' THEN 1 END) as lost_count,
+      COUNT(CASE WHEN calls_call_outcome = 'Deposit' THEN 1 END) as deposit_count,
+      COUNT(CASE WHEN calls_call_outcome = 'Disqualified' THEN 1 END) as dq_count,
+      COUNT(CASE WHEN calls_attendance = 'Ghosted' THEN 1 END) as ghosted,
+      COUNT(CASE WHEN calls_attendance = 'Rescheduled' THEN 1 END) as rescheduled,
+      COUNT(CASE WHEN calls_attendance = 'Canceled' THEN 1 END) as canceled,
+      COUNT(CASE WHEN calls_attendance != 'Show' THEN 1 END) as no_shows,
+      SAFE_DIVIDE(COUNT(CASE WHEN calls_call_type = 'First Call' AND calls_attendance = 'Show' THEN 1 END),
+                  COUNT(CASE WHEN calls_call_type = 'First Call' THEN 1 END)) as show_rate,
+      SAFE_DIVIDE(COUNT(CASE WHEN calls_call_outcome = 'Closed - Won' THEN 1 END),
+                  COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END)) as close_rate,
       SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_revenue_generated AS FLOAT64) ELSE 0 END) as revenue,
       SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_cash_collected AS FLOAT64) ELSE 0 END) as cash,
-      SAFE_DIVIDE(
-        SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_cash_collected AS FLOAT64) ELSE 0 END),
-        COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END)
-      ) as cash_per_call,
-      SAFE_DIVIDE(
-        SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_revenue_generated AS FLOAT64) ELSE 0 END),
-        COUNT(CASE WHEN calls_call_outcome = 'Closed - Won' THEN 1 END)
-      ) as avg_deal_size
-    FROM ${bq.table('v_calls_joined_flat_prefixed')}`;
+      SAFE_DIVIDE(SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_cash_collected AS FLOAT64) ELSE 0 END),
+                  COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END)) as cash_per_call,
+      SAFE_DIVIDE(SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_revenue_generated AS FLOAT64) ELSE 0 END),
+                  COUNT(CASE WHEN calls_call_outcome = 'Closed - Won' THEN 1 END)) as avg_deal_size
+    FROM ${VIEW}
+    ${where}`;
 
-  // --- Current period query ---
-  const dateFilter = dateStart && dateEnd
-    ? 'AND PARSE_TIMESTAMP("%Y-%m-%dT%H:%M:%S", calls_appointment_date) BETWEEN @dateStart AND @dateEnd'
-    : '';
+  // Time-series query — weekly buckets
+  const tb = timeBucket();
+  const timeSeriesSql = `SELECT
+      ${tb} as bucket,
+      SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_revenue_generated AS FLOAT64) ELSE 0 END) as revenue,
+      SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_cash_collected AS FLOAT64) ELSE 0 END) as cash,
+      COUNT(CASE WHEN calls_call_outcome = 'Closed - Won' THEN 1 END) as closes,
+      SAFE_DIVIDE(COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END), COUNT(*)) as show_rate,
+      SAFE_DIVIDE(COUNT(CASE WHEN calls_call_outcome = 'Closed - Won' THEN 1 END),
+                  COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END)) as close_rate,
+      COUNT(CASE WHEN calls_call_type = 'First Call' THEN 1 END) as first_calls,
+      COUNT(CASE WHEN calls_call_type = 'Follow Up' THEN 1 END) as follow_ups
+    FROM ${VIEW}
+    ${where}
+    GROUP BY bucket ORDER BY bucket`;
 
-  const params = { clientId };
-  if (dateStart) params.dateStart = dateStart;
-  if (dateEnd) params.dateEnd = dateEnd;
-  if (effectiveCloserId) params.closerId = effectiveCloserId;
+  // Previous period scorecard for deltas
+  const { prevStart, prevEnd, deltaLabel } = computePreviousPeriod(filters.dateStart, filters.dateEnd);
 
-  const atAGlanceRows = await bq.runQuery(
-    `${selectSql} WHERE clients_client_id = @clientId ${dateFilter} ${closerFilter}`,
-    params
-  );
-  const ag = atAGlanceRows[0] || {};
+  // Run current scorecard + time-series + prev period in parallel
+  const prevParams = prevStart ? { ...params, dateStart: prevStart, dateEnd: prevEnd } : null;
+  const prevWhere = prevStart
+    ? `WHERE clients_client_id = @clientId
+       AND DATE(calls_appointment_date) BETWEEN DATE(@dateStart) AND DATE(@dateEnd)
+       ${closerFilter}`
+    : null;
 
-  // --- Previous period comparison query ---
-  let prev = null;
-  const { prevStart, prevEnd, deltaLabel } = computePreviousPeriod(dateStart, dateEnd);
-  if (prevStart && prevEnd) {
-    try {
-      const prevParams = { clientId, dateStart: prevStart, dateEnd: prevEnd };
-      if (effectiveCloserId) prevParams.closerId = effectiveCloserId;
-      const prevDateFilter = 'AND PARSE_TIMESTAMP("%Y-%m-%dT%H:%M:%S", calls_appointment_date) BETWEEN @dateStart AND @dateEnd';
-      const prevRows = await bq.runQuery(
-        `${selectSql} WHERE clients_client_id = @clientId ${prevDateFilter} ${closerFilter}`,
-        prevParams
-      );
-      prev = prevRows[0] || null;
-    } catch (err) {
-      logger.warn('Previous period comparison query failed', { error: err.message });
-    }
+  const queries = [
+    bq.runQuery(scorecardSql, params),
+    bq.runQuery(timeSeriesSql, params),
+  ];
+  if (prevParams) {
+    queries.push(bq.runQuery(
+      `SELECT
+        COUNT(CASE WHEN calls_call_type = 'First Call' THEN 1 END) as prospects_booked,
+        COUNT(CASE WHEN calls_call_type = 'First Call' AND calls_attendance = 'Show' THEN 1 END) as prospects_held,
+        COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END) as calls_held,
+        COUNT(CASE WHEN calls_call_outcome = 'Closed - Won' THEN 1 END) as closed_deals,
+        SAFE_DIVIDE(COUNT(CASE WHEN calls_call_type = 'First Call' AND calls_attendance = 'Show' THEN 1 END),
+                    COUNT(CASE WHEN calls_call_type = 'First Call' THEN 1 END)) as show_rate,
+        SAFE_DIVIDE(COUNT(CASE WHEN calls_call_outcome = 'Closed - Won' THEN 1 END),
+                    COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END)) as close_rate,
+        SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_revenue_generated AS FLOAT64) ELSE 0 END) as revenue,
+        SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_cash_collected AS FLOAT64) ELSE 0 END) as cash,
+        SAFE_DIVIDE(SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_cash_collected AS FLOAT64) ELSE 0 END),
+                    COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END)) as cash_per_call,
+        SAFE_DIVIDE(SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_revenue_generated AS FLOAT64) ELSE 0 END),
+                    COUNT(CASE WHEN calls_call_outcome = 'Closed - Won' THEN 1 END)) as avg_deal_size
+      FROM ${VIEW} ${prevWhere}`, prevParams
+    ));
   }
 
-  // --- Build response from query results ---
+  const results = await runParallel(queries);
+  const ag = (results[0] && results[0][0]) || {};
+  const tsRows = results[1] || [];
+  const prev = results[2] ? (results[2][0] || null) : null;
+
+  // Build time-series chart data
+  const timeData = tsRows.map(r => ({
+    date: r.bucket ? r.bucket.value : r.bucket,
+    revenue: num(r.revenue),
+    cash: num(r.cash),
+    closes: num(r.closes),
+    showRate: rate(r.show_rate),
+    closeRate: rate(r.close_rate),
+    firstCalls: num(r.first_calls),
+    followUps: num(r.follow_ups),
+  }));
+
+  // Attendance breakdown for pie
+  const attendancePie = [
+    { label: 'Show', value: num(ag.calls_held), color: 'green' },
+    { label: 'Ghosted', value: num(ag.ghosted), color: 'red' },
+    { label: 'Rescheduled', value: num(ag.rescheduled), color: 'amber' },
+    { label: 'Canceled', value: num(ag.canceled), color: 'muted' },
+  ].filter(d => d.value > 0);
+
+  // Outcome breakdown for pie
+  const outcomePie = [
+    { label: 'Closed', value: num(ag.closed_deals), color: 'green' },
+    { label: 'Deposit', value: num(ag.deposit_count), color: 'amber' },
+    { label: 'Lost', value: num(ag.lost_count), color: 'red' },
+    { label: 'DQ', value: num(ag.dq_count), color: 'muted' },
+  ].filter(d => d.value > 0);
+
+  const dl = deltaLabel || 'vs prev period';
+
   return {
     sections: {
-      atAGlance: buildAtAGlance(ag, prev, deltaLabel),
-      volume: {},    // TODO: query
-      attendance: {},
-      outcomes: {},
-      salesCycle: {},
-      revenue: {},
-      trends: {},
+      atAGlance: buildAtAGlance(ag, prev, dl),
+      volume: {
+        prospectsBooked: { value: num(ag.prospects_booked), label: 'Prospects Booked', format: 'number' },
+        totalCallsBooked: { value: num(ag.total_booked), label: 'Total Calls Booked', format: 'number' },
+        totalCallsHeld: { value: num(ag.calls_held), label: 'Total Calls Held', format: 'number' },
+        firstCallsScheduled: { value: num(ag.prospects_booked), label: 'First Calls Scheduled', format: 'number' },
+        firstCallsHeld: { value: num(ag.prospects_held), label: 'First Calls Held', format: 'number' },
+        followUpsScheduled: { value: num(ag.follow_ups_scheduled), label: 'Follow-Ups Scheduled', format: 'number' },
+        followUpsHeld: { value: num(ag.follow_ups_held), label: 'Follow-Up Calls Held', format: 'number' },
+      },
+      attendance: {
+        showRateTotal: { value: rate(ag.show_rate), label: 'Show Rate (Total)', format: 'percent' },
+        noShows: { value: num(ag.no_shows), label: 'No-Shows', format: 'number' },
+        ghosted: { value: num(ag.ghosted), label: 'Ghosted', format: 'number' },
+        rescheduled: { value: num(ag.rescheduled), label: 'Rescheduled', format: 'number' },
+        canceled: { value: num(ag.canceled), label: 'Canceled', format: 'number' },
+      },
+      outcomes: {
+        closedDeals: { value: num(ag.closed_deals), label: 'Deals Closed', format: 'number' },
+        closeRateTotal: { value: rate(ag.close_rate), label: 'Close Rate', format: 'percent' },
+        deposits: { value: num(ag.deposit_count), label: 'Deposits Taken', format: 'number' },
+        dqCount: { value: num(ag.dq_count), label: 'Disqualified', format: 'number' },
+        lostCount: { value: num(ag.lost_count), label: 'Lost', format: 'number' },
+      },
+      revenue: {
+        totalRevenue: { value: num(ag.revenue), label: 'Total Revenue', format: 'currency' },
+        cashCollected: { value: num(ag.cash), label: 'Cash Collected', format: 'currency' },
+        collectedPct: { value: ag.revenue > 0 ? num(ag.cash) / num(ag.revenue) : 0, label: '% Collected', format: 'percent' },
+        cashPerCall: { value: num(ag.cash_per_call), label: 'Cash per Call Held', format: 'currency' },
+        avgDealSize: { value: num(ag.avg_deal_size), label: 'Avg Deal Size', format: 'currency' },
+      },
     },
-    charts: {},
+    charts: {
+      revenueOverTime: {
+        type: 'line',
+        label: 'Revenue & Cash Over Time',
+        series: [
+          { key: 'revenue', label: 'Revenue', color: 'cyan' },
+          { key: 'cash', label: 'Cash Collected', color: 'green' },
+        ],
+        data: timeData,
+      },
+      closesOverTime: {
+        type: 'bar',
+        label: 'Deals Closed Over Time',
+        series: [{ key: 'closes', label: 'Deals Closed', color: 'green' }],
+        data: timeData,
+      },
+      showCloseRateOverTime: {
+        type: 'line',
+        label: 'Show Rate & Close Rate',
+        series: [
+          { key: 'showRate', label: 'Show Rate', color: 'cyan' },
+          { key: 'closeRate', label: 'Close Rate', color: 'amber' },
+        ],
+        data: timeData,
+      },
+      attendanceBreakdown: { type: 'pie', label: 'Attendance Breakdown', data: attendancePie },
+      outcomeBreakdown: { type: 'pie', label: 'Call Outcomes', data: outcomePie },
+      callVolume: {
+        type: 'bar',
+        label: 'Calls by Type',
+        series: [
+          { key: 'firstCalls', label: 'First Calls', color: 'cyan' },
+          { key: 'followUps', label: 'Follow-Ups', color: 'amber' },
+        ],
+        data: timeData,
+      },
+    },
   };
 }
 

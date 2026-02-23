@@ -34,7 +34,7 @@ const logger = require('../../utils/logger');
  * @returns {Promise<object>} { sections, projectionBaseline, charts }
  */
 async function getProjectionsData(clientId, filters = {}, tier = 'insight') {
-  if (!bq.isAvailable()) {
+  if (!bq.isAvailable() || clientId.startsWith('demo_')) {
     logger.debug('Returning demo projections data', { closerId: filters.closerId || 'all' });
     return getDemoData(filters);
   }
@@ -52,17 +52,192 @@ async function getProjectionsData(clientId, filters = {}, tier = 'insight') {
 
 /**
  * Run real BigQuery queries for projection baseline data.
- * Placeholder -- will be filled with actual SQL when BQ credentials are available.
- *
- * Needs to calculate from selected date range:
- *   - Show rate, close rate, avg deal size, avg cash per deal
- *   - Prospects booked per month (extrapolated from date range)
- *   - Avg calls to close (from v_close_cycle_stats_dated)
- *   - MTD and YTD actuals for toggle modes
+ * Runs 3 queries in parallel: period rates, MTD actuals, YTD actuals.
  */
 async function queryBigQuery(clientId, filters, tier) {
-  // TODO: Real BQ queries when credentials available
-  return getDemoData();
+  const { runParallel, num, rate } = require('./helpers');
+  const VIEW = bq.table('v_calls_joined_flat_prefixed');
+  const cycleView = bq.table('v_close_cycle_stats_dated');
+
+  const effectiveCloserId = tier === 'basic' ? null : filters.closerId;
+  const closerFilter = effectiveCloserId ? 'AND calls_closer_id = @closerId' : '';
+  const cycleCloserFilter = effectiveCloserId ? 'AND closer_id = @closerId' : '';
+
+  const params = { clientId, dateStart: filters.dateStart, dateEnd: filters.dateEnd };
+  if (effectiveCloserId) params.closerId = effectiveCloserId;
+
+  const dateWhere = `WHERE clients_client_id = @clientId
+    AND DATE(calls_appointment_date) BETWEEN DATE(@dateStart) AND DATE(@dateEnd)
+    ${closerFilter}`;
+
+  // Calculate daysInPeriod for prospects/month extrapolation
+  const start = new Date(filters.dateStart);
+  const end = new Date(filters.dateEnd);
+  const daysInPeriod = Math.max(1, Math.round((end - start) / (1000 * 60 * 60 * 24)));
+
+  // 1) Period rates from selected date range
+  const periodSql = `SELECT
+      SAFE_DIVIDE(COUNT(CASE WHEN calls_call_type = 'First Call' AND calls_attendance = 'Show' THEN 1 END),
+                  COUNT(CASE WHEN calls_call_type = 'First Call' THEN 1 END)) as show_rate,
+      SAFE_DIVIDE(COUNT(CASE WHEN calls_call_outcome = 'Closed - Won' THEN 1 END),
+                  COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END)) as close_rate,
+      SAFE_DIVIDE(SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_revenue_generated AS FLOAT64) ELSE 0 END),
+                  COUNT(CASE WHEN calls_call_outcome = 'Closed - Won' THEN 1 END)) as avg_deal_size,
+      SAFE_DIVIDE(SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_cash_collected AS FLOAT64) ELSE 0 END),
+                  COUNT(CASE WHEN calls_call_outcome = 'Closed - Won' THEN 1 END)) as avg_cash_collected,
+      COUNT(CASE WHEN calls_call_type = 'First Call' THEN 1 END) as prospects_booked,
+      COUNT(*) as calls_scheduled,
+      COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END) as calls_held,
+      COUNT(CASE WHEN calls_call_outcome = 'Closed - Won' THEN 1 END) as closes,
+      SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_revenue_generated AS FLOAT64) ELSE 0 END) as revenue,
+      SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_cash_collected AS FLOAT64) ELSE 0 END) as cash
+    FROM ${VIEW} ${dateWhere}`;
+
+  // Avg calls to close from cycle view
+  const cycleSql = `SELECT AVG(calls_to_close) as avg_calls_to_close
+    FROM ${cycleView}
+    WHERE client_id = @clientId
+      AND close_date BETWEEN @dateStart AND @dateEnd
+      ${cycleCloserFilter}`;
+
+  // 2) MTD actuals
+  const now = new Date();
+  const mtdStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  const mtdEnd = now.toISOString().split('T')[0];
+  const mtdParams = { clientId, dateStart: mtdStart, dateEnd: mtdEnd };
+  if (effectiveCloserId) mtdParams.closerId = effectiveCloserId;
+  const mtdCloserFilter = effectiveCloserId ? 'AND calls_closer_id = @closerId' : '';
+
+  const mtdSql = `SELECT
+      COUNT(*) as calls_scheduled,
+      COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END) as calls_held,
+      COUNT(CASE WHEN calls_call_outcome = 'Closed - Won' THEN 1 END) as closes,
+      SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_revenue_generated AS FLOAT64) ELSE 0 END) as revenue,
+      SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_cash_collected AS FLOAT64) ELSE 0 END) as cash
+    FROM ${VIEW}
+    WHERE clients_client_id = @clientId
+      AND DATE(calls_appointment_date) BETWEEN DATE(@dateStart) AND DATE(@dateEnd)
+      ${mtdCloserFilter}`;
+
+  // 3) YTD actuals
+  const ytdStart = `${now.getFullYear()}-01-01`;
+  const ytdParams = { clientId, dateStart: ytdStart, dateEnd: mtdEnd };
+  if (effectiveCloserId) ytdParams.closerId = effectiveCloserId;
+
+  const ytdSql = `SELECT
+      COUNT(*) as calls_scheduled,
+      COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END) as calls_held,
+      COUNT(CASE WHEN calls_call_outcome = 'Closed - Won' THEN 1 END) as closes,
+      SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_revenue_generated AS FLOAT64) ELSE 0 END) as revenue,
+      SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_cash_collected AS FLOAT64) ELSE 0 END) as cash
+    FROM ${VIEW}
+    WHERE clients_client_id = @clientId
+      AND DATE(calls_appointment_date) BETWEEN DATE(@dateStart) AND DATE(@dateEnd)
+      ${mtdCloserFilter}`;
+
+  // 4) WTD + QTD for pacing
+  const dayOfWeek = now.getDay(); // 0=Sun
+  const wtdStart = new Date(now);
+  wtdStart.setDate(wtdStart.getDate() - dayOfWeek);
+  const wtdStartStr = wtdStart.toISOString().split('T')[0];
+  const wtdParams = { clientId, dateStart: wtdStartStr, dateEnd: mtdEnd };
+  if (effectiveCloserId) wtdParams.closerId = effectiveCloserId;
+
+  const qMonth = Math.floor(now.getMonth() / 3) * 3;
+  const qtdStart = `${now.getFullYear()}-${String(qMonth + 1).padStart(2, '0')}-01`;
+  const qtdParams = { clientId, dateStart: qtdStart, dateEnd: mtdEnd };
+  if (effectiveCloserId) qtdParams.closerId = effectiveCloserId;
+
+  const pacingSql = `SELECT
+      SUM(CASE WHEN calls_call_outcome = 'Closed - Won' THEN CAST(calls_revenue_generated AS FLOAT64) ELSE 0 END) as revenue
+    FROM ${VIEW}
+    WHERE clients_client_id = @clientId
+      AND DATE(calls_appointment_date) BETWEEN DATE(@dateStart) AND DATE(@dateEnd)
+      ${mtdCloserFilter}`;
+
+  const [periodRows, cycleRows, mtdRows, ytdRows, wtdRows, qtdRows] = await runParallel([
+    bq.runQuery(periodSql, params),
+    bq.runQuery(cycleSql, params),
+    bq.runQuery(mtdSql, mtdParams),
+    bq.runQuery(ytdSql, ytdParams),
+    bq.runQuery(pacingSql, wtdParams),
+    bq.runQuery(pacingSql, qtdParams),
+  ]);
+
+  const p = (periodRows && periodRows[0]) || {};
+  const c = (cycleRows && cycleRows[0]) || {};
+  const mtd = (mtdRows && mtdRows[0]) || {};
+  const ytd = (ytdRows && ytdRows[0]) || {};
+  const wtd = (wtdRows && wtdRows[0]) || {};
+  const qtd = (qtdRows && qtdRows[0]) || {};
+
+  const showRate = rate(p.show_rate);
+  const closeRate = rate(p.close_rate);
+  const avgDealSize = num(p.avg_deal_size);
+  const avgCashCollected = num(p.avg_cash_collected);
+  const prospectsBooked = num(p.prospects_booked);
+  const prospectsBookedPerMonth = Math.round((prospectsBooked / daysInPeriod) * 30);
+  const avgCallsToClose = num(c.avg_calls_to_close) || 2.3;
+
+  // Calendar context
+  const dayOfMonth = now.getDate();
+  const daysInCurrentMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const startOfYear = new Date(now.getFullYear(), 0, 1);
+  const dayOfYear = Math.ceil((now - startOfYear) / (1000 * 60 * 60 * 24));
+  const year = now.getFullYear();
+  const isLeapYear = (year % 4 === 0 && year % 100 !== 0) || (year % 400 === 0);
+  const daysInYear = isLeapYear ? 366 : 365;
+
+  const qStart = new Date(now.getFullYear(), qMonth, 1);
+  const qEnd = new Date(now.getFullYear(), qMonth + 3, 1);
+  const dayOfQuarter = Math.ceil((now - qStart) / (1000 * 60 * 60 * 24));
+  const daysInQuarter = Math.ceil((qEnd - qStart) / (1000 * 60 * 60 * 24));
+
+  // Format date range label
+  const fmtDate = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const dateRange = `${fmtDate(start)} - ${fmtDate(end)}`;
+
+  return {
+    sections: {
+      baseline: {
+        showRate: { value: showRate, label: 'Show Rate', format: 'percent' },
+        closeRate: { value: closeRate, label: 'Close Rate', format: 'percent' },
+        avgDealSize: { value: avgDealSize, label: 'Avg Deal Size', format: 'currency' },
+        avgCashCollected: { value: avgCashCollected, label: 'Avg Cash Collected', format: 'currency' },
+        prospectsBookedPerMonth: { value: prospectsBookedPerMonth, label: 'Prospects / Month', format: 'number' },
+        avgCallsToClose: { value: avgCallsToClose, label: 'Avg Calls to Close', format: 'decimal' },
+      },
+    },
+    projectionBaseline: {
+      showRate, closeRate, avgDealSize, avgCashCollected,
+      prospectsBookedPerMonth, avgCallsToClose,
+      callsScheduled: num(p.calls_scheduled),
+      currentCallsHeld: num(p.calls_held),
+      currentCloses: num(p.closes),
+      currentRevenue: num(p.revenue),
+      currentCash: num(p.cash),
+      daysInPeriod,
+      daysInCurrentMonth, dayOfMonth, daysInYear, dayOfYear,
+      mtdCallsScheduled: num(mtd.calls_scheduled),
+      mtdCallsHeld: num(mtd.calls_held),
+      mtdCloses: num(mtd.closes),
+      mtdRevenue: num(mtd.revenue),
+      mtdCash: num(mtd.cash),
+      ytdCallsScheduled: num(ytd.calls_scheduled),
+      ytdCallsHeld: num(ytd.calls_held),
+      ytdCloses: num(ytd.closes),
+      ytdRevenue: num(ytd.revenue),
+      ytdCash: num(ytd.cash),
+      dateRange,
+      monthlyGoal: 50000,
+      quarterlyGoal: 150000,
+      yearlyGoal: 600000,
+      wtdRevenue: num(wtd.revenue),
+      qtdRevenue: num(qtd.revenue),
+      dayOfQuarter, daysInQuarter,
+    },
+    charts: {},
+  };
 }
 
 // ================================================================

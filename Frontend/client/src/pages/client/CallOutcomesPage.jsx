@@ -118,6 +118,15 @@ export default function CallOutcomesPage() {
       {data && (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
 
+          {/* Hero: Total Calls Held — spans 2 scorecard widths */}
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(6, 1fr)' }, gap: '20px' }}>
+            <Box sx={{ gridColumn: { xs: '1', md: 'span 2' } }}>
+              <Scorecard label="Total Calls Held" value={sections.totalHeld?.value} format="number"
+                delta={sections.totalHeld?.delta} deltaLabel="vs prev period"
+                glowColor={COLORS.neon.teal} size="lg" />
+            </Box>
+          </Box>
+
           {/* ═══════════════════════════════════════════════════════
               SECTION 1: Health at a Glance
               ═══════════════════════════════════════════════════════ */}

@@ -1,0 +1,1577 @@
+/**
+ * CLIENT-SIDE METRIC COMPUTATION
+ *
+ * Computes all dashboard page metrics from raw call data + filters.
+ * This runs entirely in the browser — no server round-trips needed
+ * when filters change.
+ *
+ * Main entry: computePageData(section, rawData, filters)
+ *   section: 'overview' | 'financial' | 'attendance' | 'call-outcomes' |
+ *            'sales-cycle' | 'objections' | 'projections' | 'violations' | 'adherence'
+ *   rawData: { calls: [...], objections: [...], closeCycles: [...] }
+ *   filters: { dateStart, dateEnd, closerId, granularity }
+ *
+ * Returns: { sections, charts, tables } — same shape each page expects.
+ */
+
+// ─────────────────────────────────────────────────────────────
+// SHARED HELPERS
+// ─────────────────────────────────────────────────────────────
+
+/** Safe divide — returns 0 if divisor is 0 */
+function sd(a, b) { return b === 0 ? 0 : a / b; }
+
+/** Round to N decimal places */
+function round(v, d = 2) { return Math.round(v * Math.pow(10, d)) / Math.pow(10, d); }
+
+/** Filter calls by date range and optional closer */
+function filterCalls(calls, dateStart, dateEnd, closerId) {
+  return calls.filter(c => {
+    if (c.appointmentDate < dateStart || c.appointmentDate > dateEnd) return false;
+    if (closerId && c.closerId !== closerId) return false;
+    return true;
+  });
+}
+
+/** Filter objections by date range and optional closer */
+function filterObjections(objections, dateStart, dateEnd, closerId) {
+  return objections.filter(o => {
+    if (o.appointmentDate < dateStart || o.appointmentDate > dateEnd) return false;
+    if (closerId && o.closerId !== closerId) return false;
+    return true;
+  });
+}
+
+/** Filter close cycles by date range and optional closer */
+function filterCloseCycles(cycles, dateStart, dateEnd, closerId) {
+  return cycles.filter(c => {
+    if (c.closeDate < dateStart || c.closeDate > dateEnd) return false;
+    if (closerId && c.closerId !== closerId) return false;
+    return true;
+  });
+}
+
+/** Get the Monday of the week for a YYYY-MM-DD date string */
+function weekStart(dateStr) {
+  const d = new Date(dateStr + 'T12:00:00'); // noon avoids DST/timezone edge cases
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Monday
+  d.setDate(diff);
+  const yr = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yr}-${mo}-${dd}`;
+}
+
+/** Get month start for a YYYY-MM-DD */
+function monthStart(dateStr) {
+  return dateStr.substring(0, 7) + '-01';
+}
+
+/** Group items into time buckets. Returns Map<bucketDate, items[]> */
+function groupByTime(items, dateField, granularity) {
+  if (items.length === 0) return new Map();
+
+  const bucketFn = granularity === 'monthly' ? monthStart
+    : granularity === 'daily' ? (d) => d
+    : weekStart;
+
+  // For weekly bucketing, find the earliest item date so we can clip
+  // week-start dates that fall before the filter range.
+  // e.g. Feb 1 (Sunday) → weekStart = Jan 26 (Monday) — clip to Feb 1.
+  let clipDate = null;
+  if (granularity === 'weekly') {
+    for (const item of items) {
+      const d = item[dateField];
+      if (!clipDate || d < clipDate) clipDate = d;
+    }
+  }
+
+  const map = new Map();
+  for (const item of items) {
+    let bucket = bucketFn(item[dateField]);
+    // Clip: if the Monday falls before the earliest item in our range,
+    // merge into a bucket keyed by that earliest date instead
+    if (clipDate && bucket < clipDate) {
+      bucket = clipDate;
+    }
+    if (!map.has(bucket)) map.set(bucket, []);
+    map.get(bucket).push(item);
+  }
+  // Sort by date
+  return new Map([...map.entries()].sort((a, b) => a[0].localeCompare(b[0])));
+}
+
+/** Group items by closer. Returns Map<closerName, items[]> */
+function groupByCloser(items) {
+  const map = new Map();
+  for (const item of items) {
+    const name = item.closerName || item.closerId || 'Unknown';
+    if (!map.has(name)) map.set(name, []);
+    map.get(name).push(item);
+  }
+  return map;
+}
+
+/** Count calls matching a predicate */
+function count(calls, pred) { return calls.filter(pred).length; }
+
+/** Sum a numeric field from filtered calls */
+function sum(calls, field, pred) {
+  const filtered = pred ? calls.filter(pred) : calls;
+  return filtered.reduce((acc, c) => acc + (c[field] || 0), 0);
+}
+
+/** Average a numeric field (only non-zero values) */
+function avg(calls, field, pred) {
+  const filtered = pred ? calls.filter(pred) : calls;
+  const vals = filtered.map(c => c[field]).filter(v => v > 0);
+  return vals.length === 0 ? 0 : vals.reduce((a, b) => a + b, 0) / vals.length;
+}
+
+/** Median of an array of numbers */
+function median(arr) {
+  if (arr.length === 0) return 0;
+  const sorted = [...arr].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+// Common predicates — must match actual BigQuery data values
+// Attendance: 'Show', 'Ghosted - No Show', 'Cancelled', 'Canceled', 'Rescheduled', etc.
+// Call Type: 'First Call', 'Follow Up Call', 'Follow Up', 'Follow-Up'
+// Outcome: '', 'Lost', 'Follow Up', 'Closed - Won', 'Deposit', 'Not Pitched', 'DQ'
+const isShow = c => c.attendance === 'Show';
+const isFirstCall = c => c.callType === 'First Call';
+const isFollowUp = c => c.callType !== 'First Call' && c.callType !== '';
+const isClosed = c => c.callOutcome === 'Closed - Won';
+const isDeposit = c => c.callOutcome === 'Deposit';
+const isLost = c => c.callOutcome === 'Lost';
+const isDQ = c => c.callOutcome === 'DQ';
+const isNotPitched = c => c.callOutcome === 'Not Pitched';
+const isFollowUpOutcome = c => c.callOutcome === 'Follow Up' || c.callOutcome === 'Follow-Up';
+const isGhost = c => c.attendance.includes('Ghost') || c.attendance.includes('No Show');
+const isCanceled = c => c.attendance.includes('Cancel');
+const isRescheduled = c => c.attendance.includes('Rescheduled');
+const isNoShow = c => !isShow(c);
+const hasRevenue = c => isClosed(c) || isDeposit(c);
+
+/** Build a metric object for scorecards */
+function m(label, value, format, glowColor) {
+  // Guard: ensure numeric values are never NaN/Infinity (would show em-dash)
+  const safeValue = (typeof value === 'number' && !isFinite(value)) ? 0 : value;
+  return { label, value: safeValue, format, glowColor };
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// MAIN DISPATCHER
+// ─────────────────────────────────────────────────────────────
+
+export function computePageData(section, rawData, filters) {
+  if (!rawData || !rawData.calls) return null;
+
+  const { dateStart, dateEnd, closerId, granularity = 'weekly' } = filters;
+  const calls = filterCalls(rawData.calls, dateStart, dateEnd, closerId);
+  const objections = filterObjections(rawData.objections || [], dateStart, dateEnd, closerId);
+  const closeCycles = filterCloseCycles(rawData.closeCycles || [], dateStart, dateEnd, closerId);
+
+  switch (section) {
+    case 'overview': return computeOverview(calls, granularity, rawData);
+    case 'financial': return computeFinancial(calls, granularity);
+    case 'attendance': return computeAttendance(calls, granularity);
+    case 'call-outcomes': return computeCallOutcomes(calls, granularity);
+    case 'sales-cycle': return computeSalesCycle(calls, closeCycles);
+    case 'objections': return computeObjections(calls, objections, granularity);
+    case 'projections': return computeProjections(calls, closeCycles, rawData, filters);
+    case 'violations': return computeViolations(calls, granularity);
+    case 'adherence': return computeAdherence(calls, granularity);
+    default: return null;
+  }
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// OVERVIEW PAGE
+// ─────────────────────────────────────────────────────────────
+
+function computeOverview(calls, granularity, rawData) {
+  const held = calls.filter(isShow);
+  const closed = calls.filter(c => isShow(c) && isClosed(c));
+  const deposits = calls.filter(c => isShow(c) && isDeposit(c));
+  const lost = calls.filter(c => isShow(c) && isLost(c));
+  const firstCalls = calls.filter(isFirstCall);
+  const firstHeld = firstCalls.filter(isShow);
+
+  const revenue = sum(held, 'revenueGenerated', hasRevenue);
+  const cash = sum(held, 'cashCollected', hasRevenue);
+
+  // 1-call close % from close cycles
+  const cycles = rawData?.closeCycles || [];
+  const oneCallCloses = cycles.filter(c => c.callsToClose === 1).length;
+  const oneCallPct = round(sd(oneCallCloses, cycles.length), 3);
+
+  // Potential violations — count risk-flagged key moments
+  let violationCount = 0;
+  for (const c of held) {
+    if (!c.keyMoments) continue;
+    try {
+      const km = typeof c.keyMoments === 'string' ? JSON.parse(c.keyMoments) : c.keyMoments;
+      if (Array.isArray(km)) {
+        violationCount += km.filter(m => m.type === 'risk' || m.type === 'violation' || m.type === 'compliance').length;
+      }
+    } catch (e) { /* ignore parse errors */ }
+  }
+
+  const sections = {
+    atAGlance: {
+      revenue: m('Revenue Generated', revenue, 'currency', 'green'),
+      cashCollected: m('Cash Collected', cash, 'currency', 'teal'),
+      cashPerCall: m('Cash / Call Held', round(sd(cash, held.length)), 'currency', 'blue'),
+      avgDealSize: m('Average Deal Size', round(sd(revenue, closed.length)), 'currency', 'cyan'),
+      closedDeals: m('Closed Deals', closed.length, 'number', 'green'),
+      potentialViolations: m('Potential Violations', violationCount, 'number', 'red'),
+      oneCallClosePct: m('1 Call Close %', oneCallPct, 'percent', 'purple'),
+      callsPerDeal: m('Calls Required per Deal', round(sd(held.length, closed.length), 1), 'decimal', 'amber'),
+      prospectsBooked: m('Unique Prospects Scheduled', firstCalls.length, 'number', 'cyan'),
+      prospectsHeld: m('Unique Appointments Held', firstHeld.length, 'number', 'cyan'),
+      showRate: m('Show Rate', round(sd(held.length, calls.length), 3), 'percent', 'green'),
+      closeRate: m('Show \u2192 Close Rate', round(sd(closed.length, held.length), 3), 'percent', 'cyan'),
+      scheduledCloseRate: m('Scheduled \u2192 Close Rate', round(sd(closed.length, calls.length), 3), 'percent', 'blue'),
+      callsLost: m('Calls Lost', lost.length, 'number', 'red'),
+      lostPct: m('Lost %', round(sd(lost.length, held.length), 3), 'percent', 'red'),
+    },
+  };
+
+  // Time-series charts
+  const timeBuckets = groupByTime(calls, 'appointmentDate', granularity);
+  const revenueOverTime = [];
+  const closesOverTime = [];
+  const showCloseRateOverTime = [];
+  for (const [date, bucket] of timeBuckets) {
+    const bHeld = bucket.filter(isShow);
+    const bClosed = bucket.filter(c => isShow(c) && isClosed(c));
+    revenueOverTime.push({
+      date,
+      revenue: sum(bHeld, 'revenueGenerated', hasRevenue),
+      cash: sum(bHeld, 'cashCollected', hasRevenue),
+    });
+    closesOverTime.push({
+      date,
+      closes: bClosed.length,
+    });
+    showCloseRateOverTime.push({
+      date,
+      showRate: round(sd(bHeld.length, bucket.length), 3),
+      closeRate: round(sd(bClosed.length, bHeld.length), 3),
+    });
+  }
+
+  // Per-closer bar chart
+  const closerBuckets = groupByCloser(calls.filter(isShow));
+  const dealsClosedByCloser = [];
+  for (const [name, closerCalls] of closerBuckets) {
+    dealsClosedByCloser.push({
+      date: name,
+      closed: closerCalls.filter(isClosed).length,
+      deposits: closerCalls.filter(isDeposit).length,
+    });
+  }
+  dealsClosedByCloser.sort((a, b) => (b.closed + b.deposits) - (a.closed + a.deposits));
+
+  // Funnel
+  const funnelData = [
+    { stage: 'Booked', count: calls.length },
+    { stage: 'Held', count: held.length },
+    { stage: 'Qualified', count: held.length - calls.filter(c => isShow(c) && isDQ(c)).length },
+    { stage: 'Closed', count: closed.length },
+  ];
+
+  // Outcome breakdown pie
+  const outcomeBreakdown = [
+    { label: 'Closed', value: closed.length },
+    { label: 'Deposit', value: deposits.length },
+    { label: 'Follow-Up', value: calls.filter(c => isShow(c) && isFollowUpOutcome(c)).length },
+    { label: 'Lost', value: lost.length },
+    { label: 'DQ', value: calls.filter(c => isShow(c) && isDQ(c)).length },
+    { label: 'Not Pitched', value: calls.filter(c => isShow(c) && isNotPitched(c)).length },
+  ].filter(d => d.value > 0);
+
+  return {
+    sections,
+    charts: {
+      revenueOverTime: { data: revenueOverTime, series: [
+        { key: 'revenue', label: 'Revenue', color: 'green' },
+        { key: 'cash', label: 'Cash', color: 'teal' },
+      ]},
+      closesOverTime: { data: closesOverTime, series: [
+        { key: 'closes', label: 'Deals Closed', color: 'green' },
+      ]},
+      showCloseRateOverTime: { data: showCloseRateOverTime, series: [
+        { key: 'showRate', label: 'Show Rate', color: 'green' },
+        { key: 'closeRate', label: 'Close Rate', color: 'cyan' },
+      ]},
+      dealsClosedByCloser: { data: dealsClosedByCloser, series: [
+        { key: 'closed', label: 'Closed', color: 'green' },
+        { key: 'deposits', label: 'Deposits', color: 'amber' },
+      ]},
+      callFunnel: funnelData,
+      outcomeBreakdown: outcomeBreakdown.map((d, i) => ({
+        ...d,
+        color: ['green', 'amber', 'purple', 'red', 'muted', 'blue'][i],
+      })),
+    },
+  };
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// FINANCIAL PAGE
+// ─────────────────────────────────────────────────────────────
+
+function computeFinancial(calls, granularity) {
+  const held = calls.filter(isShow);
+  const closed = held.filter(isClosed);
+  const deposits = held.filter(isDeposit);
+  const revenueDeals = held.filter(hasRevenue);
+
+  const totalRevenue = sum(revenueDeals, 'revenueGenerated');
+  const totalCash = sum(revenueDeals, 'cashCollected');
+  const closedRevenue = sum(closed, 'revenueGenerated');
+  const closedCash = sum(closed, 'cashCollected');
+
+  const sections = {
+    revenue: {
+      revenue: m('Revenue Generated', totalRevenue, 'currency', 'green'),
+      cashCollected: m('Cash Collected', totalCash, 'currency', 'teal'),
+      revenuePerCall: m('Revenue / Call', round(sd(totalRevenue, held.length)), 'currency', 'purple'),
+      cashPerCall: m('Cash / Call', round(sd(totalCash, held.length)), 'currency', 'blue'),
+      collectedPct: m('% Collected', round(sd(totalCash, totalRevenue), 3), 'percent', 'purple'),
+      avgDealRevenue: m('Avg Revenue Per Deal', round(sd(closedRevenue, closed.length)), 'currency', 'green'),
+      avgCashPerDeal: m('Avg Cash Per Deal', round(sd(closedCash, closed.length)), 'currency', 'teal'),
+      pifPct: m('% PIFs', 0, 'percent', 'amber'), // Would need payment plan data
+      refundCount: m('# of Refunds', 0, 'number', 'red'),
+      refundAmount: m('$ of Refunds', 0, 'currency', 'red'),
+    },
+  };
+
+  // Time-series
+  const timeBuckets = groupByTime(calls, 'appointmentDate', granularity);
+  const revenueOverTime = [];
+  const perCallOverTime = [];
+  for (const [date, bucket] of timeBuckets) {
+    const bHeld = bucket.filter(isShow);
+    const bRevDeals = bHeld.filter(hasRevenue);
+    const bRev = sum(bRevDeals, 'revenueGenerated');
+    const bCash = sum(bRevDeals, 'cashCollected');
+    revenueOverTime.push({ date, revenue: bRev, cash: bCash });
+    perCallOverTime.push({
+      date,
+      revPerCall: round(sd(bRev, bHeld.length)),
+      cashPerCall: round(sd(bCash, bHeld.length)),
+    });
+  }
+
+  // Per-closer
+  const closerBuckets = groupByCloser(held);
+  const revenueByCloserBar = [];
+  const avgPerDealByCloser = [];
+  const perCallByCloser = [];
+  const revenueByCloserPie = [];
+
+  for (const [name, closerCalls] of closerBuckets) {
+    const cRevDeals = closerCalls.filter(hasRevenue);
+    const cClosed = closerCalls.filter(isClosed);
+    const cRev = sum(cRevDeals, 'revenueGenerated');
+    const cCash = sum(cRevDeals, 'cashCollected');
+    const cClosedRev = sum(cClosed, 'revenueGenerated');
+    const cClosedCash = sum(cClosed, 'cashCollected');
+
+    revenueByCloserBar.push({
+      date: name,
+      cash: cCash,
+      uncollected: cRev - cCash,
+    });
+    avgPerDealByCloser.push({
+      date: name,
+      avgCash: round(sd(cClosedCash, cClosed.length)),
+      avgUncollected: round(sd(cClosedRev - cClosedCash, cClosed.length)),
+    });
+    perCallByCloser.push({
+      date: name,
+      revPerCall: round(sd(cRev, closerCalls.length)),
+      cashPerCall: round(sd(cCash, closerCalls.length)),
+    });
+    revenueByCloserPie.push({ label: name, value: cRev });
+  }
+  revenueByCloserBar.sort((a, b) => (b.cash + b.uncollected) - (a.cash + a.uncollected));
+  avgPerDealByCloser.sort((a, b) => (b.avgCash + b.avgUncollected) - (a.avgCash + a.avgUncollected));
+
+  return {
+    sections,
+    charts: {
+      revenueOverTime: { data: revenueOverTime, series: [
+        { key: 'revenue', label: 'Revenue Generated', color: 'green' },
+        { key: 'cash', label: 'Cash Collected', color: 'teal' },
+      ]},
+      perCallOverTime: { data: perCallOverTime, series: [
+        { key: 'revPerCall', label: 'Revenue / Call', color: 'purple' },
+        { key: 'cashPerCall', label: 'Cash / Call', color: 'blue' },
+      ]},
+      revenueByCloserBar: { data: revenueByCloserBar },
+      avgPerDealByCloser: { data: avgPerDealByCloser },
+      perCallByCloser: { data: perCallByCloser },
+      revenueByCloserPie: { data: revenueByCloserPie },
+      paymentPlanBreakdown: { data: [] }, // Would need payment plan data
+    },
+  };
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// ATTENDANCE PAGE
+// ─────────────────────────────────────────────────────────────
+
+function computeAttendance(calls, granularity) {
+  const held = calls.filter(isShow);
+  const firstCalls = calls.filter(isFirstCall);
+  const followUps = calls.filter(isFollowUp);
+  const firstHeld = firstCalls.filter(isShow);
+  const followUpHeld = followUps.filter(isShow);
+  const noShows = calls.filter(isNoShow);
+  const ghosted = calls.filter(isGhost);
+  const canceled = calls.filter(isCanceled);
+  const rescheduled = calls.filter(isRescheduled);
+  const activeFollowUpCount = calls.filter(c => isShow(c) && isFollowUpOutcome(c)).length;
+
+  // Sections structured as column groups (page uses MetricColumn components)
+  const sections = {
+    // Column 1: Unique Prospects (first calls only)
+    uniqueProspects: {
+      scheduled: m('Scheduled', firstCalls.length, 'number'),
+      held: m('Held', firstHeld.length, 'number'),
+      showRate: m('Show Rate', round(sd(firstHeld.length, firstCalls.length), 3), 'percent'),
+    },
+    // Column 2: Total Calls
+    totalCalls: {
+      scheduled: m('Scheduled', calls.length, 'number'),
+      held: m('Held', held.length, 'number'),
+      showRate: m('Show Rate', round(sd(held.length, calls.length), 3), 'percent'),
+    },
+    // Column 3: First Calls
+    firstCalls: {
+      scheduled: m('Scheduled', firstCalls.length, 'number'),
+      held: m('Held', firstHeld.length, 'number'),
+      showRate: m('Show Rate', round(sd(firstHeld.length, firstCalls.length), 3), 'percent'),
+    },
+    // Column 4: Follow Up
+    followUpCalls: {
+      scheduled: m('Scheduled', followUps.length, 'number'),
+      held: m('Held', followUpHeld.length, 'number'),
+      showRate: m('Show Rate', round(sd(followUpHeld.length, followUps.length), 3), 'percent'),
+    },
+    // Standalone cards
+    activeFollowUp: m('Active Follow Up', activeFollowUpCount, 'number'),
+    notYetHeld: m('Not Yet Held', calls.filter(c => !isShow(c) && !isGhost(c) && !isCanceled(c) && !isRescheduled(c)).length, 'number'),
+    // Calls Not Taken section
+    callsNotTaken: {
+      notTaken: m('Not Taken', noShows.length, 'number'),
+      ghosted: m('# Ghosted', ghosted.length, 'number'),
+      cancelled: m('# Canceled', canceled.length, 'number'),
+      rescheduled: m('# Rescheduled', rescheduled.length, 'number'),
+      notTakenPct: m('% Not Taken', round(sd(noShows.length, calls.length), 3), 'percent'),
+      ghostedPct: m('% Ghosted', round(sd(ghosted.length, noShows.length), 3), 'percent'),
+      cancelledPct: m('% Canceled', round(sd(canceled.length, noShows.length), 3), 'percent'),
+      rescheduledPct: m('% Rescheduled', round(sd(rescheduled.length, noShows.length), 3), 'percent'),
+    },
+    // Lost Revenue calculation row
+    lostRevenue: {
+      notTaken: m('Not Taken', noShows.length, 'number'),
+      showCloseRate: m('Show > Close Rate', round(sd(held.filter(isClosed).length, held.length), 3), 'percent'),
+      avgDealSize: m('Average Deal Size', round(sd(sum(held.filter(isClosed), 'revenueGenerated'), held.filter(isClosed).length)), 'currency'),
+      lostPotential: m('Lost Potential Revenue', round(noShows.length * sd(held.filter(isClosed).length, held.length) * sd(sum(held.filter(isClosed), 'revenueGenerated'), held.filter(isClosed).length)), 'currency'),
+    },
+  };
+
+  // Time-series
+  const timeBuckets = groupByTime(calls, 'appointmentDate', granularity);
+  const scheduledVsHeld = [];
+  const firstFollowUpShowRate = [];
+  const firstFollowUpHeldChart = [];
+  const notTakenBreakdown = [];
+
+  for (const [date, bucket] of timeBuckets) {
+    const bHeld = bucket.filter(isShow);
+    const bFirst = bucket.filter(isFirstCall);
+    const bFirstHeld = bFirst.filter(isShow);
+    const bFU = bucket.filter(isFollowUp);
+    const bFUHeld = bFU.filter(isShow);
+
+    scheduledVsHeld.push({ date, scheduled: bucket.length, held: bHeld.length });
+    firstFollowUpShowRate.push({
+      date,
+      firstCallShowRate: round(sd(bFirstHeld.length, bFirst.length), 3),
+      followUpShowRate: round(sd(bFUHeld.length, bFU.length), 3),
+    });
+    firstFollowUpHeldChart.push({
+      date,
+      firstHeld: bFirstHeld.length,
+      followUpHeld: bFUHeld.length,
+    });
+    notTakenBreakdown.push({
+      date,
+      ghosted: bucket.filter(isGhost).length,
+      canceled: bucket.filter(isCanceled).length,
+      rescheduled: bucket.filter(isRescheduled).length,
+    });
+  }
+
+  // Attendance pie
+  const attendanceBreakdown = [
+    { label: 'Show', value: held.length, color: 'green' },
+    { label: 'Ghost', value: ghosted.length, color: 'red' },
+    { label: 'Canceled', value: canceled.length, color: 'blue' },
+    { label: 'Rescheduled', value: rescheduled.length, color: 'amber' },
+  ].filter(d => d.value > 0);
+
+  // Not taken reason pie
+  const notTakenReason = [
+    { label: 'Ghosted', value: ghosted.length, color: 'amber' },
+    { label: 'Canceled', value: canceled.length, color: 'red' },
+    { label: 'Rescheduled', value: rescheduled.length, color: 'purple' },
+  ].filter(d => d.value > 0);
+
+  // Per-closer
+  const closerBuckets = groupByCloser(calls);
+  const showRatePerCloser = [];
+  const attendancePerCloser = [];
+  for (const [name, closerCalls] of closerBuckets) {
+    const cHeld = closerCalls.filter(isShow);
+    showRatePerCloser.push({
+      date: name,
+      showRate: round(sd(cHeld.length, closerCalls.length), 3),
+    });
+    attendancePerCloser.push({
+      date: name,
+      show: cHeld.length,
+      noShow: closerCalls.length - cHeld.length,
+    });
+  }
+  showRatePerCloser.sort((a, b) => b.showRate - a.showRate);
+
+  return {
+    sections,
+    charts: {
+      scheduledVsHeld: { data: scheduledVsHeld, series: [
+        { key: 'scheduled', label: 'Scheduled', color: 'cyan' },
+        { key: 'held', label: 'Held', color: 'green' },
+      ]},
+      firstFollowUpShowRate: { data: firstFollowUpShowRate, series: [
+        { key: 'firstCallShowRate', label: 'First Call Show Rate', color: 'green' },
+        { key: 'followUpShowRate', label: 'Follow-Up Show Rate', color: 'purple' },
+      ]},
+      attendanceBreakdown: { data: attendanceBreakdown },
+      firstFollowUpsHeld: { data: firstFollowUpHeldChart, series: [
+        { key: 'firstHeld', label: 'First Call Held', color: 'green' },
+        { key: 'followUpHeld', label: 'Follow-Up Held', color: 'purple' },
+      ]},
+      showRatePerCloser: { data: showRatePerCloser, series: [
+        { key: 'showRate', label: 'Show Rate', color: 'cyan' },
+      ]},
+      attendancePerCloser: { data: attendancePerCloser, series: [
+        { key: 'show', label: 'Show', color: 'green' },
+        { key: 'noShow', label: 'No Show', color: 'red' },
+      ]},
+      notTakenBreakdown: { data: notTakenBreakdown, series: [
+        { key: 'ghosted', label: 'Ghosted', color: 'amber' },
+        { key: 'canceled', label: 'Canceled', color: 'red' },
+        { key: 'rescheduled', label: 'Rescheduled', color: 'purple' },
+      ]},
+      notTakenReason: { data: notTakenReason },
+    },
+  };
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// CALL OUTCOMES PAGE
+// ─────────────────────────────────────────────────────────────
+
+function computeCallOutcomes(calls, granularity) {
+  const held = calls.filter(isShow);
+  const firstCalls = calls.filter(isFirstCall);
+  const followUps = calls.filter(isFollowUp);
+  const firstHeld = firstCalls.filter(isShow);
+  const followUpHeld = followUps.filter(isShow);
+
+  const closed = held.filter(isClosed);
+  const deposits = held.filter(isDeposit);
+  const lost = held.filter(isLost);
+  const dq = held.filter(isDQ);
+  const notPitched = held.filter(isNotPitched);
+  const followUpOutcome = held.filter(isFollowUpOutcome);
+
+  const firstClosed = firstHeld.filter(isClosed);
+  const followUpClosed = followUpHeld.filter(isClosed);
+  const firstLost = firstHeld.filter(isLost);
+  const followUpLost = followUpHeld.filter(isLost);
+  const firstDQ = firstHeld.filter(isDQ);
+
+  const sections = {
+    // Hero scorecard above Health at a Glance
+    totalHeld: m('Total Calls Held', held.length, 'number', 'teal'),
+    // Section 1: Health at a Glance — 6 HealthColumns
+    health: {
+      closes: {
+        count: m('Total', closed.length, 'number'),
+        pctOfTotal: m('% of Total', round(sd(closed.length, held.length), 3), 'percent'),
+        closeRate: m('Close Rate', round(sd(closed.length, held.length), 3), 'percent'),
+      },
+      deposits: {
+        count: m('Total', deposits.length, 'number'),
+        pctOfTotal: m('% of Total', round(sd(deposits.length, held.length), 3), 'percent'),
+        closeRate: m('Close Rate', round(sd(deposits.length, held.length), 3), 'percent'),
+      },
+      followUps: {
+        count: m('Total', followUpOutcome.length, 'number'),
+        pctOfTotal: m('% of Total', round(sd(followUpOutcome.length, held.length), 3), 'percent'),
+        closeRate: m('Close Rate', round(sd(followUpClosed.length, followUpHeld.length), 3), 'percent'),
+      },
+      lost: {
+        count: m('Total', lost.length, 'number'),
+        pctOfTotal: m('% of Total', round(sd(lost.length, held.length), 3), 'percent'),
+      },
+      disqualified: {
+        count: m('Total', dq.length, 'number'),
+        pctOfTotal: m('% of Total', round(sd(dq.length, held.length), 3), 'percent'),
+      },
+      notPitched: {
+        count: m('Total', notPitched.length, 'number'),
+        pctOfTotal: m('% of Total', round(sd(notPitched.length, held.length), 3), 'percent'),
+      },
+    },
+    // Section 2: Closed - Won
+    closedWon: {
+      firstCallCloses: m('First Call Closes', firstClosed.length, 'number'),
+      firstCallCloseRate: m('First Call Close Rate', round(sd(firstClosed.length, firstHeld.length), 3), 'percent'),
+      followUpCloses: m('Follow-Up Closes', followUpClosed.length, 'number'),
+      followUpCloseRate: m('Follow-Up Close Rate', round(sd(followUpClosed.length, followUpHeld.length), 3), 'percent'),
+    },
+    // Section 3: Deposits
+    deposits: {
+      depositsTaken: m('Deposits Taken', deposits.length, 'number'),
+      depositClosedPct: m('Deposit Closed %', 0, 'percent'),
+      depositsLost: m('Deposits Lost', 0, 'number'),
+      depositsStillOpen: m('Deposits Still Open', 0, 'number'),
+    },
+    // Section 4: Follow Up
+    followUp: {
+      scheduled: m('Follow-Ups Scheduled', followUps.length, 'number'),
+      held: m('Follow-Ups Held', followUpHeld.length, 'number'),
+      showRate: m('Follow-Up Show Rate', round(sd(followUpHeld.length, followUps.length), 3), 'percent'),
+      stillInFollowUp: m('Still in Follow-Up', followUpOutcome.length, 'number'),
+    },
+    // Section 5: Lost
+    lost: {
+      firstCallLost: m('First Call Lost', firstLost.length, 'number'),
+      firstCallLostRate: m('First Call Lost Rate', round(sd(firstLost.length, firstHeld.length), 3), 'percent'),
+      followUpLost: m('Follow-Up Lost', followUpLost.length, 'number'),
+      followUpLostRate: m('Follow-Up Lost Rate', round(sd(followUpLost.length, followUpHeld.length), 3), 'percent'),
+    },
+    // Section 6: Disqualified
+    disqualified: {
+      firstCallDQ: m('First Call DQ', firstDQ.length, 'number'),
+      firstCallDQRate: m('DQ Rate', round(sd(firstDQ.length, firstHeld.length), 3), 'percent'),
+    },
+    // Section 7: Not Pitched
+    notPitched: {
+      notPitched: m('Not Pitched', notPitched.length, 'number'),
+      notPitchedRate: m('Not Pitched Rate', round(sd(notPitched.length, held.length), 3), 'percent'),
+    },
+  };
+
+  // Time-series
+  const timeBuckets = groupByTime(calls, 'appointmentDate', granularity);
+  const closesOverTime = [];
+  const closeRateOverTime = [];
+  const outcomesOverTime = [];
+  const lostOverTime = [];
+  const dqOverTime = [];
+  const notPitchedOverTime = [];
+  const followUpVolume = [];
+
+  for (const [date, bucket] of timeBuckets) {
+    const bHeld = bucket.filter(isShow);
+    const bClosed = bHeld.filter(isClosed);
+    const bFirstHeld = bucket.filter(c => isFirstCall(c) && isShow(c));
+    const bFirstClosed = bFirstHeld.filter(isClosed);
+    const bFUHeld = bucket.filter(c => isFollowUp(c) && isShow(c));
+
+    closesOverTime.push({
+      date,
+      firstCall: bFirstClosed.length,
+      followUp: bFUHeld.filter(isClosed).length,
+    });
+    closeRateOverTime.push({
+      date,
+      totalCloseRate: round(sd(bClosed.length, bHeld.length), 3),
+      firstCloseRate: round(sd(bFirstClosed.length, bFirstHeld.length), 3),
+    });
+    outcomesOverTime.push({
+      date,
+      closed: bClosed.length,
+      deposit: bHeld.filter(isDeposit).length,
+      followUp: bHeld.filter(isFollowUpOutcome).length,
+      lost: bHeld.filter(isLost).length,
+    });
+    lostOverTime.push({
+      date,
+      firstCall: bFirstHeld.filter(isLost).length,
+      followUp: bFUHeld.filter(isLost).length,
+    });
+    dqOverTime.push({ date, dq: bHeld.filter(isDQ).length });
+    notPitchedOverTime.push({ date, notPitched: bHeld.filter(isNotPitched).length });
+    followUpVolume.push({
+      date,
+      scheduled: bucket.filter(isFollowUp).length,
+      held: bFUHeld.length,
+    });
+  }
+
+  // Per-closer charts
+  const closerBuckets = groupByCloser(held);
+  const outcomeByCloser = [];
+  const closesByCloser = [];
+  const lostRateByCloser = [];
+  const dqByCloser = [];
+  const notPitchedByCloser = [];
+
+  for (const [name, closerCalls] of closerBuckets) {
+    outcomeByCloser.push({
+      date: name,
+      closed: closerCalls.filter(isClosed).length,
+      deposit: closerCalls.filter(isDeposit).length,
+      followUp: closerCalls.filter(isFollowUpOutcome).length,
+      lost: closerCalls.filter(isLost).length,
+      disqualified: closerCalls.filter(isDQ).length,
+      notPitched: closerCalls.filter(isNotPitched).length,
+    });
+    closesByCloser.push({
+      date: name,
+      firstCall: closerCalls.filter(c => isFirstCall(c) && isClosed(c)).length,
+      followUp: closerCalls.filter(c => isFollowUp(c) && isClosed(c)).length,
+    });
+    lostRateByCloser.push({
+      date: name, lostRate: round(sd(closerCalls.filter(isLost).length, closerCalls.length), 3),
+    });
+    dqByCloser.push({
+      date: name, dqRate: round(sd(closerCalls.filter(isDQ).length, closerCalls.length), 3),
+    });
+    notPitchedByCloser.push({
+      date: name, notPitchedRate: round(sd(closerCalls.filter(isNotPitched).length, closerCalls.length), 3),
+    });
+  }
+
+  // Closes by product (stacked bar: per closer, broken down by product)
+  const productNames = new Set();
+  const closedWithProduct = [...closed, ...deposits].filter(c => c.productPurchased);
+  for (const c of closedWithProduct) productNames.add(c.productPurchased);
+  const productList = [...productNames].sort();
+
+  const closesByProductData = [];
+  if (productList.length > 0) {
+    for (const [name, closerCalls] of closerBuckets) {
+      const row = { date: name };
+      for (const p of productList) {
+        row[p] = closerCalls.filter(c => (isClosed(c) || isDeposit(c)) && c.productPurchased === p).length;
+      }
+      closesByProductData.push(row);
+    }
+  }
+
+  const colors = ['green', 'cyan', 'amber', 'purple', 'red', 'blue', 'teal', 'muted'];
+  const closesByProductSeries = productList.map((p, i) => ({
+    key: p,
+    label: p,
+    color: colors[i % colors.length],
+  }));
+
+  // Lost reasons pie
+  const lostReasons = {};
+  for (const c of lost) {
+    const reason = c.lostReason || 'Unknown';
+    lostReasons[reason] = (lostReasons[reason] || 0) + 1;
+  }
+  const lostReasonsPie = Object.entries(lostReasons).map(([label, value]) => ({ label, value }));
+
+  // Outcome breakdown pie
+  const outcomeBreakdown = [
+    { label: 'Closed', value: closed.length, color: 'green' },
+    { label: 'Deposit', value: deposits.length, color: 'amber' },
+    { label: 'Follow-Up', value: followUpOutcome.length, color: 'purple' },
+    { label: 'Lost', value: lost.length, color: 'red' },
+    { label: 'DQ', value: dq.length, color: 'muted' },
+    { label: 'Not Pitched', value: notPitched.length, color: 'blue' },
+  ].filter(d => d.value > 0);
+
+  // Follow-up outcomes pie
+  const followUpOutcomes = [
+    { label: 'Closed', value: followUpClosed.length, color: 'green' },
+    { label: 'Still Open', value: followUpOutcome.length, color: 'purple' },
+    { label: 'Lost', value: followUpLost.length, color: 'red' },
+  ].filter(d => d.value > 0);
+
+  // Deposit outcomes pie — show deposit count by closer
+  const depositOutcomesData = [];
+  for (const [name, closerCalls] of closerBuckets) {
+    const depCount = closerCalls.filter(isDeposit).length;
+    if (depCount > 0) {
+      depositOutcomesData.push({ label: name, value: depCount });
+    }
+  }
+
+  // Deposit rate by closer (bar chart)
+  const depositByCloserData = [];
+  for (const [name, closerCalls] of closerBuckets) {
+    const depCount = closerCalls.filter(isDeposit).length;
+    if (depCount > 0 || closerCalls.length > 0) {
+      depositByCloserData.push({
+        date: name,
+        deposits: depCount,
+        depositRate: round(sd(depCount, closerCalls.length), 3),
+      });
+    }
+  }
+
+  // Follow-up outcome by closer (stacked bar)
+  const followUpOutcomeByCloserData = [];
+  for (const [name, closerCalls] of closerBuckets) {
+    followUpOutcomeByCloserData.push({
+      date: name,
+      closed: closerCalls.filter(c => isFollowUp(c) && isClosed(c)).length,
+      followUp: closerCalls.filter(isFollowUpOutcome).length,
+      lost: closerCalls.filter(c => isFollowUp(c) && isLost(c)).length,
+    });
+  }
+
+  // Lost reasons by closer (stacked bar)
+  const allLostReasonKeys = [...new Set(lost.map(c => c.lostReason || 'Unknown'))].sort();
+  const lostReasonsByCloserData = [];
+  for (const [name, closerCalls] of closerBuckets) {
+    const row = { date: name };
+    const closerLost = closerCalls.filter(isLost);
+    for (const reason of allLostReasonKeys) {
+      row[reason] = closerLost.filter(c => (c.lostReason || 'Unknown') === reason).length;
+    }
+    lostReasonsByCloserData.push(row);
+  }
+  const lostReasonColors = ['red', 'amber', 'purple', 'blue', 'muted', 'cyan', 'green', 'teal'];
+  const lostReasonsByCloserSeries = allLostReasonKeys.map((r, i) => ({
+    key: r, label: r, color: lostReasonColors[i % lostReasonColors.length],
+  }));
+
+  // Sort horizontal bar chart data: highest value at top (descending)
+  // For stacked bars, sort by sum of all numeric keys (excluding 'date'/'label')
+  const sortDesc = (arr, keys) => [...arr].sort((a, b) => {
+    const totalA = keys.reduce((s, k) => s + (a[k] || 0), 0);
+    const totalB = keys.reduce((s, k) => s + (b[k] || 0), 0);
+    return totalB - totalA;
+  });
+  // Lost Rate: highest % at BOTTOM (ascending = worst performer last)
+  const sortAsc = (arr, key) => [...arr].sort((a, b) => (a[key] || 0) - (b[key] || 0));
+
+  return {
+    sections,
+    charts: {
+      outcomeBreakdown: { data: outcomeBreakdown },
+      outcomeByCloser: { data: sortDesc(outcomeByCloser, ['closed', 'deposit', 'followUp', 'lost', 'disqualified', 'notPitched']), series: [
+        { key: 'closed', label: 'Closed', color: 'green' },
+        { key: 'deposit', label: 'Deposit', color: 'amber' },
+        { key: 'followUp', label: 'Follow-Up', color: 'purple' },
+        { key: 'lost', label: 'Lost', color: 'red' },
+        { key: 'disqualified', label: 'DQ', color: 'muted' },
+        { key: 'notPitched', label: 'Not Pitched', color: 'blue' },
+      ]},
+      outcomesOverTime: { data: outcomesOverTime, series: [
+        { key: 'closed', label: 'Closed', color: 'green' },
+        { key: 'deposit', label: 'Deposit', color: 'amber' },
+        { key: 'followUp', label: 'Follow-Up', color: 'purple' },
+        { key: 'lost', label: 'Lost', color: 'red' },
+      ]},
+      closesByProduct: { data: sortDesc(closesByProductData, productList), series: closesByProductSeries },
+      closesOverTime: { data: closesOverTime, series: [
+        { key: 'firstCall', label: 'First Call', color: 'green' },
+        { key: 'followUp', label: 'Follow-Up', color: 'purple' },
+      ]},
+      closeRateOverTime: { data: closeRateOverTime, series: [
+        { key: 'totalCloseRate', label: 'Total Close Rate', color: 'green' },
+        { key: 'firstCloseRate', label: 'First Call Close Rate', color: 'cyan' },
+      ]},
+      closesByCloser: { data: sortDesc(closesByCloser, ['firstCall', 'followUp']), series: [
+        { key: 'firstCall', label: 'First Call', color: 'green' },
+        { key: 'followUp', label: 'Follow-Up', color: 'purple' },
+      ]},
+      depositOutcomes: { data: depositOutcomesData },
+      depositCloseByCloser: { data: sortDesc(depositByCloserData, ['depositRate']), series: [
+        { key: 'depositRate', label: 'Deposit Rate', color: 'amber' },
+      ]},
+      followUpVolume: { data: followUpVolume, series: [
+        { key: 'scheduled', label: 'Scheduled', color: 'cyan' },
+        { key: 'held', label: 'Held', color: 'purple' },
+      ]},
+      followUpOutcomes: { data: followUpOutcomes },
+      followUpOutcomeByCloser: { data: sortDesc(followUpOutcomeByCloserData, ['closed', 'followUp', 'lost']), series: [
+        { key: 'closed', label: 'Closed', color: 'green' },
+        { key: 'followUp', label: 'Follow-Up', color: 'purple' },
+        { key: 'lost', label: 'Lost', color: 'red' },
+      ]},
+      lostOverTime: { data: lostOverTime, series: [
+        { key: 'firstCall', label: 'First Call', color: 'red' },
+        { key: 'followUp', label: 'Follow-Up', color: 'amber' },
+      ]},
+      lostReasons: { data: lostReasonsPie },
+      lostRateByCloser: { data: sortAsc(lostRateByCloser, 'lostRate'), series: [
+        { key: 'lostRate', label: 'Lost Rate', color: 'red' },
+      ]},
+      lostReasonsByCloser: { data: sortDesc(lostReasonsByCloserData, allLostReasonKeys), series: lostReasonsByCloserSeries },
+      dqOverTime: { data: dqOverTime, series: [
+        { key: 'dq', label: 'Disqualified', color: 'muted' },
+      ]},
+      dqByCloser: { data: sortDesc(dqByCloser, ['dqRate']), series: [
+        { key: 'dqRate', label: 'DQ Rate', color: 'muted' },
+      ]},
+      notPitchedOverTime: { data: notPitchedOverTime, series: [
+        { key: 'notPitched', label: 'Not Pitched', color: 'blue' },
+      ]},
+      notPitchedByCloser: { data: sortDesc(notPitchedByCloser, ['notPitchedRate']), series: [
+        { key: 'notPitchedRate', label: 'Not Pitched Rate', color: 'blue' },
+      ]},
+    },
+  };
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// SALES CYCLE PAGE
+// ─────────────────────────────────────────────────────────────
+
+function computeSalesCycle(calls, closeCycles) {
+  const callsToClose = closeCycles.map(c => c.callsToClose).filter(v => v > 0);
+  const daysToClose = closeCycles.map(c => c.daysToClose).filter(v => v >= 0);
+
+  const oneCall = callsToClose.filter(v => v === 1).length;
+  const twoCall = callsToClose.filter(v => v === 2).length;
+  const threePlus = callsToClose.filter(v => v >= 3).length;
+  const total = callsToClose.length;
+
+  // Calls needed per deal: total held calls / closed deals
+  const held = calls.filter(isShow);
+  const closed = held.filter(isClosed);
+
+  const sections = {
+    // Section 1 (Overview) + Section 2 (Key Metrics): callsToClose
+    callsToClose: {
+      oneCallCloses: m('1-Call Closes', oneCall, 'number', 'green'),
+      twoCallCloses: m('2-Call Closes', twoCall, 'number', 'blue'),
+      threeCallCloses: m('3+ Call Closes', threePlus, 'number', 'amber'),
+      oneCallClosePct: m('1-Call Close %', round(sd(oneCall, total), 3), 'percent', 'green'),
+      twoCallClosePct: m('2-Call Close %', round(sd(twoCall, total), 3), 'percent', 'blue'),
+      threeCallClosePct: m('3+ Call Close %', round(sd(threePlus, total), 3), 'percent', 'amber'),
+      avgCallsToClose: m('Avg Calls to Close', round(avg(closeCycles, 'callsToClose'), 1), 'decimal', 'cyan'),
+      medianCallsToClose: m('Median Calls to Close', median(callsToClose), 'decimal', 'cyan'),
+      callsNeededPerDeal: m('Calls Scheduled per Close', round(sd(calls.length, closed.length), 1), 'decimal', 'green'),
+    },
+    // Section 2 (Key Metrics): daysToClose
+    daysToClose: {
+      avgDaysToClose: m('Avg Days to Close', round(avg(closeCycles, 'daysToClose'), 1), 'decimal', 'purple'),
+      medianDaysToClose: m('Median Days to Close', median(daysToClose), 'decimal', 'purple'),
+    },
+  };
+
+  // Distribution pie
+  const callsDistribution = [
+    { label: '1 Call', value: oneCall, color: 'green' },
+    { label: '2 Calls', value: twoCall, color: 'cyan' },
+    { label: '3+ Calls', value: threePlus, color: 'amber' },
+  ].filter(d => d.value > 0);
+
+  // Days distribution
+  const sameDay = daysToClose.filter(d => d === 0).length;
+  const oneToThree = daysToClose.filter(d => d >= 1 && d <= 3).length;
+  const fourToSeven = daysToClose.filter(d => d >= 4 && d <= 7).length;
+  const eightToFourteen = daysToClose.filter(d => d >= 8 && d <= 14).length;
+  const fifteenPlus = daysToClose.filter(d => d >= 15).length;
+
+  const daysDistribution = [
+    { label: 'Same Day', value: sameDay, color: 'green' },
+    { label: '1-3 Days', value: oneToThree, color: 'cyan' },
+    { label: '4-7 Days', value: fourToSeven, color: 'amber' },
+    { label: '8-14 Days', value: eightToFourteen, color: 'purple' },
+    { label: '15+ Days', value: fifteenPlus, color: 'red' },
+  ].filter(d => d.value > 0);
+
+  // Per-closer
+  const closerMap = new Map();
+  for (const c of closeCycles) {
+    const name = c.closerId || 'Unknown';
+    if (!closerMap.has(name)) closerMap.set(name, []);
+    closerMap.get(name).push(c);
+  }
+
+  const callsToCloseByCloser = [];
+  const daysToCloseByCloser = [];
+  for (const [name, cycles] of closerMap) {
+    const ctc = cycles.map(c => c.callsToClose);
+    const dtc = cycles.map(c => c.daysToClose);
+    callsToCloseByCloser.push({
+      date: name,
+      oneCall: ctc.filter(v => v === 1).length,
+      twoCalls: ctc.filter(v => v === 2).length,
+      threePlus: ctc.filter(v => v >= 3).length,
+    });
+    daysToCloseByCloser.push({
+      date: name,
+      sameDay: dtc.filter(d => d === 0).length,
+      oneToThree: dtc.filter(d => d >= 1 && d <= 3).length,
+      fourToSeven: dtc.filter(d => d >= 4 && d <= 7).length,
+      eightPlus: dtc.filter(d => d >= 8).length,
+    });
+  }
+
+  return {
+    sections,
+    charts: {
+      salesCyclePie: { data: callsDistribution },
+      callsToCloseBar: { data: callsDistribution.map(d => ({ date: d.label, count: d.value })), series: [
+        { key: 'count', label: 'Closes', color: 'cyan' },
+      ]},
+      daysToClosePie: { data: daysDistribution },
+      daysToCloseBar: { data: daysDistribution.map(d => ({ date: d.label, count: d.value })), series: [
+        { key: 'count', label: 'Closes', color: 'amber' },
+      ]},
+      callsToCloseByCloser: { data: callsToCloseByCloser, series: [
+        { key: 'oneCall', label: '1 Call', color: 'green' },
+        { key: 'twoCalls', label: '2 Calls', color: 'cyan' },
+        { key: 'threePlus', label: '3+', color: 'amber' },
+      ]},
+      daysToCloseByCloser: { data: daysToCloseByCloser, series: [
+        { key: 'sameDay', label: 'Same Day', color: 'green' },
+        { key: 'oneToThree', label: '1-3', color: 'cyan' },
+        { key: 'fourToSeven', label: '4-7', color: 'amber' },
+        { key: 'eightPlus', label: '8+', color: 'red' },
+      ]},
+    },
+  };
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// OBJECTIONS PAGE
+// ─────────────────────────────────────────────────────────────
+
+function computeObjections(calls, objections, granularity) {
+  const held = calls.filter(isShow);
+  const callsWithObj = new Set(objections.map(o => o.callId));
+  const resolvedObj = objections.filter(o => o.resolved);
+
+  // Calls that had objections and closed
+  const closedWithObj = held.filter(c => isClosed(c) && callsWithObj.has(c.callId));
+  const lostWithObj = held.filter(c => isLost(c) && callsWithObj.has(c.callId));
+  const closedNoObj = held.filter(c => isClosed(c) && !callsWithObj.has(c.callId));
+
+  const sections = {
+    summary: {
+      callsHeld: m('Calls Held', held.length, 'number', 'cyan'),
+      objectionsFaced: m('Objections Faced', objections.length, 'number', 'amber'),
+      pctCallsWithObj: m('% Calls w/ Objections', round(sd(callsWithObj.size, held.length), 3), 'percent', 'amber'),
+      avgObjPerCall: m('Avg Obj / Call', callsWithObj.size > 0 ? round(sd(objections.length, callsWithObj.size), 1) : 0, 'decimal', 'amber'),
+      resolvedCount: m('Resolved', resolvedObj.length, 'number', 'green'),
+      resolutionRate: m('Resolution Rate', round(sd(resolvedObj.length, objections.length), 3), 'percent', 'green'),
+      objectionlessCloses: m('Objectionless Closes', closedNoObj.length, 'number', 'green'),
+      closedWithObj: m('Closed w/ Objections', closedWithObj.length, 'number', 'cyan'),
+      lostToObj: m('Lost to Objections', lostWithObj.length, 'number', 'red'),
+    },
+  };
+
+  // By type
+  const byType = {};
+  for (const o of objections) {
+    const type = o.objectionType || 'Other';
+    if (!byType[type]) byType[type] = { total: 0, resolved: 0 };
+    byType[type].total++;
+    if (o.resolved) byType[type].resolved++;
+  }
+
+  const objectionsByType = Object.entries(byType).map(([type, d]) => ({
+    date: type,
+    resolved: d.resolved,
+    unresolved: d.total - d.resolved,
+  })).sort((a, b) => (b.resolved + b.unresolved) - (a.resolved + a.unresolved));
+
+  const unresolvedRaw = Object.entries(byType)
+    .map(([label, d]) => ({ label, value: d.total - d.resolved }))
+    .filter(d => d.value > 0)
+    .sort((a, b) => b.value - a.value);
+  const unresolvedTotal = unresolvedRaw.reduce((s, d) => s + d.value, 0);
+  const unresolvedByType = [];
+  let otherBucket = 0;
+  for (const d of unresolvedRaw) {
+    if (d.value / unresolvedTotal < 0.05) {
+      otherBucket += d.value;
+    } else {
+      unresolvedByType.push(d);
+    }
+  }
+  if (otherBucket > 0) unresolvedByType.push({ label: 'Other', value: otherBucket });
+
+  // By type table
+  const byTypeTable = Object.entries(byType).map(([type, d]) => ({
+    type,
+    total: d.total,
+    resolved: d.resolved,
+    resRate: round(sd(d.resolved, d.total), 3),
+  })).sort((a, b) => b.total - a.total);
+
+  // Time-series — top objection types over time
+  const objTimeBuckets = groupByTime(objections, 'appointmentDate', granularity);
+  const typeSet = new Set(objections.map(o => o.objectionType || 'Other'));
+  const topTypes = [...typeSet].slice(0, 3);
+  const objectionTrends = [];
+  for (const [date, bucket] of objTimeBuckets) {
+    const point = { date };
+    for (const type of topTypes) {
+      const key = type.replace(/[^a-zA-Z]/g, '').toLowerCase();
+      point[key] = bucket.filter(o => o.objectionType === type).length;
+    }
+    objectionTrends.push(point);
+  }
+  const trendSeries = topTypes.map((type, i) => ({
+    key: type.replace(/[^a-zA-Z]/g, '').toLowerCase(),
+    label: type,
+    color: ['cyan', 'purple', 'amber'][i],
+  }));
+
+  // Per-closer resolution rate
+  const closerObjMap = new Map();
+  for (const o of objections) {
+    const name = o.closerName || o.closerId || 'Unknown';
+    if (!closerObjMap.has(name)) closerObjMap.set(name, { total: 0, resolved: 0 });
+    const cd = closerObjMap.get(name);
+    cd.total++;
+    if (o.resolved) cd.resolved++;
+  }
+  const resolutionByCloser = [...closerObjMap.entries()].map(([name, d]) => ({
+    date: name,
+    rate: round(sd(d.resolved, d.total), 3),
+  })).sort((a, b) => b.rate - a.rate);
+
+  // By closer table
+  const byCloserTable = [...closerObjMap.entries()].map(([name, d]) => ({
+    closer: name,
+    total: d.total,
+    resolved: d.resolved,
+    resRate: round(sd(d.resolved, d.total), 3),
+  })).sort((a, b) => b.total - a.total);
+
+  // Detail table — individual objections for drill-down
+  // Build callId → recordingUrl lookup from calls data
+  const callRecordingMap = {};
+  for (const c of calls) {
+    if (c.callId && c.recordingUrl) callRecordingMap[c.callId] = c.recordingUrl;
+  }
+
+  const detailRows = objections.map(o => ({
+    objectionType: o.objectionType || 'Other',
+    resolved: !!o.resolved,
+    closer: o.closerName || o.closerId || 'Unknown',
+    closerId: o.closerId || '',
+    callOutcome: o.callOutcome || '',
+    appointmentDate: o.appointmentDate || '',
+    recordingUrl: callRecordingMap[o.callId] || '',
+  }));
+
+  return {
+    sections,
+    charts: {
+      objectionsByType: { data: objectionsByType, series: [
+        { key: 'resolved', label: 'Resolved', color: 'green' },
+        { key: 'unresolved', label: 'Unresolved', color: 'red' },
+      ]},
+      objectionTrends: { data: objectionTrends, series: trendSeries },
+      unresolvedByType: { data: unresolvedByType },
+      resolutionByCloser: { data: resolutionByCloser, series: [
+        { key: 'rate', label: 'Resolution Rate', color: 'green' },
+      ]},
+    },
+    tables: {
+      byType: { rows: byTypeTable },
+      byCloser: { rows: byCloserTable },
+      detail: { rows: detailRows },
+    },
+  };
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// PROJECTIONS PAGE
+// ─────────────────────────────────────────────────────────────
+
+function computeProjections(calls, closeCycles, rawData, filters) {
+  const { dateStart, dateEnd } = filters;
+  const held = calls.filter(isShow);
+  const closed = held.filter(isClosed);
+  const revenueDeals = held.filter(hasRevenue);
+
+  const totalRevenue = sum(revenueDeals, 'revenueGenerated');
+  const totalCash = sum(revenueDeals, 'cashCollected');
+
+  // Calculate days in period
+  const start = new Date(dateStart);
+  const end = new Date(dateEnd);
+  const daysInPeriod = Math.max(1, Math.round((end - start) / 86400000) + 1);
+
+  // Rates
+  const showRate = round(sd(held.length, calls.length), 4);
+  const closeRate = round(sd(closed.length, held.length), 4);
+  const avgDealSize = round(sd(totalRevenue, closed.length));
+  const avgCashCollected = round(sd(totalCash, closed.length));
+  const prospectsBookedPerMonth = round(calls.filter(isFirstCall).length / (daysInPeriod / 30), 1);
+
+  // Avg calls to close from close cycles
+  const avgCallsToClose = closeCycles.length > 0
+    ? round(avg(closeCycles, 'callsToClose'), 1)
+    : 0;
+
+  // Calendar context
+  const now = new Date();
+  const dayOfMonth = now.getDate();
+  const daysInCurrentMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const startOfYear = new Date(now.getFullYear(), 0, 1);
+  const dayOfYear = Math.floor((now - startOfYear) / 86400000) + 1;
+  const daysInYear = (now.getFullYear() % 4 === 0) ? 366 : 365;
+
+  // Quarter context — Q1: Jan-Mar, Q2: Apr-Jun, Q3: Jul-Sep, Q4: Oct-Dec
+  const currentMonth = now.getMonth(); // 0-11
+  const quarterStartMonth = Math.floor(currentMonth / 3) * 3; // 0, 3, 6, or 9
+  const quarterStart = new Date(now.getFullYear(), quarterStartMonth, 1);
+  const quarterEnd = new Date(now.getFullYear(), quarterStartMonth + 3, 0); // last day of quarter
+  const dayOfQuarter = Math.floor((now - quarterStart) / 86400000) + 1;
+  const daysInQuarter = Math.floor((quarterEnd - quarterStart) / 86400000) + 1;
+
+  // MTD — filter all raw calls for current month
+  const mtdStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  const mtdEnd = now.toISOString().split('T')[0];
+  const mtdCalls = filterCalls(rawData.calls, mtdStart, mtdEnd, null);
+  const mtdHeld = mtdCalls.filter(isShow);
+  const mtdClosed = mtdHeld.filter(isClosed);
+  const mtdRevDeals = mtdHeld.filter(hasRevenue);
+
+  // YTD
+  const ytdStart = `${now.getFullYear()}-01-01`;
+  const ytdCalls = filterCalls(rawData.calls, ytdStart, mtdEnd, null);
+  const ytdHeld = ytdCalls.filter(isShow);
+  const ytdClosed = ytdHeld.filter(isClosed);
+  const ytdRevDeals = ytdHeld.filter(hasRevenue);
+
+  // WTD — week-to-date (Monday to today)
+  const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon, ...
+  const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + mondayOffset);
+  const wtdStart = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`;
+  const wtdCalls = filterCalls(rawData.calls, wtdStart, mtdEnd, null);
+  const wtdHeld = wtdCalls.filter(isShow);
+  const wtdRevDeals = wtdHeld.filter(hasRevenue);
+
+  // QTD — quarter-to-date
+  const qtdStart = `${now.getFullYear()}-${String(quarterStartMonth + 1).padStart(2, '0')}-01`;
+  const qtdCalls = filterCalls(rawData.calls, qtdStart, mtdEnd, null);
+  const qtdHeld = qtdCalls.filter(isShow);
+  const qtdRevDeals = qtdHeld.filter(hasRevenue);
+
+  // Goals from Clients table
+  const clientData = rawData.client || {};
+  const monthlyGoal = clientData.monthlyGoal || 0;
+  const quarterlyGoal = clientData.quarterlyGoal || 0;
+  const yearlyGoal = clientData.yearlyGoal || 0;
+
+  const projectionBaseline = {
+    showRate,
+    closeRate,
+    avgDealSize,
+    avgCashCollected,
+    prospectsBookedPerMonth,
+    avgCallsToClose,
+    callsScheduled: calls.length,
+    currentCallsHeld: held.length,
+    currentCloses: closed.length,
+    currentRevenue: totalRevenue,
+    currentCash: totalCash,
+    daysInPeriod,
+    daysInCurrentMonth,
+    dayOfMonth,
+    daysInYear,
+    dayOfYear,
+    mtdCallsScheduled: mtdCalls.length,
+    mtdCallsHeld: mtdHeld.length,
+    mtdCloses: mtdClosed.length,
+    mtdRevenue: sum(mtdRevDeals, 'revenueGenerated'),
+    mtdCash: sum(mtdRevDeals, 'cashCollected'),
+    ytdCallsScheduled: ytdCalls.length,
+    ytdCallsHeld: ytdHeld.length,
+    ytdCloses: ytdClosed.length,
+    ytdRevenue: sum(ytdRevDeals, 'revenueGenerated'),
+    ytdCash: sum(ytdRevDeals, 'cashCollected'),
+    wtdRevenue: sum(wtdRevDeals, 'revenueGenerated'),
+    wtdCash: sum(wtdRevDeals, 'cashCollected'),
+    qtdRevenue: sum(qtdRevDeals, 'revenueGenerated'),
+    qtdCash: sum(qtdRevDeals, 'cashCollected'),
+    dayOfQuarter,
+    daysInQuarter,
+    monthlyGoal,
+    quarterlyGoal,
+    yearlyGoal,
+    dateRange: `${dateStart} – ${dateEnd}`,
+  };
+
+  return {
+    sections: {
+      baseline: {
+        showRate: m('Show Rate', showRate, 'percent', 'green'),
+        closeRate: m('Close Rate', closeRate, 'percent', 'cyan'),
+        avgDealSize: m('Avg Deal Size', avgDealSize, 'currency', 'amber'),
+        avgCashCollected: m('Avg Cash Collected', avgCashCollected, 'currency', 'teal'),
+        prospectsPerMonth: m('Prospects / Month', Math.round(prospectsBookedPerMonth), 'number', 'purple'),
+        avgCallsToClose: m('Avg Calls to Close', avgCallsToClose, 'decimal', 'cyan'),
+      },
+    },
+    charts: {},
+    projectionBaseline,
+  };
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// VIOLATIONS PAGE
+// ─────────────────────────────────────────────────────────────
+
+function computeViolations(calls, granularity) {
+  const held = calls.filter(isShow);
+
+  // Parse key_moments for risk flags
+  // key_moments is a JSON string or plain text from AI
+  const riskFlags = [];
+  const riskCategories = ['Claims', 'Guarantees', 'Earnings', 'Pressure'];
+
+  for (const c of held) {
+    if (!c.keyMoments) continue;
+    let moments;
+    try {
+      moments = typeof c.keyMoments === 'string' ? JSON.parse(c.keyMoments) : c.keyMoments;
+    } catch {
+      continue; // Not valid JSON, skip
+    }
+
+    if (!Array.isArray(moments)) continue;
+    for (const moment of moments) {
+      const category = moment.risk_category || moment.category;
+      if (category && riskCategories.some(rc => category.toLowerCase().includes(rc.toLowerCase()))) {
+        riskFlags.push({
+          date: c.appointmentDate,
+          closer: c.closerName,
+          closerId: c.closerId,
+          callType: c.callType,
+          riskCategory: category,
+          timestamp: moment.timestamp || '',
+          exactPhrase: moment.phrase || moment.text || '',
+          whyFlagged: moment.reason || moment.explanation || '',
+          recordingUrl: c.recordingUrl,
+          transcriptUrl: c.transcriptLink,
+        });
+      }
+    }
+  }
+
+  const uniqueCallsWithRisk = new Set(riskFlags.map(f => f.date + f.closerId)).size;
+  const catCounts = {};
+  for (const rc of riskCategories) catCounts[rc] = 0;
+  for (const f of riskFlags) {
+    for (const rc of riskCategories) {
+      if (f.riskCategory.toLowerCase().includes(rc.toLowerCase())) {
+        catCounts[rc]++;
+        break;
+      }
+    }
+  }
+
+  // Risk by call type
+  const firstCallFlags = riskFlags.filter(f => f.callType === 'First Call').length;
+  const followUpFlags = riskFlags.filter(f => f.callType !== 'First Call').length;
+  const firstCallTotal = held.filter(isFirstCall).length;
+  const followUpTotal = held.filter(isFollowUp).length;
+
+  const sections = {
+    overview: {
+      flagCount: m('Risk Flags', riskFlags.length, 'number', 'red'),
+      uniqueCalls: m('Unique Calls w/ Risk', uniqueCallsWithRisk, 'number', 'red'),
+      pctCalls: m('% Calls w/ Flags', round(sd(uniqueCallsWithRisk, held.length), 3), 'percent', 'amber'),
+      ftcSecCount: m('FTC / SEC Warnings', riskFlags.length, 'number', 'magenta'),
+    },
+    riskCategories: {
+      claims: m('Claims', catCounts.Claims, 'number', 'red'),
+      guarantees: m('Guarantees', catCounts.Guarantees, 'number', 'amber'),
+      earnings: m('Earnings / Income', catCounts.Earnings, 'number', 'magenta'),
+      pressure: m('Pressure / Urgency', catCounts.Pressure, 'number', 'purple'),
+    },
+    riskByCallType: {
+      firstCallPct: m('First Call Infractions', round(sd(firstCallFlags, firstCallTotal), 3), 'percent', 'red'),
+      followUpPct: m('Follow-Up Infractions', round(sd(followUpFlags, followUpTotal), 3), 'percent', 'magenta'),
+    },
+  };
+
+  // Time-series
+  const timeBuckets = groupByTime(riskFlags.length > 0 ? riskFlags : [{ appointmentDate: new Date().toISOString().split('T')[0] }], 'date', granularity);
+  const complianceOverTime = [];
+  for (const [date, bucket] of timeBuckets) {
+    complianceOverTime.push({ date, flags: riskFlags.length > 0 ? bucket.length : 0 });
+  }
+
+  // Per-closer
+  const closerFlags = new Map();
+  for (const f of riskFlags) {
+    const name = f.closer || 'Unknown';
+    closerFlags.set(name, (closerFlags.get(name) || 0) + 1);
+  }
+  const flagsByCloser = [...closerFlags.entries()]
+    .map(([name, flags]) => ({ date: name, flags }))
+    .sort((a, b) => b.flags - a.flags);
+
+  // Risk category trends over time
+  const riskTrendsData = [];
+  if (riskFlags.length > 0) {
+    const riskTimeBuckets = groupByTime(riskFlags, 'date', granularity);
+    for (const [date, bucket] of riskTimeBuckets) {
+      const point = { date };
+      for (const rc of riskCategories) {
+        point[rc.toLowerCase()] = bucket.filter(f =>
+          f.riskCategory.toLowerCase().includes(rc.toLowerCase())
+        ).length;
+      }
+      riskTrendsData.push(point);
+    }
+  }
+
+  return {
+    sections,
+    charts: {
+      complianceOverTime: { data: complianceOverTime, series: [
+        { key: 'flags', label: 'Compliance Flags', color: 'red' },
+      ]},
+      flagsByCloser: { data: flagsByCloser, series: [
+        { key: 'flags', label: 'Risk Flags', color: 'amber' },
+      ]},
+      riskTrends: { data: riskTrendsData, series: [
+        { key: 'claims', label: 'Claims', color: 'red' },
+        { key: 'guarantees', label: 'Guarantees', color: 'amber' },
+        { key: 'earnings', label: 'Earnings', color: 'magenta' },
+        { key: 'pressure', label: 'Pressure', color: 'purple' },
+      ]},
+    },
+    tables: {
+      riskReview: { rows: riskFlags.slice(0, 50) }, // Limit to 50 for performance
+    },
+  };
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// ADHERENCE PAGE
+// ─────────────────────────────────────────────────────────────
+
+function computeAdherence(calls, granularity) {
+  const held = calls.filter(c => isShow(c) && c.overallCallScore > 0);
+
+  // Score fields mapped to 8 radar axes
+  const scoreMap = {
+    intro: 'scriptAdherenceScore',
+    pain: 'discoveryScore',
+    discovery: 'discoveryScore',
+    goal: 'discoveryScore',
+    transition: 'scriptAdherenceScore',
+    pitch: 'pitchScore',
+    close: 'closeAttemptScore',
+    objections: 'objectionHandlingScore',
+  };
+
+  const axes = ['Intro', 'Pain', 'Discovery', 'Goal', 'Transition', 'Pitch', 'Close', 'Objections'];
+  const axisKeys = ['intro', 'pain', 'discovery', 'goal', 'transition', 'pitch', 'close', 'objections'];
+
+  // Overall scores
+  const overallAdherence = round(avg(held, 'scriptAdherenceScore'), 1);
+  const objHandling = round(avg(held, 'objectionHandlingScore'), 1);
+
+  const sections = {
+    overall: {
+      adherenceScore: m('Script Adherence Score', overallAdherence || 0, 'score', 'cyan'),
+      objHandlingScore: m('Objection Handling Quality', objHandling || 0, 'score', 'amber'),
+    },
+    bySection: {},
+  };
+
+  for (let i = 0; i < axes.length; i++) {
+    const key = axisKeys[i];
+    const field = scoreMap[key];
+    sections.bySection[key] = m(axes[i], round(avg(held, field), 1) || 0, 'score', 'cyan');
+  }
+
+  // Radar data per closer
+  const closerBuckets = groupByCloser(held);
+  const byCloser = [];
+  const adherenceByCloser = [];
+  const objHandlingByCloser = [];
+
+  for (const [name, closerCalls] of closerBuckets) {
+    const closerValues = axisKeys.map(key => {
+      const field = scoreMap[key];
+      return round(avg(closerCalls, field), 1) || 0;
+    });
+    byCloser.push({ label: name, closerId: closerCalls[0]?.closerId, values: closerValues });
+    adherenceByCloser.push({
+      date: name,
+      score: round(avg(closerCalls, 'scriptAdherenceScore'), 1) || 0,
+    });
+    objHandlingByCloser.push({
+      date: name,
+      score: round(avg(closerCalls, 'objectionHandlingScore'), 1) || 0,
+    });
+  }
+  adherenceByCloser.sort((a, b) => b.score - a.score);
+  objHandlingByCloser.sort((a, b) => b.score - a.score);
+
+  // Time-series
+  const timeBuckets = groupByTime(held.length > 0 ? held : calls, 'appointmentDate', granularity);
+  const adherenceOverTime = [];
+  for (const [date, bucket] of timeBuckets) {
+    const scored = bucket.filter(c => c.scriptAdherenceScore > 0);
+    adherenceOverTime.push({
+      date,
+      score: scored.length > 0 ? round(avg(scored, 'scriptAdherenceScore'), 1) : 0,
+    });
+  }
+
+  return {
+    sections,
+    charts: {
+      radarData: { axes, byCloser },
+      adherenceByCloser: { data: adherenceByCloser, series: [
+        { key: 'score', label: 'Adherence Score', color: 'cyan' },
+      ]},
+      objHandlingByCloser: { data: objHandlingByCloser, series: [
+        { key: 'score', label: 'Obj Handling Score', color: 'amber' },
+      ]},
+      adherenceOverTime: { data: adherenceOverTime, series: [
+        { key: 'score', label: 'Adherence Score', color: 'green' },
+      ]},
+    },
+  };
+}

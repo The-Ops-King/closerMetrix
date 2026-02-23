@@ -15,6 +15,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { DataProvider } from './context/DataContext';
 
 // Client dashboard pages
 import ClientDashboardLayout from './pages/client/ClientDashboardLayout';
@@ -42,6 +43,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <DataProvider>
         <Routes>
           {/* ── Client Dashboard ── */}
           {/* /d/:token is the shared secret link clients receive */}
@@ -90,6 +92,7 @@ export default function App() {
           {/* ── Catch-all: redirect to admin login ── */}
           <Route path="*" element={<Navigate to="/admin/login" replace />} />
         </Routes>
+        </DataProvider>
       </AuthProvider>
     </BrowserRouter>
   );

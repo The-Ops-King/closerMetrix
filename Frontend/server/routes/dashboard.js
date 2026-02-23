@@ -39,6 +39,7 @@ const { getProjectionsData } = require('../db/queries/projections');
 const { getViolationsData } = require('../db/queries/violations');
 const { getAdherenceData } = require('../db/queries/adherence');
 const { getCallExportData } = require('../db/queries/callExport');
+const { getRawData } = require('../db/queries/rawData');
 
 const router = express.Router();
 
@@ -197,10 +198,22 @@ router.put('/goals', async (req, res) => {
     }
 
     if (bq.isAvailable()) {
-      // Real BQ mode: UPDATE Clients table
-      // TODO: Implement when BQ credentials are available
-      // await bq.runQuery(`UPDATE ... SET monthly_goal=@m, quarterly_goal=@q, yearly_goal=@y WHERE client_id=@clientId`, { ... });
-      logger.info('Goals save (BQ mode not yet implemented)', { clientId: req.clientId, goals });
+      const clientsTable = bq.table('Clients');
+      await bq.runQuery(
+        `UPDATE ${clientsTable}
+         SET monthly_goal = @monthlyGoal,
+             quarterly_goal = @quarterlyGoal,
+             yearly_goal = @yearlyGoal,
+             last_modified = CURRENT_TIMESTAMP()
+         WHERE client_id = @clientId`,
+        {
+          clientId: req.clientId,
+          monthlyGoal: monthly_goal,
+          quarterlyGoal: quarterly_goal,
+          yearlyGoal: yearly_goal,
+        }
+      );
+      logger.info('Goals saved to BigQuery', { clientId: req.clientId, goals });
     } else {
       // Demo mode: log and return success without persisting
       logger.debug('Goals save (demo mode)', { clientId: req.clientId, goals });
@@ -258,6 +271,22 @@ router.get('/export-calls', async (req, res) => {
   } catch (err) {
     logger.error('Call export endpoint error', { error: err.message, clientId: req.clientId });
     res.status(500).json({ success: false, error: 'Failed to export call data' });
+  }
+});
+
+// ── Raw Data (All Tiers — Bulk Fetch for Client-Side Computation) ──
+
+router.get('/raw-data', async (req, res) => {
+  try {
+    const result = await getRawData(req.clientId);
+    res.json({
+      success: true,
+      data: result,
+      meta: buildMeta(req),
+    });
+  } catch (err) {
+    logger.error('Raw data endpoint error', { error: err.message, clientId: req.clientId });
+    res.status(500).json({ success: false, error: 'Failed to load raw data' });
   }
 });
 

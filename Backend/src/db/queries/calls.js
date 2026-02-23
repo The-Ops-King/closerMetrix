@@ -64,7 +64,7 @@ module.exports = {
          AND cl.work_email = @closerEmail
          AND (c.attendance IS NULL OR c.attendance IN ('Scheduled', 'No Recording', 'Waiting for Outcome'))
          AND ABS(TIMESTAMP_DIFF(
-               SAFE.PARSE_TIMESTAMP('%Y-%m-%dT%H:%M:%E*SZ', c.appointment_date),
+               c.appointment_date,
                TIMESTAMP(@scheduledStartTime),
                MINUTE
              )) <= @toleranceMinutes
@@ -88,7 +88,7 @@ module.exports = {
          AND c.prospect_email = @prospectEmail
          AND (c.attendance IS NULL OR c.attendance IN ('Scheduled', 'No Recording', 'Waiting for Outcome'))
          AND ABS(TIMESTAMP_DIFF(
-               SAFE.PARSE_TIMESTAMP('%Y-%m-%dT%H:%M:%E*SZ', c.appointment_date),
+               c.appointment_date,
                TIMESTAMP(@scheduledStartTime),
                MINUTE
              )) <= @toleranceMinutes

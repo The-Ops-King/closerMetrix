@@ -64,7 +64,8 @@ export function AuthProvider({ children }) {
    * Called when the app loads at /d/:token
    */
   const validateClientToken = useCallback(async (token) => {
-    setAuth((prev) => ({ ...prev, isLoading: true, error: null }));
+    // Only show loading if not already authenticated (prevents flash on StrictMode re-invoke)
+    setAuth((prev) => prev.isAuthenticated ? prev : ({ ...prev, isLoading: true, error: null }));
     try {
       const res = await fetch(`/api/auth/validate?token=${encodeURIComponent(token)}`);
       if (!res.ok) {

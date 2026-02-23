@@ -143,7 +143,7 @@ const dateLabelSx = {
 /* ─── Component ───────────────────────────────────────────────────────── */
 
 export default function DateRangeFilter() {
-  const { dateRange, setDateRange, dateLabel, setDateLabel } = useFilters();
+  const { dateRange, setDateRange, dateLabel, setDateLabel, setGranularity } = useFilters();
 
   const [anchorEl, setAnchorEl] = useState(null);
   const open = Boolean(anchorEl);
@@ -162,6 +162,7 @@ export default function DateRangeFilter() {
   /**
    * Handle a "This {period}" or "Last {period}" selection.
    * Calculates dates, updates context, sets label, and closes the popover.
+   * Also auto-sets the best granularity for the selected range.
    */
   const handlePresetSelect = useCallback((selectedMode, period) => {
     const range = selectedMode === 'this' ? calcThisPeriod(period) : calcLastPeriod(period);
@@ -170,7 +171,17 @@ export default function DateRangeFilter() {
     setMode(selectedMode);
     setActivePeriod(period);
     setAnchorEl(null);
-  }, [setDateRange, setDateLabel]);
+
+    // Auto-set granularity based on the date range span
+    const days = dayjs(range.end).diff(dayjs(range.start), 'day') + 1;
+    if (days <= 35) {
+      setGranularity('daily');
+    } else if (days <= 120) {
+      setGranularity('weekly');
+    } else {
+      setGranularity('monthly');
+    }
+  }, [setDateRange, setDateLabel, setGranularity]);
 
   /**
    * Apply the custom "Between" date range.
@@ -184,7 +195,17 @@ export default function DateRangeFilter() {
     setMode('between');
     setActivePeriod(null);
     setAnchorEl(null);
-  }, [betweenStart, betweenEnd, setDateRange, setDateLabel]);
+
+    // Auto-set granularity based on the date range span
+    const days = dayjs(betweenEnd).diff(dayjs(betweenStart), 'day') + 1;
+    if (days <= 35) {
+      setGranularity('daily');
+    } else if (days <= 120) {
+      setGranularity('weekly');
+    } else {
+      setGranularity('monthly');
+    }
+  }, [betweenStart, betweenEnd, setDateRange, setDateLabel, setGranularity]);
 
   /**
    * Switch mode tabs. Pre-fill "Between" inputs with the current date range.

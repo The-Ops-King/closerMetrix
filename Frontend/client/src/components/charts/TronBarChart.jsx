@@ -32,8 +32,17 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { BarChart } from '@mui/x-charts/BarChart';
 import { COLORS } from '../../theme/constants';
-import { getAxisFormatter, getTooltipFormatter } from '../../utils/formatters';
+import { getAxisFormatter, getTooltipFormatter, formatDateLabel } from '../../utils/formatters';
 import { COLOR_MAP } from '../../utils/colors';
+
+/** Detect ISO date strings (YYYY-MM-DD) and format as "Feb 16" */
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+function formatCategoryLabel(val) {
+  if (typeof val === 'string' && DATE_RE.test(val)) {
+    return formatDateLabel(new Date(val + 'T12:00:00'));
+  }
+  return val;
+}
 
 /**
  * Custom tooltip for stacked bar charts that includes a total row.
@@ -130,7 +139,7 @@ export default function TronBarChart({
    * Each data item should have a `label` or `date` field for the category axis.
    */
   const categoryLabels = useMemo(
-    () => data.map((d) => d.label || d.date || ''),
+    () => data.map((d) => formatCategoryLabel(d.label || d.date || '')),
     [data]
   );
 
