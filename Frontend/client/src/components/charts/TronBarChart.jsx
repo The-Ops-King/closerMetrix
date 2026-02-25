@@ -202,6 +202,11 @@ export default function TronBarChart({
         },
       ];
 
+  // Increase left margin for horizontal layout to give room for category labels.
+  // Scale based on longest label length so names don't overlap bars.
+  const maxLabelLen = isHorizontal ? Math.max(...categoryLabels.map(l => (l || '').length), 0) : 0;
+  const leftMargin = isHorizontal ? Math.max(130, Math.min(maxLabelLen * 8, 200)) : 70;
+
   const yAxisConfig = isHorizontal
     ? [
         {
@@ -210,6 +215,9 @@ export default function TronBarChart({
           tickLabelStyle: {
             fill: COLORS.text.secondary,
             fontSize: 11,
+            textOverflow: 'ellipsis',
+            overflow: 'hidden',
+            maxWidth: leftMargin - 10,
           },
         },
       ]
@@ -224,9 +232,6 @@ export default function TronBarChart({
           ...(yAxisFormat === 'number' ? { tickMinStep: 1 } : {}),
         },
       ];
-
-  // Increase left margin for horizontal layout to give room for category labels
-  const leftMargin = isHorizontal ? 130 : 70;
   // Increase bottom margin when vertical labels will be rotated (long names or many categories)
   const needsRotation = !isHorizontal && (categoryLabels.length > 8 || categoryLabels.some((l) => l.length > 10));
   const bottomMargin = needsRotation ? 70 : 30;

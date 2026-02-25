@@ -138,8 +138,8 @@ const OUTCOME_COLORS = {
 const SCRIPT_SECTIONS = [
   { key: 'intro',      label: 'Intro',      scoreField: 'introScore' },
   { key: 'pain',       label: 'Pain',       scoreField: 'painScore' },
-  { key: 'discovery',  label: 'Discovery',  scoreField: 'discoveryScore' },
   { key: 'goal',       label: 'Goal',       scoreField: 'goalScore' },
+  { key: 'discovery',  label: 'Discovery',  scoreField: 'discoveryScore' },
   { key: 'transition', label: 'Transition', scoreField: 'transitionScore' },
   { key: 'pitch',      label: 'Pitch',      scoreField: 'pitchScore' },
   { key: 'close',      label: 'Close',      scoreField: 'closeAttemptScore' },

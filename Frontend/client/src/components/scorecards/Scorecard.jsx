@@ -104,6 +104,13 @@ function useCountUp(target, format, duration = 700) {
       return;
     }
 
+    // String values (e.g. '-' for unavailable metrics) — display directly, no animation
+    if (typeof target === 'string') {
+      setDisplay(target);
+      prevTarget.current = target;
+      return;
+    }
+
     // Target arrived (or changed) — animate from 0 to target
     const startTime = performance.now();
     // For percentages, the raw value is 0-1 scale; we animate the raw number

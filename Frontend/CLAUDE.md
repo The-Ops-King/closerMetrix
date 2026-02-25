@@ -51,6 +51,19 @@ If a query works with demo data but fails with real data, the bug is in the SQL 
 
 ---
 
+## DEMO DATA — ZERO TOLERANCE POLICY
+
+**NEVER show demo/dummy/fake data to users by default.** If API data is missing or empty:
+- Scorecards: show `'-'` (dash) or `null` (triggers loading state)
+- Charts: show empty array `[]` (triggers ChartWrapper empty state)
+- Tables: show empty rows with "No data" message
+
+The ONLY acceptable use of dummy data is for **tier-gate blur previews** (e.g., DUMMY_FINANCIAL shown blurred behind upgrade prompt for non-Executive users).
+
+**Every time you change a metric, scorecard, label, formula, color, or chart — update `review.md` to match.** review.md is the single source of truth for what the dashboard displays.
+
+---
+
 ## REVIEW.MD — KEEP THIS UPDATED
 
 The file `review.md` at the project root is a complete reference of every page, scorecard, chart, table, formula, and color in the dashboard. **Whenever you change a metric formula, add/remove a scorecard, change a color, rename a label, add a new data field, or modify chart behavior, update `review.md` to match.** This file is Tyler's single reference for what the dashboard actually does — if it's wrong, he can't review the product accurately.

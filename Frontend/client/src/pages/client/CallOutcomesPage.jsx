@@ -135,7 +135,7 @@ export default function CallOutcomesPage() {
             <SectionHeader title="Health at a Glance" color={COLORS.neon.cyan} />
             {/* 6 outcome columns — each with Total, % of Total, and Close Rate (where applicable) */}
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: 'repeat(3, 1fr)', md: 'repeat(6, 1fr)' }, gap: '20px', my: 2 }}>
-              <HealthColumn title="Closed" color={COLORS.neon.green} col={sections.health?.closes} hasCloseRate />
+              <HealthColumn title="Closed" color={COLORS.neon.green} col={sections.health?.closes} />
               <HealthColumn title="Deposits" color={COLORS.neon.amber} col={sections.health?.deposits} hasCloseRate />
               <HealthColumn title="Follow-Up" color={COLORS.neon.purple} col={sections.health?.followUps} hasCloseRate />
               <HealthColumn title="Lost" color={COLORS.neon.red} col={sections.health?.lost} desiredDirection="down" />

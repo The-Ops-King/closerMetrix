@@ -156,7 +156,7 @@ module.exports = {
       `SELECT * FROM ${CALLS_TABLE}
        WHERE client_id = @clientId
          AND attendance = 'Scheduled'
-         AND COALESCE(appointment_end_date, appointment_date) < @cutoffTimestamp
+         AND COALESCE(SAFE_CAST(appointment_end_date AS TIMESTAMP), SAFE_CAST(appointment_date AS TIMESTAMP)) < @cutoffTimestamp
        ORDER BY appointment_date ASC`,
       { clientId, cutoffTimestamp }
     );
@@ -176,7 +176,7 @@ module.exports = {
     return bq.query(
       `SELECT * FROM ${CALLS_TABLE}
        WHERE attendance = 'Scheduled'
-         AND COALESCE(appointment_end_date, appointment_date) < @cutoffTimestamp
+         AND COALESCE(SAFE_CAST(appointment_end_date AS TIMESTAMP), SAFE_CAST(appointment_date AS TIMESTAMP)) < @cutoffTimestamp
        ORDER BY appointment_date ASC`,
       { cutoffTimestamp }
     );
@@ -195,7 +195,7 @@ module.exports = {
     return bq.query(
       `SELECT * FROM ${CALLS_TABLE}
        WHERE (attendance IS NULL OR attendance = 'Scheduled')
-         AND COALESCE(appointment_end_date, appointment_date) < @cutoffTimestamp
+         AND COALESCE(SAFE_CAST(appointment_end_date AS TIMESTAMP), SAFE_CAST(appointment_date AS TIMESTAMP)) < @cutoffTimestamp
        ORDER BY appointment_date ASC`,
       { cutoffTimestamp }
     );
@@ -209,7 +209,7 @@ module.exports = {
       `SELECT * FROM ${CALLS_TABLE}
        WHERE client_id = @clientId
          AND (attendance IS NULL OR attendance = 'Scheduled')
-         AND COALESCE(appointment_end_date, appointment_date) < @cutoffTimestamp
+         AND COALESCE(SAFE_CAST(appointment_end_date AS TIMESTAMP), SAFE_CAST(appointment_date AS TIMESTAMP)) < @cutoffTimestamp
        ORDER BY appointment_date ASC`,
       { clientId, cutoffTimestamp }
     );
@@ -228,7 +228,7 @@ module.exports = {
     return bq.query(
       `SELECT * FROM ${CALLS_TABLE}
        WHERE attendance = 'Waiting for Outcome'
-         AND COALESCE(appointment_end_date, appointment_date) < @cutoffTimestamp
+         AND COALESCE(SAFE_CAST(appointment_end_date AS TIMESTAMP), SAFE_CAST(appointment_date AS TIMESTAMP)) < @cutoffTimestamp
        ORDER BY appointment_date ASC`,
       { cutoffTimestamp }
     );
@@ -242,7 +242,7 @@ module.exports = {
       `SELECT * FROM ${CALLS_TABLE}
        WHERE client_id = @clientId
          AND attendance = 'Waiting for Outcome'
-         AND COALESCE(appointment_end_date, appointment_date) < @cutoffTimestamp
+         AND COALESCE(SAFE_CAST(appointment_end_date AS TIMESTAMP), SAFE_CAST(appointment_date AS TIMESTAMP)) < @cutoffTimestamp
        ORDER BY appointment_date ASC`,
       { clientId, cutoffTimestamp }
     );
@@ -273,7 +273,7 @@ module.exports = {
          AND call_id != @excludeCallId
          AND (attendance IS NULL OR attendance IN ('Scheduled', 'Waiting for Outcome', 'Ghosted - No Show'))
          AND appointment_date < @endTime
-         AND COALESCE(appointment_end_date, appointment_date) > @startTime`,
+         AND COALESCE(SAFE_CAST(appointment_end_date AS TIMESTAMP), SAFE_CAST(appointment_date AS TIMESTAMP)) > @startTime`,
       { closerId, clientId, excludeCallId, startTime, endTime }
     );
   },

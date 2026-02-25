@@ -132,8 +132,8 @@ These formulas are referenced throughout all pages:
 
 | Scorecard Title | Format | Formula | Color |
 |---|---|---|---|
-| Revenue / Call | currency | `totalRevenue / held.length` | purple |
-| Cash / Call | currency | `totalCash / held.length` | blue |
+| Revenue / Call Held | currency | `totalRevenue / held.length` | purple |
+| Cash / Call Held | currency | `totalCash / held.length` | blue |
 
 #### Row 3 — Deal Economics
 
@@ -141,10 +141,10 @@ These formulas are referenced throughout all pages:
 |---|---|---|---|
 | Avg Revenue Per Deal | currency | `closedRevenue / closedDeals.length` | green |
 | % Collected | percent | `totalCash / totalRevenue` | purple |
-| # of Refunds | number | `COUNT(refunds)` | red |
+| # of Refunds | number | Shown as `'-'` (not yet computed) | red |
 | Avg Cash Per Deal | currency | `closedCash / closedDeals.length` | teal |
-| % PIFs | percent | `COUNT(paymentPlan matches 'paid in full', 'pay in full', or 'pif') / revenueDeals.length` | amber |
-| $ of Refunds | currency | `SUM(refundAmount)` | red |
+| % PIFs | percent | `COUNT(paymentPlan matches 'paid in full', 'pay in full', 'pif', or 'full') / revenueDeals.length` | amber |
+| $ of Refunds | currency | Shown as `'-'` (not yet computed) | red |
 
 *All scorecards include deltas.*
 
@@ -157,7 +157,7 @@ These formulas are referenced throughout all pages:
 | Avg Cash & Revenue per Closer | Bar (horizontal, stacked) | `avgCash`, `avgUncollected` | Per closer: `closedCash / closedCount`, `(closedRev - closedCash) / closedCount` |
 | Cash & Revenue per Call Over Time | Line (dual, area) | `revPerCall` (purple), `cashPerCall` (blue) | Per time bucket: `revenue / held`, `cash / held` |
 | % of Revenue by Closer | Pie (donut) | Per closer | `SUM(revenueGenerated)` per closer |
-| Payment Plan Breakdown | Pie (donut) | PIF (green), 2-Pay (cyan), 3-Pay (purple), Custom (amber) | `COUNT` per payment plan type |
+| Payment Plan Breakdown | Pie (donut) | PIF (green), Deposit (cyan), Payment Plan (purple), Financed (blue), Unknown (amber) | `COUNT` per payment plan type. Matches real BQ values: `Full`→PIF, `Deposit`→Deposit, `Payment Plan`/`Installments`→Payment Plan, `Financed`→Financed |
 
 ---
 
@@ -214,7 +214,7 @@ These formulas are referenced throughout all pages:
 |---|---|---|---|
 | Scheduled vs Held | Line (dual) | `scheduled`, `held` | Per bucket: `bucket.length`, `COUNT(isShow in bucket)` |
 | First Call / Follow Up Show Rate | Line (dual) | `firstCallShowRate`, `followUpShowRate` | Per bucket: `firstHeld / firstScheduled`, `followUpHeld / followUpScheduled` |
-| Attendance Breakdown | Pie (donut) | Show, Ghost, Canceled, Rescheduled | `COUNT` per attendance category (filtered to >0) |
+| Attendance Breakdown | Pie (donut) | Show, Ghosted - No Show, Canceled, Rescheduled | `COUNT` per attendance category (filtered to >0) |
 | First / Follow Ups Held | Bar (vertical, stacked) | `firstHeld`, `followUpHeld` | Per bucket: `COUNT(isFirstCall AND isShow)`, `COUNT(isFollowUp AND isShow)` |
 | Show Rate per Closer | Bar (horizontal) | `showRate` per closer | Per closer: `COUNT(isShow) / COUNT(all)` — sorted highest first |
 | Attendance per Closer | Bar (vertical, stacked) | Show, Ghost, Reschedule, Cancel | Per closer: `COUNT` per attendance type |

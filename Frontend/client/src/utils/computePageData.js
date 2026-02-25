@@ -34,9 +34,18 @@ import {
   DAYS_TO_CLOSE_CHART_CONFIG,
 } from '../../../shared/chartMappings.js';
 
+import { COLORS } from '../theme/constants';
+
 // ─────────────────────────────────────────────────────────────
 // SHARED HELPERS
 // ─────────────────────────────────────────────────────────────
+
+/**
+ * Visually distinct neon color cycle for dynamic pie charts (closers, reasons, etc.).
+ * Used when we don't know segment labels ahead of time and need to assign colors by index.
+ * Ordered for maximum visual contrast between adjacent slices.
+ */
+const PIE_COLORS = ['cyan', 'green', 'amber', 'purple', 'blue', 'red', 'teal', 'muted'];
 
 /** Safe divide — returns 0 if divisor is 0 */
 function sd(a, b) { return b === 0 ? 0 : a / b; }
@@ -96,12 +105,17 @@ function filterCalls(calls, dateStart, dateEnd, closerId) {
   });
 }
 
-/** Filter objections by date range and optional closer(s) */
-function filterObjections(objections, dateStart, dateEnd, closerId) {
+/** Filter objections by date range, optional closer(s), and optional objection type(s) */
+function filterObjections(objections, dateStart, dateEnd, closerId, objectionType) {
   const ids = parseCloserIds(closerId);
+  // Parse objectionType — may be comma-separated string or array
+  const typeFilter = objectionType
+    ? (Array.isArray(objectionType) ? objectionType : objectionType.split(',').map(t => t.trim()))
+    : null;
   return objections.filter(o => {
     if (o.appointmentDate < dateStart || o.appointmentDate > dateEnd) return false;
     if (ids && !ids.includes(o.closerId)) return false;
+    if (typeFilter && typeFilter.length > 0 && !typeFilter.includes(o.objectionType)) return false;
     return true;
   });
 }
@@ -302,19 +316,19 @@ function m(label, value, format, glowColor) {
 export function computePageData(section, rawData, filters) {
   if (!rawData || !rawData.calls) return null;
 
-  const { dateStart, dateEnd, closerId, granularity: rawGranularity } = filters;
+  const { dateStart, dateEnd, closerId, granularity: rawGranularity, objectionType } = filters;
 
   // Auto-select granularity based on date range span if set to 'auto' or default
   const granularity = autoGranularity(rawGranularity, dateStart, dateEnd);
 
   const calls = filterCalls(rawData.calls, dateStart, dateEnd, closerId);
-  const objections = filterObjections(rawData.objections || [], dateStart, dateEnd, closerId);
+  const objections = filterObjections(rawData.objections || [], dateStart, dateEnd, closerId, objectionType);
   const closeCycles = filterCloseCycles(rawData.closeCycles || [], dateStart, dateEnd, closerId);
 
   // Compute previous period for delta comparisons
   const { prevStart, prevEnd, deltaLabel } = computePreviousPeriod(dateStart, dateEnd);
   const prevCalls = filterCalls(rawData.calls, prevStart, prevEnd, closerId);
-  const prevObjections = filterObjections(rawData.objections || [], prevStart, prevEnd, closerId);
+  const prevObjections = filterObjections(rawData.objections || [], prevStart, prevEnd, closerId, objectionType);
   const prevCloseCycles = filterCloseCycles(rawData.closeCycles || [], prevStart, prevEnd, closerId);
   const prev = { calls: prevCalls, objections: prevObjections, closeCycles: prevCloseCycles, deltaLabel };
 
@@ -500,12 +514,12 @@ function computeOverview(calls, granularity, rawData, prev) {
   }
   dealsClosedByCloser.sort((a, b) => (b.closed + b.deposits) - (a.closed + a.deposits));
 
-  // Funnel
+  // Funnel — explicit colors so Closed is always green
   const funnelData = [
-    { stage: 'Booked', count: calls.length },
-    { stage: 'Held', count: held.length },
-    { stage: 'Qualified', count: held.length - calls.filter(c => isShow(c) && isDQ(c)).length },
-    { stage: 'Closed', count: closed.length },
+    { stage: 'Booked', count: calls.length, color: COLORS.neon.cyan },
+    { stage: 'Held', count: held.length, color: COLORS.neon.blue },
+    { stage: 'Qualified', count: held.length - calls.filter(c => isShow(c) && isDQ(c)).length, color: COLORS.neon.purple },
+    { stage: 'Closed', count: closed.length, color: COLORS.neon.green },
   ];
 
   // Outcome breakdown pie — built from OUTCOME_CHART_CONFIG
@@ -565,20 +579,20 @@ function computeFinancial(calls, granularity, prev) {
     revenue: {
       revenue: m('Revenue Generated', totalRevenue, 'currency', 'green'),
       cashCollected: m('Cash Collected', totalCash, 'currency', 'teal'),
-      revenuePerCall: m('Revenue / Call', round(sd(totalRevenue, held.length)), 'currency', 'purple'),
-      cashPerCall: m('Cash / Call', round(sd(totalCash, held.length)), 'currency', 'blue'),
+      revenuePerCall: m('Revenue / Call Held', round(sd(totalRevenue, held.length)), 'currency', 'purple'),
+      cashPerCall: m('Cash / Call Held', round(sd(totalCash, held.length)), 'currency', 'blue'),
       collectedPct: m('% Collected', round(sd(totalCash, totalRevenue), 3), 'percent', 'purple'),
       avgDealRevenue: m('Avg Revenue Per Deal', round(sd(closedRevenue, closed.length)), 'currency', 'green'),
       avgCashPerDeal: m('Avg Cash Per Deal', round(sd(closedCash, closed.length)), 'currency', 'teal'),
       pifPct: m('% PIFs', (() => {
         const pifCount = revenueDeals.filter(c => {
           const pp = (c.paymentPlan || '').toLowerCase().replace(/[-_]/g, ' ');
-          return pp.includes('paid in full') || pp.includes('pay in full') || pp === 'pif';
+          return pp.includes('paid in full') || pp.includes('pay in full') || pp === 'pif' || pp === 'full';
         }).length;
         return round(sd(pifCount, revenueDeals.length), 3);
       })(), 'percent', 'amber'),
-      refundCount: m('# of Refunds', 0, 'number', 'red'),
-      refundAmount: m('$ of Refunds', 0, 'currency', 'red'),
+      refundCount: m('# of Refunds', '-', 'number', 'red'),
+      refundAmount: m('$ of Refunds', '-', 'currency', 'red'),
     },
   };
 
@@ -651,7 +665,7 @@ function computeFinancial(calls, granularity, prev) {
       revPerCall: round(sd(cRev, closerCalls.length)),
       cashPerCall: round(sd(cCash, closerCalls.length)),
     });
-    revenueByCloserPie.push({ label: name, value: cRev });
+    revenueByCloserPie.push({ label: name, value: cRev, color: PIE_COLORS[revenueByCloserPie.length % PIE_COLORS.length] });
   }
   revenueByCloserBar.sort((a, b) => (b.cash + b.uncollected) - (a.cash + a.uncollected));
   avgPerDealByCloser.sort((a, b) => (b.avgCash + b.avgUncollected) - (a.avgCash + a.avgUncollected));
@@ -664,14 +678,50 @@ function computeFinancial(calls, granularity, prev) {
         { key: 'cash', label: 'Cash Collected', color: 'teal' },
       ]},
       perCallOverTime: { data: perCallOverTime, series: [
-        { key: 'revPerCall', label: 'Revenue / Call', color: 'purple' },
-        { key: 'cashPerCall', label: 'Cash / Call', color: 'blue' },
+        { key: 'revPerCall', label: 'Revenue / Call Held', color: 'purple' },
+        { key: 'cashPerCall', label: 'Cash / Call Held', color: 'blue' },
       ]},
       revenueByCloserBar: { data: revenueByCloserBar },
       avgPerDealByCloser: { data: avgPerDealByCloser },
       perCallByCloser: { data: perCallByCloser },
       revenueByCloserPie: { data: revenueByCloserPie },
-      paymentPlanBreakdown: { data: [] }, // Would need payment plan data
+      paymentPlanBreakdown: { data: (() => {
+        // Color map covers all known BigQuery payment_plan values (raw + AI-generated)
+        const planColors = {
+          'PIF': 'green',
+          'Deposit': 'cyan',
+          'Payment Plan': 'purple',
+          'Installments': 'purple',
+          'Financed': 'blue',
+          'None': 'muted',
+          'Unknown': 'amber',
+        };
+        const counts = {};
+        for (const c of revenueDeals) {
+          const pp = (c.paymentPlan || '').toLowerCase().replace(/[-_]/g, ' ');
+          let label;
+          if (pp.includes('paid in full') || pp.includes('pay in full') || pp === 'pif' || pp === 'full') {
+            label = 'PIF';
+          } else if (pp === 'deposit') {
+            label = 'Deposit';
+          } else if (pp === 'payment plan' || pp === 'installments') {
+            label = 'Payment Plan';
+          } else if (pp === 'financed') {
+            label = 'Financed';
+          } else if (pp === 'none' || pp === '') {
+            label = 'Unknown';
+          } else if (pp) {
+            // Capitalize first letter of each word for display
+            label = c.paymentPlan.replace(/[-_]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()).trim();
+          } else {
+            label = 'Unknown';
+          }
+          counts[label] = (counts[label] || 0) + 1;
+        }
+        return Object.entries(counts)
+          .map(([label, value]) => ({ label, value, color: planColors[label] || 'amber' }))
+          .sort((a, b) => b.value - a.value);
+      })() },
     },
   };
 }
@@ -826,7 +876,7 @@ function computeAttendance(calls, granularity, prev) {
   // Attendance pie
   const attendanceBreakdown = [
     { label: 'Show', value: held.length, color: 'green' },
-    { label: 'Ghost', value: ghosted.length, color: 'red' },
+    { label: 'Ghosted - No Show', value: ghosted.length, color: 'red' },
     { label: 'Canceled', value: canceled.length, color: 'blue' },
     { label: 'Rescheduled', value: rescheduled.length, color: 'amber' },
   ].filter(d => d.value > 0);
@@ -992,6 +1042,9 @@ function computeCallOutcomes(calls, granularity, prev) {
   const followUpLost = followUpHeld.filter(isLost);
   const firstDQ = firstHeld.filter(isDQ);
 
+  // Compute deposit lifecycle first so we can use its close rate in the health section
+  const depositLifecycle = computeDepositLifecycle(calls, deposits);
+
   const sections = {
     // Hero scorecard above Health at a Glance
     totalHeld: m('Total Calls Held', held.length, 'number', 'teal'),
@@ -1000,12 +1053,13 @@ function computeCallOutcomes(calls, granularity, prev) {
       closes: {
         count: m('Total', closed.length, 'number'),
         pctOfTotal: m('% of Total', round(sd(closed.length, held.length), 3), 'percent'),
-        closeRate: m('Close Rate', round(sd(closed.length, held.length), 3), 'percent'),
+        // Close Rate removed — identical to % of Total for this column (closes / held)
       },
       deposits: {
         count: m('Total', deposits.length, 'number'),
         pctOfTotal: m('% of Total', round(sd(deposits.length, held.length), 3), 'percent'),
-        closeRate: m('Close Rate', round(sd(deposits.length, held.length), 3), 'percent'),
+        // Close Rate = what % of deposit-takers eventually closed (from lifecycle tracking)
+        closeRate: m('Close Rate', depositLifecycle.depositClosedPct.value, 'percent'),
       },
       followUps: {
         count: m('Total', followUpOutcome.length, 'number'),
@@ -1033,7 +1087,7 @@ function computeCallOutcomes(calls, granularity, prev) {
       followUpCloseRate: m('Follow-Up Close Rate', round(sd(followUpClosed.length, followUpHeld.length), 3), 'percent'),
     },
     // Section 3: Deposits — lifecycle tracking by prospect_email
-    deposits: computeDepositLifecycle(calls, deposits),
+    deposits: depositLifecycle,
     // Section 4: Follow Up
     followUp: {
       scheduled: m('Follow-Ups Scheduled', followUps.length, 'number'),
@@ -1080,14 +1134,27 @@ function computeCallOutcomes(calls, granularity, prev) {
     const pFirstLost = pFirstHeld.filter(isLost);
     const pFULost = pFUHeld.filter(isLost);
 
-    // Health section — closes/deposits up, lost/dq/notPitched down
+    // Hero scorecard
+    sections.totalHeld = withDelta(sections.totalHeld, held.length, pHeld.length, dl, 'up');
+
+    // Health section — counts
     sections.health.closes.count = withDelta(sections.health.closes.count, closed.length, pClosed.length, dl, 'up');
-    sections.health.closes.closeRate = withDelta(sections.health.closes.closeRate, sd(closed.length, held.length), sd(pClosed.length, pHeld.length), dl, 'up');
     sections.health.deposits.count = withDelta(sections.health.deposits.count, deposits.length, pDeposits.length, dl, 'up');
     sections.health.followUps.count = withDelta(sections.health.followUps.count, followUpOutcome.length, pFollowUpOutcome.length, dl, 'up');
     sections.health.lost.count = withDelta(sections.health.lost.count, lost.length, pLost.length, dl, 'down');
     sections.health.disqualified.count = withDelta(sections.health.disqualified.count, dq.length, pDQ.length, dl, 'down');
     sections.health.notPitched.count = withDelta(sections.health.notPitched.count, notPitched.length, pNotPitched.length, dl, 'down');
+
+    // Health section — % of Total
+    sections.health.closes.pctOfTotal = withDelta(sections.health.closes.pctOfTotal, sd(closed.length, held.length), sd(pClosed.length, pHeld.length), dl, 'up');
+    sections.health.deposits.pctOfTotal = withDelta(sections.health.deposits.pctOfTotal, sd(deposits.length, held.length), sd(pDeposits.length, pHeld.length), dl, 'up');
+    sections.health.followUps.pctOfTotal = withDelta(sections.health.followUps.pctOfTotal, sd(followUpOutcome.length, held.length), sd(pFollowUpOutcome.length, pHeld.length), dl, 'up');
+    sections.health.lost.pctOfTotal = withDelta(sections.health.lost.pctOfTotal, sd(lost.length, held.length), sd(pLost.length, pHeld.length), dl, 'down');
+    sections.health.disqualified.pctOfTotal = withDelta(sections.health.disqualified.pctOfTotal, sd(dq.length, held.length), sd(pDQ.length, pHeld.length), dl, 'down');
+    sections.health.notPitched.pctOfTotal = withDelta(sections.health.notPitched.pctOfTotal, sd(notPitched.length, held.length), sd(pNotPitched.length, pHeld.length), dl, 'down');
+
+    // Health section — close rates (follow-up)
+    sections.health.followUps.closeRate = withDelta(sections.health.followUps.closeRate, sd(followUpClosed.length, followUpHeld.length), sd(pFUClosed.length, pFUHeld.length), dl, 'up');
 
     // Closed-Won section
     sections.closedWon.firstCallCloses = withDelta(sections.closedWon.firstCallCloses, firstClosed.length, pFirstClosed.length, dl, 'up');
@@ -1100,6 +1167,7 @@ function computeCallOutcomes(calls, granularity, prev) {
     sections.followUp.scheduled = withDelta(sections.followUp.scheduled, followUps.length, pFU.length, dl, 'up');
     sections.followUp.held = withDelta(sections.followUp.held, followUpHeld.length, pFUHeld.length, dl, 'up');
     sections.followUp.showRate = withDelta(sections.followUp.showRate, sd(followUpHeld.length, followUps.length), sd(pFUHeld.length, pFU.length), dl, 'up');
+    sections.followUp.stillInFollowUp = withDelta(sections.followUp.stillInFollowUp, followUpOutcome.length, pFollowUpOutcome.length, dl, 'down');
 
     // Lost section
     sections.lost.firstCallLost = withDelta(sections.lost.firstCallLost, firstLost.length, pFirstLost.length, dl, 'down');
@@ -1107,12 +1175,24 @@ function computeCallOutcomes(calls, granularity, prev) {
     sections.lost.followUpLost = withDelta(sections.lost.followUpLost, followUpLost.length, pFULost.length, dl, 'down');
     sections.lost.followUpLostRate = withDelta(sections.lost.followUpLostRate, sd(followUpLost.length, followUpHeld.length), sd(pFULost.length, pFUHeld.length), dl, 'down');
 
+    // Disqualified section
+    const pFirstDQ = pFirstHeld.filter(isDQ);
+    sections.disqualified.firstCallDQ = withDelta(sections.disqualified.firstCallDQ, firstDQ.length, pFirstDQ.length, dl, 'down');
+    sections.disqualified.firstCallDQRate = withDelta(sections.disqualified.firstCallDQRate, sd(firstDQ.length, firstHeld.length), sd(pFirstDQ.length, pFirstHeld.length), dl, 'down');
+
+    // Not Pitched section
+    sections.notPitched.notPitched = withDelta(sections.notPitched.notPitched, notPitched.length, pNotPitched.length, dl, 'down');
+    sections.notPitched.notPitchedRate = withDelta(sections.notPitched.notPitchedRate, sd(notPitched.length, held.length), sd(pNotPitched.length, pHeld.length), dl, 'down');
+
     // Deposit lifecycle deltas — compute previous period lifecycle for comparison
     const prevDepositLifecycle = computeDepositLifecycle(pc, pDeposits);
     sections.deposits.depositsTaken = withDelta(sections.deposits.depositsTaken, deposits.length, pDeposits.length, dl, 'up');
     sections.deposits.depositClosedPct = withDelta(sections.deposits.depositClosedPct, sections.deposits.depositClosedPct.value, prevDepositLifecycle.depositClosedPct.value, dl, 'up');
     sections.deposits.depositsLost = withDelta(sections.deposits.depositsLost, sections.deposits.depositsLost.value, prevDepositLifecycle.depositsLost.value, dl, 'down');
     sections.deposits.depositsStillOpen = withDelta(sections.deposits.depositsStillOpen, sections.deposits.depositsStillOpen.value, prevDepositLifecycle.depositsStillOpen.value, dl, 'down');
+
+    // Health deposit close rate delta (same value as depositClosedPct)
+    sections.health.deposits.closeRate = withDelta(sections.health.deposits.closeRate, depositLifecycle.depositClosedPct.value, prevDepositLifecycle.depositClosedPct.value, dl, 'up');
   }
 
   // Time-series
@@ -1221,13 +1301,15 @@ function computeCallOutcomes(calls, granularity, prev) {
     color: colors[i % colors.length],
   }));
 
-  // Lost reasons pie
+  // Lost reasons pie — assign visually distinct colors from the neon palette
   const lostReasons = {};
   for (const c of lost) {
     const reason = c.lostReason || 'Unknown';
     lostReasons[reason] = (lostReasons[reason] || 0) + 1;
   }
-  const lostReasonsPie = Object.entries(lostReasons).map(([label, value]) => ({ label, value }));
+  const lostReasonsPie = Object.entries(lostReasons)
+    .sort((a, b) => b[1] - a[1])
+    .map(([label, value], i) => ({ label, value, color: PIE_COLORS[i % PIE_COLORS.length] }));
 
   // Outcome breakdown pie — driven by OUTCOME_CHART_CONFIG
   const coOutcomeCounts = {
@@ -1582,6 +1664,8 @@ function computeObjections(calls, objections, granularity, prev) {
     }
   }
   if (otherBucket > 0) unresolvedByType.push({ label: 'Other', value: otherBucket });
+  // Assign explicit colors so we use neon palette, not the chart[] fallback
+  unresolvedByType.forEach((d, i) => { d.color = PIE_COLORS[i % PIE_COLORS.length]; });
 
   // By type table
   const byTypeTable = Object.entries(byType).map(([type, d]) => ({
@@ -1591,10 +1675,12 @@ function computeObjections(calls, objections, granularity, prev) {
     resRate: round(sd(d.resolved, d.total), 3),
   })).sort((a, b) => b.total - a.total);
 
-  // Time-series — top objection types over time
+  // Time-series — top objection types over time (ranked by total count)
   const objTimeBuckets = groupByTime(objections, 'appointmentDate', granularity);
-  const typeSet = new Set(objections.map(o => o.objectionType || 'Other'));
-  const topTypes = [...typeSet].slice(0, 3);
+  const topTypes = Object.entries(byType)
+    .sort((a, b) => b[1].total - a[1].total)
+    .slice(0, 3)
+    .map(([type]) => type);
   const objectionTrends = [];
   for (const [date, bucket] of objTimeBuckets) {
     const point = { date };

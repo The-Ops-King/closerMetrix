@@ -19,7 +19,7 @@
  *   red    — Refunds
  *
  * Data: GET /api/dashboard/financial
- * Falls back to demo data when API data is not yet available.
+ * Shows loading shimmer / empty states when API data is not yet available.
  */
 
 import React from 'react';
@@ -38,104 +38,28 @@ import TronPieChart from '../../components/charts/TronPieChart';
 
 
 // ─────────────────────────────────────────────────────────────
-// DEMO DATA — Used when API data is not yet available.
-// Replaced by live API data when the backend returns real metrics.
+// METRIC LABELS — Label/format lookup for scorecard display.
+// When API data hasn't loaded yet, these provide the label and
+// format so the loading shimmer shows the correct card title.
+// Values are NEVER shown from this object — only label + format.
 // ─────────────────────────────────────────────────────────────
 
-const DEMO_METRICS = {
+const METRIC_LABELS = {
   // Row 1: Revenue & Cash
-  revenue:          { value: 115000, label: 'Revenue Generated',      format: 'currency', delta: 18.5, deltaLabel: 'vs prev period' },
-  cashCollected:    { value: 69000,  label: 'Cash Collected',         format: 'currency', delta: 12.3, deltaLabel: 'vs prev period' },
+  revenue:          { label: 'Revenue Generated',      format: 'currency' },
+  cashCollected:    { label: 'Cash Collected',         format: 'currency' },
   // Row 2: Per-call
-  revenuePerCall:   { value: 701,    label: 'Revenue / Call',         format: 'currency', delta: 5.2,  deltaLabel: 'vs prev period' },
-  cashPerCall:      { value: 663,    label: 'Cash / Call',            format: 'currency', delta: 4.8,  deltaLabel: 'vs prev period' },
+  revenuePerCall:   { label: 'Revenue / Call Held',    format: 'currency' },
+  cashPerCall:      { label: 'Cash / Call Held',       format: 'currency' },
   // Row 3: Deal economics
-  collectedPct:     { value: 0.60,   label: '% Collected',            format: 'percent',  delta: 3.1,  deltaLabel: 'vs prev period' },
-  avgDealRevenue:   { value: 5000,   label: 'Avg Revenue Per Deal',    format: 'currency', delta: 2.1,  deltaLabel: 'vs prev period' },
-  avgCashPerDeal:   { value: 3000,   label: 'Avg Cash Per Deal',      format: 'currency', delta: 1.8,  deltaLabel: 'vs prev period' },
+  collectedPct:     { label: '% Collected',            format: 'percent' },
+  avgDealRevenue:   { label: 'Avg Revenue Per Deal',    format: 'currency' },
+  avgCashPerDeal:   { label: 'Avg Cash Per Deal',      format: 'currency' },
   // Row 4: Payment & refund
-  pifPct:           { value: 0.34,   label: '% PIFs',                 format: 'percent',  delta: 2.5,  deltaLabel: 'vs prev period' },
-  refundCount:      { value: 3,      label: '# of Refunds',           format: 'number',   delta: -1,   deltaLabel: 'vs prev period', desiredDirection: 'down' },
-  refundAmount:     { value: 8500,   label: '$ of Refunds',           format: 'currency', delta: -12.4, deltaLabel: 'vs prev period', desiredDirection: 'down' },
+  pifPct:           { label: '% PIFs',                 format: 'percent' },
+  refundCount:      { label: '# of Refunds',           format: 'number' },
+  refundAmount:     { label: '$ of Refunds',           format: 'currency' },
 };
-
-
-/**
- * Generate weekly time-series demo data for charts.
- * Creates 12 weeks of plausible data.
- */
-function generateDemoChartData() {
-  const weeks = [];
-  const base = new Date('2025-11-18');
-  for (let i = 0; i < 12; i++) {
-    const d = new Date(base);
-    d.setDate(d.getDate() + i * 7);
-    weeks.push(d.toISOString().split('T')[0]);
-  }
-
-  const revenueOverTime = weeks.map((date) => ({
-    date,
-    revenue: 12000 + Math.round(Math.random() * 6000),
-    cash: 7000 + Math.round(Math.random() * 4000),
-  }));
-
-  const perCallOverTime = weeks.map((date) => ({
-    date,
-    revPerCall: 650 + Math.round(Math.random() * 200),
-    cashPerCall: 400 + Math.round(Math.random() * 150),
-  }));
-
-  const closers = ['Sarah', 'Mike', 'Jessica', 'Alex'];
-  const closerRevenue = [38000, 32000, 28000, 17000];
-  const closerCash = [22800, 19200, 16800, 10200];
-
-  const revenueByCloserPie = closers.map((label, i) => ({
-    label,
-    value: closerRevenue[i],
-    color: COLORS.chart[i],
-  }));
-
-  // Cash is a portion of revenue — split into cash + uncollected so bar total = revenue
-  const revenueByCloserBar = closers.map((name, i) => ({
-    date: name,
-    cash: closerCash[i],
-    uncollected: closerRevenue[i] - closerCash[i],
-  }));
-
-  const perCallByCloser = closers.map((name, i) => ({
-    date: name,
-    revPerCall: 600 + Math.round(Math.random() * 300),
-    cashPerCall: 350 + Math.round(Math.random() * 200),
-  }));
-
-  // Cash is a portion of revenue — split into cash + uncollected so bar total = avg revenue
-  const avgRevPerDeal = [5800, 5200, 4600, 4100];
-  const avgCashPerDeal = [3480, 3120, 2760, 2460];
-  const avgPerDealByCloser = closers.map((name, i) => ({
-    date: name,
-    avgCash: avgCashPerDeal[i],
-    avgUncollected: avgRevPerDeal[i] - avgCashPerDeal[i],
-  }));
-
-  const paymentPlanBreakdown = [
-    { label: 'PIF',         value: 8,  color: COLORS.neon.green },
-    { label: '2-Pay',       value: 6,  color: COLORS.neon.cyan },
-    { label: '3-Pay',       value: 5,  color: COLORS.neon.purple },
-    { label: 'Custom Plan', value: 4,  color: COLORS.neon.amber },
-  ];
-
-  return {
-    revenueOverTime,
-    perCallOverTime,
-    revenueByCloserPie,
-    revenueByCloserBar,
-    perCallByCloser,
-    avgPerDealByCloser,
-    paymentPlanBreakdown,
-  };
-}
-
-const DEMO_CHARTS = generateDemoChartData();
 
 
 // ─────────────────────────────────────────────────────────────
@@ -144,34 +68,33 @@ const DEMO_CHARTS = generateDemoChartData();
 
 /**
  * Safely extract a metric from the API response.
- * Falls back to demo data when the API metric is not available.
- * Decorates with the glow color for the Scorecard component.
+ * If API metric is unavailable, returns null value (triggers loading shimmer).
+ * Label/format come from METRIC_LABELS lookup — no demo values are ever shown.
  */
 function getMetric(apiMetrics, key, glowColor) {
   const m = apiMetrics?.[key];
   if (!m) {
-    const demo = DEMO_METRICS[key];
-    return { label: demo?.label || key, format: demo?.format || 'number', value: null, glowColor };
+    const meta = METRIC_LABELS[key];
+    return { label: meta?.label || key, format: meta?.format || 'number', value: null, glowColor };
   }
   return { ...m, glowColor };
 }
 
 /**
- * Get chart data array from API response, falling back to demo data.
- *
- * The API wraps chart data in an envelope: { type, label, series, data: [...] }
- * This helper extracts the inner .data array.
+ * Get chart data array from API response.
+ * Returns empty array when data is missing — NEVER returns demo/fake data.
+ * Empty array triggers ChartWrapper's empty state.
  */
 function getChart(apiCharts, key) {
   const raw = apiCharts?.[key];
   // API envelope: { type, data: [...] } — extract inner array
   if (raw && typeof raw === 'object' && !Array.isArray(raw) && Array.isArray(raw.data)) {
-    return raw.data.length > 0 ? raw.data : (DEMO_CHARTS[key] || []);
+    return raw.data;
   }
   // Raw array
-  if (Array.isArray(raw) && raw.length > 0) return raw;
-  // Fallback to demo
-  return DEMO_CHARTS[key] || [];
+  if (Array.isArray(raw)) return raw;
+  // No data available
+  return [];
 }
 
 
@@ -184,7 +107,7 @@ export default function FinancialPage() {
   const { tier } = useAuth();
   const closerLocked = !meetsMinTier(tier, 'insight');
 
-  // Extract API data with demo fallbacks
+  // Extract API data
   const apiData = data?.data || data;
   const metrics = apiData?.sections?.revenue;
   const charts = apiData?.charts;
@@ -218,7 +141,7 @@ export default function FinancialPage() {
             Failed to load financial data
           </Typography>
           <Typography sx={{ color: COLORS.text.muted, fontSize: '0.85rem' }}>
-            {error.message || 'Showing demo data. Please try again later.'}
+            {error.message || 'Please try again later.'}
           </Typography>
         </Box>
       )}
@@ -338,8 +261,8 @@ export default function FinancialPage() {
             <TronLineChart
               data={getChart(charts, 'perCallOverTime')}
               series={[
-                { key: 'revPerCall', label: 'Revenue / Call', color: COLORS.neon.purple },
-                { key: 'cashPerCall', label: 'Cash / Call', color: COLORS.neon.blue },
+                { key: 'revPerCall', label: 'Revenue / Call Held', color: COLORS.neon.purple },
+                { key: 'cashPerCall', label: 'Cash / Call Held', color: COLORS.neon.blue },
               ]}
               height={240}
               yAxisFormat="currency"

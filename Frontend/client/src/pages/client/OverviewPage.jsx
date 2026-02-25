@@ -19,7 +19,7 @@
  *   - All tiers: "Potential Violations" count shows for everyone; details locked behind Executive.
  *
  * Data: GET /api/dashboard/overview (via useMetrics hook)
- * Falls back to demo data when API data is not yet available.
+ * Shows loading shimmer / empty states when API data is not yet available.
  */
 
 import React from 'react';
@@ -50,98 +50,41 @@ const OV = {
 
 
 // ─────────────────────────────────────────────────────────────
-// DEMO DATA — Used when API data is not yet available.
-// Matches the Figma design values exactly so the layout looks
-// correct during development. Replaced by live API data when
-// the backend returns real metrics.
+// METRIC LABELS — Label/format lookup for scorecard display.
+// When API data hasn't loaded yet, these provide the label and
+// format so the loading shimmer shows the correct card title.
+// Values are NEVER shown from this object — only label + format.
 // ─────────────────────────────────────────────────────────────
 
-const DEMO_METRICS = {
+const METRIC_LABELS = {
   // Section 1: Revenue & Deals (left scorecards)
-  revenue:          { value: 2681500,  label: 'Revenue Generated',       format: 'currency', delta: 18.5, deltaLabel: 'vs prev period' },
-  cashCollected:    { value: 1366302,  label: 'Cash Collected',          format: 'currency', delta: 12.3, deltaLabel: 'vs prev period' },
-  cashPerCall:      { value: 572,      label: 'Cash / Call Held',        format: 'currency', delta: 8.9,  deltaLabel: 'vs prev period' },
-  avgDealSize:      { value: 6572,     label: 'Average Deal Size',       format: 'currency', delta: 5.4,  deltaLabel: 'vs prev period' },
+  revenue:          { label: 'Revenue Generated',       format: 'currency' },
+  cashCollected:    { label: 'Cash Collected',          format: 'currency' },
+  cashPerCall:      { label: 'Cash / Call Held',        format: 'currency' },
+  avgDealSize:      { label: 'Average Deal Size',       format: 'currency' },
 
   // Section 2: Deals Closed (right scorecards)
-  closedDeals:        { value: 408,    label: 'Closed Deals',            format: 'number',  delta: 15.7,  deltaLabel: 'vs prev period' },
-  potentialViolations:{ value: 0,      label: 'Potential Violations',    format: 'number',  delta: 0,     deltaLabel: 'vs prev period' },
-  oneCallClosePct:    { value: 0.924,  label: '1 Call Close %',          format: 'percent', delta: 4.2,   deltaLabel: 'vs prev period' },
-  callsPerDeal:       { value: 9.2,    label: 'Calls Required per Deal', format: 'decimal', delta: -1.5,  deltaLabel: 'vs prev period', desiredDirection: 'down' },
+  closedDeals:        { label: 'Closed Deals',            format: 'number' },
+  potentialViolations:{ label: 'Potential Violations',    format: 'number' },
+  oneCallClosePct:    { label: '1 Call Close %',          format: 'percent' },
+  callsPerDeal:       { label: 'Calls Required per Deal', format: 'decimal' },
 
   // Section 3: Prospects & Show Rate (left scorecards)
-  prospectsBooked: { value: 3357, label: 'Unique Prospects Scheduled', format: 'number',  delta: 12.5, deltaLabel: 'vs prev period' },
-  prospectsHeld:   { value: 2491, label: 'Unique Appointments Held',   format: 'number',  delta: 8.3,  deltaLabel: 'vs prev period' },
-  showRate:        { value: 0.694,label: 'Show Rate',                  format: 'percent', delta: 5.1,  deltaLabel: 'vs prev period' },
+  prospectsBooked: { label: 'Unique Prospects Scheduled', format: 'number' },
+  prospectsHeld:   { label: 'Unique Appointments Held',   format: 'number' },
+  showRate:        { label: 'Show Rate',                  format: 'percent' },
 
   // Section 4: Close Rates & Calls Lost (left scorecards)
-  closeRate:           { value: 0.16,  label: 'Show \u2192 Close Rate',      format: 'percent', delta: 3.2,  deltaLabel: 'vs prev period' },
-  scheduledCloseRate:  { value: 0.109, label: 'Scheduled \u2192 Close Rate', format: 'percent', delta: 2.1,  deltaLabel: 'vs prev period' },
-  callsLost:           { value: 1179,  label: 'Calls Lost',                  format: 'number',  delta: -4.2, deltaLabel: 'vs prev period', desiredDirection: 'down' },
-  lostPct:             { value: 0.473, label: 'Lost %',                      format: 'percent', delta: -2.1, deltaLabel: 'vs prev period', desiredDirection: 'down' },
+  closeRate:           { label: 'Show \u2192 Close Rate',      format: 'percent' },
+  scheduledCloseRate:  { label: 'Scheduled \u2192 Close Rate', format: 'percent' },
+  callsLost:           { label: 'Calls Lost',                  format: 'number' },
+  lostPct:             { label: 'Lost %',                      format: 'percent' },
 
   // Section 5: Bottom scorecards (right column)
-  avgCallDuration: { value: 18.7,  label: 'Average Call Duration', format: 'duration', delta: 3.2,  deltaLabel: 'vs prev period' },
-  activeFollowUp:  { value: 92,    label: 'Active Follow Up',     format: 'number',  delta: 6.8,  deltaLabel: 'vs prev period', desiredDirection: 'down' },
-  disqualified:    { value: 127,   label: '# Disqualified',       format: 'number',  delta: 12.3, deltaLabel: 'vs prev period', desiredDirection: 'down' },
+  avgCallDuration: { label: 'Average Call Duration', format: 'duration' },
+  activeFollowUp:  { label: 'Active Follow Up',     format: 'number' },
+  disqualified:    { label: '# Disqualified',       format: 'number' },
 };
-
-
-/**
- * Generate weekly time-series demo data for charts.
- * Creates 12 weeks of plausible data for each chart type.
- */
-function generateDemoChartData() {
-  const weeks = [];
-  const base = new Date('2025-11-18');
-  for (let i = 0; i < 12; i++) {
-    const d = new Date(base);
-    d.setDate(d.getDate() + i * 7);
-    weeks.push(d.toISOString().split('T')[0]);
-  }
-
-  const revenueOverTime = weeks.map((date) => ({
-    date,
-    revenue: 180000 + Math.round(Math.random() * 80000),
-    cash: 80000 + Math.round(Math.random() * 50000),
-  }));
-
-  const closesOverTime = weeks.map((date) => ({
-    date,
-    closes: 1 + Math.floor(Math.random() * 5),
-  }));
-
-  const showCloseRateOverTime = weeks.map((date) => ({
-    date,
-    showRate: 0.68 + Math.random() * 0.06,
-    closeRate: 0.12 + Math.random() * 0.06,
-  }));
-
-  const callFunnel = [
-    { stage: 'Booked',    count: 3357, color: OV.cyan },
-    { stage: 'Held',      count: 2491, color: OV.blue },
-    { stage: 'Qualified', count: 2381, color: OV.purple },
-    { stage: 'Closed',    count: 408,  color: OV.green },
-  ];
-
-  const outcomeBreakdown = [
-    { label: 'Closed - Won', value: 408,  color: OV.green },
-    { label: 'Deposit',      value: 125,  color: OV.cyan },
-    { label: 'Follow Up',    value: 358,  color: OV.purple },
-    { label: 'Lost',         value: 1179, color: '#5a5a5a' },
-    { label: 'Not Pitched',  value: 421,  color: OV.red },
-  ];
-
-  return {
-    revenueOverTime,
-    closesOverTime,
-    showCloseRateOverTime,
-    callFunnel,
-    outcomeBreakdown,
-  };
-}
-
-const DEMO_CHARTS = generateDemoChartData();
 
 
 // ─────────────────────────────────────────────────────────────
@@ -150,37 +93,33 @@ const DEMO_CHARTS = generateDemoChartData();
 
 /**
  * Safely extract a metric from the API response.
- * Falls back to demo data when the API metric is not available.
- * Decorates with the glow color for the Scorecard component.
+ * If API metric is unavailable, returns null value (triggers loading shimmer).
+ * Label/format come from METRIC_LABELS lookup — no demo values are ever shown.
  */
 function getMetric(apiMetrics, key, glowColor) {
-  // If API data has loaded, use it; otherwise return null value to show "Loading..."
   const m = apiMetrics?.[key];
   if (!m) {
-    // Use demo label/format as placeholder, but null value triggers loading state
-    const demo = DEMO_METRICS[key];
-    return { label: demo?.label || key, format: demo?.format || 'number', value: null, glowColor };
+    const meta = METRIC_LABELS[key];
+    return { label: meta?.label || key, format: meta?.format || 'number', value: null, glowColor };
   }
   return { ...m, glowColor };
 }
 
 /**
- * Get chart data array from API response, falling back to demo data.
- *
- * The API wraps chart data in an envelope: { type, label, series, data: [...] }
- * This helper extracts the inner .data array. If the API returns a raw array
- * (or doesn't have chart data), falls back to demo data.
+ * Get chart data array from API response.
+ * Returns empty array when data is missing — NEVER returns demo/fake data.
+ * Empty array triggers ChartWrapper's empty state.
  */
 function getChart(apiCharts, key) {
   const raw = apiCharts?.[key];
   // API envelope: { type, data: [...] } — extract inner array
   if (raw && typeof raw === 'object' && !Array.isArray(raw) && Array.isArray(raw.data)) {
-    return raw.data.length > 0 ? raw.data : (DEMO_CHARTS[key] || []);
+    return raw.data;
   }
-  // Raw array (shouldn't happen but handle it)
-  if (Array.isArray(raw) && raw.length > 0) return raw;
-  // Fallback to demo
-  return DEMO_CHARTS[key] || [];
+  // Raw array
+  if (Array.isArray(raw)) return raw;
+  // No data available
+  return [];
 }
 
 /**
@@ -206,7 +145,7 @@ export default function OverviewPage() {
   const { data, isLoading, error } = useMetrics('overview');
 
 
-  // Extract API data with demo fallbacks
+  // Extract API data
   const apiData = data?.data || data; // Handle both { data: { sections, charts } } and { sections, charts }
   const metrics = apiData?.sections?.atAGlance;
   const charts = apiData?.charts;
@@ -243,7 +182,7 @@ export default function OverviewPage() {
             Failed to load overview data
           </Typography>
           <Typography sx={{ color: COLORS.text.muted, fontSize: '0.85rem' }}>
-            {error.message || 'Showing demo data. Please try again later.'}
+            {error.message || 'Please try again later.'}
           </Typography>
         </Box>
       )}
