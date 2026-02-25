@@ -1473,6 +1473,10 @@ function computeSalesCycle(calls, closeCycles, prev) {
     });
   }
 
+  // Sort per-closer charts by total count descending (most at top)
+  callsToCloseByCloser.sort((a, b) => (b.oneCall + b.twoCalls + b.threePlus) - (a.oneCall + a.twoCalls + a.threePlus));
+  daysToCloseByCloser.sort((a, b) => (b.sameDay + b.oneToThree + b.fourToSeven + b.eightPlus) - (a.sameDay + a.oneToThree + a.fourToSeven + a.eightPlus));
+
   return {
     sections,
     charts: {
@@ -1988,7 +1992,7 @@ function computeViolations(calls, granularity, prev) {
 // ─────────────────────────────────────────────────────────────
 
 function computeAdherence(calls, granularity, prev) {
-  const held = calls.filter(c => isShow(c) && c.overallCallScore > 0);
+  const held = calls.filter(c => isShow(c) && c.scriptAdherenceScore > 0);
 
   // Score fields mapped to radar axes — driven by SCRIPT_SECTIONS config
   const scoreMap = Object.fromEntries(SCRIPT_SECTIONS.map(s => [s.key, s.scoreField]));
@@ -1997,7 +2001,7 @@ function computeAdherence(calls, granularity, prev) {
 
   // Overall scores
   const overallAdherence = round(avg(held, 'scriptAdherenceScore'), 1);
-  const objHandling = round(avg(held, 'objectionHandlingScore'), 1);
+  const objHandling = round(avg(held, 'objectionAdherenceScore'), 1);
 
   const sections = {
     overall: {
@@ -2016,10 +2020,10 @@ function computeAdherence(calls, granularity, prev) {
   // Add period-over-period deltas (higher scores are better)
   if (prev && prev.calls.length > 0) {
     const dl = prev.deltaLabel;
-    const pHeld = prev.calls.filter(c => isShow(c) && c.overallCallScore > 0);
+    const pHeld = prev.calls.filter(c => isShow(c) && c.scriptAdherenceScore > 0);
     if (pHeld.length > 0) {
       const pAdherence = round(avg(pHeld, 'scriptAdherenceScore'), 1);
-      const pObjHandling = round(avg(pHeld, 'objectionHandlingScore'), 1);
+      const pObjHandling = round(avg(pHeld, 'objectionAdherenceScore'), 1);
       sections.overall.adherenceScore = withDelta(sections.overall.adherenceScore, overallAdherence || 0, pAdherence || 0, dl, 'up');
       sections.overall.objHandlingScore = withDelta(sections.overall.objHandlingScore, objHandling || 0, pObjHandling || 0, dl, 'up');
     }
@@ -2043,7 +2047,7 @@ function computeAdherence(calls, granularity, prev) {
     });
     objHandlingByCloser.push({
       date: name,
-      score: round(avg(closerCalls, 'objectionHandlingScore'), 1) || 0,
+      score: round(avg(closerCalls, 'objectionAdherenceScore'), 1) || 0,
     });
   }
   adherenceByCloser.sort((a, b) => b.score - a.score);

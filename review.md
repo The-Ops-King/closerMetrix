@@ -363,10 +363,10 @@ Colors: Closed=green, Deposits=amber, Follow-Up=purple, Lost=red, DQ=muted, Not 
 |---|---|---|---|
 | 1-Call vs Multi-Call Closes | Pie (donut) | 1-Call (green), 2-Call (cyan), 3+ (amber) | `COUNT` per bucket |
 | # of Calls to Close | Bar (vertical) | Distribution bars | Per bucket: `COUNT(callsToClose in bucket range)` |
-| Calls to Close by Closer | Bar (horizontal, stacked) | `oneCall`, `twoCalls`, `threePlus` | Per closer (by name via Closers JOIN): `COUNT` per calls-to-close bucket |
+| Calls to Close by Closer | Bar (horizontal, stacked) | `oneCall`, `twoCalls`, `threePlus` | Per closer (by name via Closers JOIN): `COUNT` per calls-to-close bucket. **Sorted by total descending** (most closes at top) |
 | Days to Close Breakdown | Pie (donut) | Same Day (green), 1-3 Days (cyan), 4-7 (amber), 8-14 (purple), 15+ (red) | `COUNT` per bucket |
 | # of Days to Close | Bar (vertical) | Distribution bars | Per bucket: `COUNT(daysToClose in bucket range)` |
-| Days to Close by Closer | Bar (horizontal, stacked) | `sameDay`, `oneToThree`, `fourToSeven`, `eightPlus` | Per closer (by name via Closers JOIN): `COUNT` per days-to-close bucket |
+| Days to Close by Closer | Bar (horizontal, stacked) | `sameDay`, `oneToThree`, `fourToSeven`, `eightPlus` | Per closer (by name via Closers JOIN): `COUNT` per days-to-close bucket. **Sorted by total descending** (most closes at top) |
 
 ---
 
@@ -516,31 +516,32 @@ Colors: Closed=green, Deposits=amber, Follow-Up=purple, Lost=red, DQ=muted, Not 
 
 | Scorecard Title | Format | Formula | Color |
 |---|---|---|---|
-| Script Adherence Score | score | `AVG(scriptAdherenceScore)` — scored calls only (>0) | purple |
-| Objection Handling Quality | score | `AVG(objectionHandlingScore)` — scored calls only (>0) | purple |
+| Script Adherence Score | score | `AVG(scriptAdherenceScore)` — Show calls with `scriptAdherenceScore > 0` only | purple |
+| Objection Handling Quality | score | `AVG(objectionAdherenceScore)` — Show calls with `scriptAdherenceScore > 0` only | purple |
 
-#### Score by Script Section (8 scorecards via ScorecardGrid)
+#### Score by Script Section (7 scorecards via ScorecardGrid)
 
-| Scorecard Title | Format | Source Score Field | Color |
+BigQuery columns: `intro_score`, `pain_score`, `goal_score`, `transition_score`, `pitch_adherence_score`, `close_adherence_score`, `objection_adherence_score`. No `discovery_score` — it was split into pain/goal.
+
+| Scorecard Title | Format | Source Score Field (JS prop → BQ column) | Color |
 |---|---|---|---|
-| Intro | score | `AVG(introScore)` | cyan |
-| Pain | score | `AVG(painScore)` | cyan |
-| Discovery | score | `AVG(discoveryScore)` | cyan |
-| Goal | score | `AVG(goalScore)` | cyan |
-| Transition | score | `AVG(transitionScore)` | cyan |
-| Pitch | score | `AVG(pitchScore)` | cyan |
-| Close | score | `AVG(closeAttemptScore)` | cyan |
-| Objections | score | `AVG(objectionHandlingScore)` | cyan |
+| Intro | score | `introScore` → `intro_score` | cyan |
+| Pain | score | `painScore` → `pain_score` | cyan |
+| Goal | score | `goalScore` → `goal_score` | cyan |
+| Transition | score | `transitionScore` → `transition_score` | cyan |
+| Pitch | score | `pitchAdherenceScore` → `pitch_adherence_score` | cyan |
+| Close | score | `closeAdherenceScore` → `close_adherence_score` | cyan |
+| Objections | score | `objectionAdherenceScore` → `objection_adherence_score` | cyan |
 
-*All 8 sections now have distinct score fields from the AI pipeline. All include deltas.*
+*All 7 sections have distinct score fields from the AI pipeline. All include deltas.*
 
 ### Charts
 
 | Chart Title | Type | Series / Data | Formula per Data Point |
 |---|---|---|---|
-| Script Adherence Comparison | Radar (custom SVG) | 2 overlay polygons (selectable closers), 8 axes | Per axis: `AVG(scoreField)` for selected closer — axes: Intro, Pain, Discovery, Goal, Transition, Pitch, Close, Objections |
+| Script Adherence Comparison | Radar (custom SVG) | 2 overlay polygons (selectable closers), 7 axes | Per axis: `AVG(scoreField)` for selected closer — axes: Intro, Pain, Goal, Transition, Pitch, Close, Objections |
 | Adherence by Closer | Bar (horizontal) | `score` per closer | Per closer: `AVG(scriptAdherenceScore)` — sorted highest first |
-| Objection Handling by Closer | Bar (horizontal) | `score` per closer | Per closer: `AVG(objectionHandlingScore)` — sorted highest first |
+| Objection Handling by Closer | Bar (horizontal) | `score` per closer | Per closer: `AVG(objectionAdherenceScore)` — sorted highest first |
 | Adherence Over Time | Line (multi-line) | Adherence trend per selected closer | Per bucket: `AVG(scriptAdherenceScore) where score > 0` |
 
 ---
@@ -606,8 +607,8 @@ Read-only list of assigned clients. No scorecards or charts of its own — click
 
 ## Data Pipeline Summary
 
-1. **Calls ingested** → BigQuery `Calls` table (with `key_moments` JSON, `compliance_flags` JSON, `payment_plan_offered` STRING, and 8 score fields for AI analysis)
-2. **AI pipeline** → `Backend/src/services/ai/` — PromptBuilder → Anthropic API → ResponseParser → AIProcessor → writes `compliance_flags`, `payment_plan_offered`, `intro_score`, `pain_score`, `goal_score`, `transition_score` (plus existing scores) back to Calls table
+1. **Calls ingested** → BigQuery `Calls` table (with `key_moments` JSON, `compliance_flags` JSON, `payment_plan_offered` STRING, and 11 score fields for AI analysis)
+2. **AI pipeline** → `Backend/src/services/ai/` — PromptBuilder → Anthropic API → ResponseParser → AIProcessor → writes `compliance_flags`, `payment_plan_offered`, and all score fields back to Calls table. Score columns: `intro_score`, `pain_score`, `goal_score`, `transition_score`, `pitch_adherence_score`, `close_adherence_score`, `objection_adherence_score`, `script_adherence_score`, `discovery_score`, `overall_call_score`, `prospect_fit_score`
 3. **Views materialized** → `v_calls_joined_flat_prefixed` (joins Calls + Closers + Clients), `v_close_cycle_stats_dated` (LEFT JOIN Closers for closer names), `v_objections_joined`, `v_calls_with_objection_counts`
 4. **Server queries** → `Frontend/server/db/queries/*.js` aggregate metrics via BigQuery SQL
 5. **Client computation** → `Frontend/client/src/utils/computePageData.js` handles filtering, time bucketing, deltas, and chart data shaping

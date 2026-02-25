@@ -93,10 +93,9 @@ async function queryBigQuery(clientId) {
       calls_duration_minutes,
       calls_overall_call_score,
       calls_script_adherence_score,
-      calls_discovery_score,
-      calls_pitch_score,
-      calls_close_attempt_score,
-      calls_objection_handling_score,
+      calls_pitch_adherence_score,
+      calls_close_adherence_score,
+      calls_objection_adherence_score,
       calls_intro_score,
       calls_pain_score,
       calls_goal_score,
@@ -197,10 +196,9 @@ async function queryBigQuery(clientId) {
       durationMinutes: num(row.calls_duration_minutes),
       overallCallScore: num(row.calls_overall_call_score),
       scriptAdherenceScore: num(row.calls_script_adherence_score),
-      discoveryScore: num(row.calls_discovery_score),
-      pitchScore: num(row.calls_pitch_score),
-      closeAttemptScore: num(row.calls_close_attempt_score),
-      objectionHandlingScore: num(row.calls_objection_handling_score),
+      pitchAdherenceScore: num(row.calls_pitch_adherence_score),
+      closeAdherenceScore: num(row.calls_close_adherence_score),
+      objectionAdherenceScore: num(row.calls_objection_adherence_score),
       introScore: num(row.calls_intro_score),
       painScore: num(row.calls_pain_score),
       goalScore: num(row.calls_goal_score),
@@ -384,10 +382,9 @@ function generateDemoCalls() {
     let durationMinutes = 0;
     let overallCallScore = 0;
     let scriptAdherenceScore = 0;
-    let discoveryScore = 0;
-    let pitchScore = 0;
-    let closeAttemptScore = 0;
-    let objectionHandlingScore = 0;
+    let pitchAdherenceScore = 0;
+    let closeAdherenceScore = 0;
+    let objectionAdherenceScore = 0;
     let lostReason = '';
     let introScore = 0;
     let painScore = 0;
@@ -432,10 +429,9 @@ function generateDemoCalls() {
       // AI scores for shows (varying quality)
       overallCallScore = randInt(5, 9, i * 7 + 8);
       scriptAdherenceScore = randInt(5, 9, i * 7 + 9);
-      discoveryScore = randInt(4, 9, i * 7 + 10);
-      pitchScore = randInt(5, 9, i * 7 + 11);
-      closeAttemptScore = randInt(4, 9, i * 7 + 12);
-      objectionHandlingScore = randInt(4, 9, i * 7 + 13);
+      pitchAdherenceScore = randInt(5, 9, i * 7 + 11);
+      closeAdherenceScore = randInt(4, 9, i * 7 + 12);
+      objectionAdherenceScore = randInt(4, 9, i * 7 + 13);
       introScore = randInt(4, 9, i * 7 + 14);
       painScore = randInt(4, 9, i * 7 + 15);
       goalScore = randInt(4, 9, i * 7 + 16);
@@ -484,10 +480,9 @@ function generateDemoCalls() {
       durationMinutes,
       overallCallScore,
       scriptAdherenceScore,
-      discoveryScore,
-      pitchScore,
-      closeAttemptScore,
-      objectionHandlingScore,
+      pitchAdherenceScore,
+      closeAdherenceScore,
+      objectionAdherenceScore,
       introScore,
       painScore,
       goalScore,
