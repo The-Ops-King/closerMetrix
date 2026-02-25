@@ -25,5 +25,9 @@ module.exports = {
     { key: 'overall_call_score',        label: 'Overall',            description: 'Holistic call quality considering all factors' },
     { key: 'script_adherence_score',    label: 'Script Adherence',   description: 'How closely the closer followed the script template' },
     { key: 'prospect_fit_score',        label: 'Prospect Fit',       description: 'How good a fit this prospect is for the offer' },
+    { key: 'intro_score',              label: 'Intro & Rapport',    description: 'How well the closer opened, built rapport, set the tone' },
+    { key: 'pain_score',               label: 'Pain Discovery',     description: 'How effectively the closer uncovered current pain points' },
+    { key: 'goal_score',               label: 'Goal Discovery',     description: 'How well the closer identified desired future state' },
+    { key: 'transition_score',         label: 'Transition',         description: 'How smoothly the closer transitioned from discovery to pitch' },
   ],
 };

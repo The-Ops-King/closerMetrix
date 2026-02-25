@@ -115,6 +115,8 @@ class ResponseParser {
       objections: this._normalizeObjections(parsed.objections),
       coaching_notes: this._normalizeString(parsed.coaching_notes, null),
       disqualification_reason: this._normalizeString(parsed.disqualification_reason, null),
+      payment_plan_offered: this._normalizePaymentPlan(parsed.payment_plan_offered),
+      compliance_flags: this._normalizeComplianceFlags(parsed.compliance_flags),
     };
   }
 
@@ -233,6 +235,48 @@ class ResponseParser {
 
     logger.warn('Unknown objection type, defaulting to other', { rawType: type });
     return 'other';
+  }
+
+  /**
+   * Validates payment_plan_offered against valid values.
+   */
+  _normalizePaymentPlan(value) {
+    if (value == null || typeof value !== 'string') return null;
+    const valid = ['full', 'deposit', 'installments', 'financed', 'none'];
+    const lower = value.trim().toLowerCase();
+    if (valid.includes(lower)) return lower;
+    logger.warn('Unknown payment_plan_offered, defaulting to null', { rawValue: value });
+    return null;
+  }
+
+  /**
+   * Validates and normalizes compliance_flags array.
+   * Each flag must have category, exact_phrase, and risk_level.
+   */
+  _normalizeComplianceFlags(flags) {
+    if (!Array.isArray(flags)) return [];
+    const validCategories = ['claims', 'guarantees', 'earnings', 'pressure'];
+    const validRiskLevels = ['high', 'medium', 'low'];
+
+    return flags
+      .filter(f => f && typeof f === 'object')
+      .map(f => {
+        const category = (f.category || '').trim();
+        const matchedCategory = validCategories.find(vc =>
+          category.toLowerCase().includes(vc)
+        );
+        return {
+          category: matchedCategory
+            ? matchedCategory.charAt(0).toUpperCase() + matchedCategory.slice(1)
+            : 'Claims',
+          exact_phrase: this._normalizeString(f.exact_phrase, ''),
+          timestamp: this._normalizeString(f.timestamp, ''),
+          risk_level: validRiskLevels.includes((f.risk_level || '').toLowerCase())
+            ? f.risk_level.toLowerCase()
+            : 'medium',
+          explanation: this._normalizeString(f.explanation, ''),
+        };
+      });
   }
 
   /**

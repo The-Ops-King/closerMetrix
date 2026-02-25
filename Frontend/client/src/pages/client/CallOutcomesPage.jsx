@@ -10,7 +10,7 @@
  *   4. Follow Up            — purple  — 4 scorecards, 3 charts
  *   5. Lost                 — red     — 4 scorecards, 4 charts
  *   6. Disqualified         — muted   — 2 scorecards, 2 charts
- *   7. Not Pitched          — magenta — 2 scorecards, 2 charts
+ *   7. Not Pitched          — blue    — 2 scorecards, 2 charts
  *
  * Per-closer charts show locked/blurred state for Basic tier.
  *

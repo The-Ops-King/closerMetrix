@@ -90,7 +90,7 @@ const RISK_CATEGORY_LABELS = {
 const RISK_CATEGORY_COLORS = {
   Claims: 'red',
   Guarantees: 'amber',
-  Earnings: 'magenta',
+  Earnings: 'cyan',
   Pressure: 'purple',
 };
 
@@ -133,15 +133,14 @@ const OUTCOME_COLORS = {
 /**
  * Script sections for the adherence radar chart.
  * Each entry maps a section label to the BigQuery score column it reads from.
- * Some sections share score fields (e.g. Pain, Discovery, Goal all use discoveryScore)
- * because the AI pipeline doesn't break them out individually yet.
+ * All 8 axes now have distinct score fields from the AI pipeline.
  */
 const SCRIPT_SECTIONS = [
-  { key: 'intro',      label: 'Intro',      scoreField: 'scriptAdherenceScore' },
-  { key: 'pain',       label: 'Pain',       scoreField: 'discoveryScore' },
+  { key: 'intro',      label: 'Intro',      scoreField: 'introScore' },
+  { key: 'pain',       label: 'Pain',       scoreField: 'painScore' },
   { key: 'discovery',  label: 'Discovery',  scoreField: 'discoveryScore' },
-  { key: 'goal',       label: 'Goal',       scoreField: 'discoveryScore' },
-  { key: 'transition', label: 'Transition', scoreField: 'scriptAdherenceScore' },
+  { key: 'goal',       label: 'Goal',       scoreField: 'goalScore' },
+  { key: 'transition', label: 'Transition', scoreField: 'transitionScore' },
   { key: 'pitch',      label: 'Pitch',      scoreField: 'pitchScore' },
   { key: 'close',      label: 'Close',      scoreField: 'closeAttemptScore' },
   { key: 'objections', label: 'Objections', scoreField: 'objectionHandlingScore' },

@@ -241,6 +241,8 @@ class AIProcessor {
       ai_summary: aiData.summary,
       ai_feedback: aiData.coaching_notes,
       lost_reason: aiData.disqualification_reason,
+      payment_plan_offered: aiData.payment_plan_offered || null,
+      compliance_flags: JSON.stringify(aiData.compliance_flags || []),
     };
 
     // Add individual scores

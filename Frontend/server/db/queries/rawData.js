@@ -97,7 +97,13 @@ async function queryBigQuery(clientId) {
       calls_pitch_score,
       calls_close_attempt_score,
       calls_objection_handling_score,
+      calls_intro_score,
+      calls_pain_score,
+      calls_goal_score,
+      calls_transition_score,
       calls_key_moments,
+      calls_compliance_flags,
+      calls_payment_plan_offered,
       calls_recording_url,
       calls_transcript_link,
       calls_lost_reason,
@@ -127,16 +133,19 @@ async function queryBigQuery(clientId) {
     ORDER BY calls_appointment_date DESC`;
 
   // 3) Close cycle stats — no date filter
+  const closersTable = bq.table('Closers');
   const closeCycleSql = `
     SELECT
-      prospect_email,
-      client_id,
-      closer_id,
-      close_date,
-      days_to_close,
-      calls_to_close
-    FROM ${closeCycleView}
-    WHERE client_id = @clientId`;
+      cc.prospect_email,
+      cc.client_id,
+      cc.closer_id,
+      cl.name AS closer_name,
+      cc.close_date,
+      cc.days_to_close,
+      cc.calls_to_close
+    FROM ${closeCycleView} cc
+    LEFT JOIN ${closersTable} cl ON cc.closer_id = cl.closer_id
+    WHERE cc.client_id = @clientId`;
 
   // 4) Client record — goals for GoalsPacing on Projections page
   const clientsTable = bq.table('Clients');
@@ -192,7 +201,13 @@ async function queryBigQuery(clientId) {
       pitchScore: num(row.calls_pitch_score),
       closeAttemptScore: num(row.calls_close_attempt_score),
       objectionHandlingScore: num(row.calls_objection_handling_score),
+      introScore: num(row.calls_intro_score),
+      painScore: num(row.calls_pain_score),
+      goalScore: num(row.calls_goal_score),
+      transitionScore: num(row.calls_transition_score),
       keyMoments: row.calls_key_moments || '',
+      complianceFlags: row.calls_compliance_flags ? JSON.parse(row.calls_compliance_flags) : [],
+      paymentPlanOffered: row.calls_payment_plan_offered || '',
       recordingUrl: row.calls_recording_url || '',
       transcriptLink: row.calls_transcript_link || '',
       lostReason: row.calls_lost_reason || '',
@@ -226,6 +241,7 @@ async function queryBigQuery(clientId) {
     prospectEmail: row.prospect_email || '',
     clientId: row.client_id || '',
     closerId: row.closer_id || '',
+    closerName: row.closer_name || '',
     closeDate: toDateStr(row.close_date) || '',
     daysToClose: num(row.days_to_close),
     callsToClose: num(row.calls_to_close),
@@ -373,6 +389,12 @@ function generateDemoCalls() {
     let closeAttemptScore = 0;
     let objectionHandlingScore = 0;
     let lostReason = '';
+    let introScore = 0;
+    let painScore = 0;
+    let goalScore = 0;
+    let transitionScore = 0;
+    let complianceFlags = [];
+    let paymentPlanOffered = '';
 
     if (attendance === 'Show') {
       // Outcome distribution for shows:
@@ -414,6 +436,31 @@ function generateDemoCalls() {
       pitchScore = randInt(5, 9, i * 7 + 11);
       closeAttemptScore = randInt(4, 9, i * 7 + 12);
       objectionHandlingScore = randInt(4, 9, i * 7 + 13);
+      introScore = randInt(4, 9, i * 7 + 14);
+      painScore = randInt(4, 9, i * 7 + 15);
+      goalScore = randInt(4, 9, i * 7 + 16);
+      transitionScore = randInt(4, 9, i * 7 + 17);
+
+      // Payment plan offered (for revenue deals)
+      if (callOutcome === 'Closed - Won') {
+        const planRoll = seededRandom(i * 7 + 18);
+        paymentPlanOffered = planRoll < 0.40 ? 'full' : planRoll < 0.70 ? 'deposit' : planRoll < 0.90 ? 'installments' : 'none';
+      } else if (callOutcome === 'Deposit') {
+        paymentPlanOffered = 'deposit';
+      }
+
+      // Compliance flags — add to ~20% of show calls
+      if (seededRandom(i * 7 + 19) < 0.20) {
+        const flagCategories = ['Claims', 'Guarantees', 'Earnings', 'Pressure'];
+        const flagCat = pick(flagCategories, i * 7 + 20);
+        complianceFlags = [{
+          category: flagCat,
+          exact_phrase: `Demo ${flagCat.toLowerCase()} flag — example phrase`,
+          timestamp: `00:${String(randInt(5, 45, i * 7 + 21)).padStart(2, '0')}:00`,
+          risk_level: pick(['high', 'medium', 'low'], i * 7 + 22),
+          explanation: `This is a demo ${flagCat.toLowerCase()} compliance flag for testing.`,
+        }];
+      }
     } else {
       // No-shows get no outcome, duration, or scores
       callOutcome = 'No Show';
@@ -441,7 +488,13 @@ function generateDemoCalls() {
       pitchScore,
       closeAttemptScore,
       objectionHandlingScore,
+      introScore,
+      painScore,
+      goalScore,
+      transitionScore,
       keyMoments: attendance === 'Show' ? 'Demo key moments summary' : '',
+      complianceFlags,
+      paymentPlanOffered,
       recordingUrl: attendance === 'Show' ? `https://app.closermetrix.com/recordings/demo_rec_${String(i + 1).padStart(3, '0')}` : '',
       transcriptLink: attendance === 'Show' ? `https://app.closermetrix.com/transcripts/demo_tr_${String(i + 1).padStart(3, '0')}` : '',
       lostReason,
@@ -506,14 +559,14 @@ function generateDemoObjections() {
 function generateDemoCloseCycles() {
   const closeCycles = [];
   const prospects = [
-    { email: 'john.smith@example.com', closerId: 'demo_closer_1', daysAgo: 5, days: 0, calls: 1 },
-    { email: 'jane.doe@example.com', closerId: 'demo_closer_2', daysAgo: 10, days: 3, calls: 2 },
-    { email: 'bob.wilson@example.com', closerId: 'demo_closer_3', daysAgo: 18, days: 7, calls: 2 },
-    { email: 'alice.johnson@example.com', closerId: 'demo_closer_1', daysAgo: 25, days: 14, calls: 3 },
-    { email: 'charlie.brown@example.com', closerId: 'demo_closer_4', daysAgo: 35, days: 1, calls: 1 },
-    { email: 'diana.prince@example.com', closerId: 'demo_closer_2', daysAgo: 48, days: 21, calls: 4 },
-    { email: 'edward.norton@example.com', closerId: 'demo_closer_3', daysAgo: 60, days: 5, calls: 2 },
-    { email: 'fiona.apple@example.com', closerId: 'demo_closer_4', daysAgo: 75, days: 30, calls: 5 },
+    { email: 'john.smith@example.com', closerId: 'demo_closer_1', closerName: 'Sarah', daysAgo: 5, days: 0, calls: 1 },
+    { email: 'jane.doe@example.com', closerId: 'demo_closer_2', closerName: 'Mike', daysAgo: 10, days: 3, calls: 2 },
+    { email: 'bob.wilson@example.com', closerId: 'demo_closer_3', closerName: 'Jessica', daysAgo: 18, days: 7, calls: 2 },
+    { email: 'alice.johnson@example.com', closerId: 'demo_closer_1', closerName: 'Sarah', daysAgo: 25, days: 14, calls: 3 },
+    { email: 'charlie.brown@example.com', closerId: 'demo_closer_4', closerName: 'Alex', daysAgo: 35, days: 1, calls: 1 },
+    { email: 'diana.prince@example.com', closerId: 'demo_closer_2', closerName: 'Mike', daysAgo: 48, days: 21, calls: 4 },
+    { email: 'edward.norton@example.com', closerId: 'demo_closer_3', closerName: 'Jessica', daysAgo: 60, days: 5, calls: 2 },
+    { email: 'fiona.apple@example.com', closerId: 'demo_closer_4', closerName: 'Alex', daysAgo: 75, days: 30, calls: 5 },
   ];
 
   for (const p of prospects) {
@@ -524,6 +577,7 @@ function generateDemoCloseCycles() {
       prospectEmail: p.email,
       clientId: 'demo_client',
       closerId: p.closerId,
+      closerName: p.closerName,
       closeDate: closeDate.toISOString().split('T')[0],
       daysToClose: p.days,
       callsToClose: p.calls,

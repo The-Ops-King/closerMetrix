@@ -83,7 +83,15 @@ const RESCHEDULE_SUBSTRINGS = ['Rescheduled'];
 const CALL_TYPES = {
   FIRST_CALL: 'First Call',
   FOLLOW_UP: 'Follow Up',
+  RESCHEDULED_FIRST_CALL: 'Rescheduled - First Call',
+  RESCHEDULED_FOLLOW_UP: 'Rescheduled - Follow Up',
 };
+
+/** All call types that count as a "first call" — use with Array.includes() */
+const FIRST_CALL_TYPES = [CALL_TYPES.FIRST_CALL, CALL_TYPES.RESCHEDULED_FIRST_CALL];
+
+/** All call types that count as a "follow up" — use with Array.includes() */
+const FOLLOW_UP_TYPES = [CALL_TYPES.FOLLOW_UP, CALL_TYPES.RESCHEDULED_FOLLOW_UP];
 
 // ─────────────────────────────────────────────────────────────
 // KEY MOMENT TYPES — entries inside calls.key_moments JSON array
@@ -114,6 +122,8 @@ if (typeof module !== 'undefined' && module.exports) {
     CANCEL_SUBSTRINGS,
     RESCHEDULE_SUBSTRINGS,
     CALL_TYPES,
+    FIRST_CALL_TYPES,
+    FOLLOW_UP_TYPES,
     KEY_MOMENT_RISK_TYPES,
     LOST_REASONS,
   };
@@ -130,6 +140,8 @@ export {
   CANCEL_SUBSTRINGS,
   RESCHEDULE_SUBSTRINGS,
   CALL_TYPES,
+  FIRST_CALL_TYPES,
+  FOLLOW_UP_TYPES,
   KEY_MOMENT_RISK_TYPES,
   LOST_REASONS,
 };

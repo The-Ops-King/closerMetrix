@@ -265,7 +265,7 @@ export const DUMMY_OBJECTIONS = {
       ],
       series: [
         { key: 'financial', label: 'Financial', color: '#00f0ff' },
-        { key: 'thinkAboutIt', label: 'Think About It', color: '#ff00e5' },
+        { key: 'thinkAboutIt', label: 'Think About It', color: '#B84DFF' },
         { key: 'spouse', label: 'Spouse/Partner', color: '#ffb800' },
       ],
     },
@@ -355,12 +355,12 @@ export const DUMMY_VIOLATIONS = {
       uniqueCalls: { label: 'Unique Calls w/ Risk', value: 9, format: 'number', glowColor: 'red' },
       pctCalls: { label: '% Calls w/ Flags', value: 0.087, format: 'percent', glowColor: 'amber' },
       avgFlaggedPerCall: { label: 'Avg Flagged / Call', value: 1.56, format: 'decimal', glowColor: 'amber' },
-      ftcSecCount: { label: 'FTC / SEC Warnings', value: 7, format: 'number', glowColor: 'magenta' },
+      ftcSecCount: { label: 'FTC / SEC Warnings', value: 7, format: 'number', glowColor: 'red' },
     },
     riskCategories: {
       claims: { label: 'Claims', value: 5, format: 'number', glowColor: 'red' },
       guarantees: { label: 'Guarantees', value: 3, format: 'number', glowColor: 'amber' },
-      earnings: { label: 'Earnings / Income', value: 4, format: 'number', glowColor: 'magenta' },
+      earnings: { label: 'Earnings / Income', value: 4, format: 'number', glowColor: 'cyan' },
       pressure: { label: 'Pressure / Urgency', value: 2, format: 'number', glowColor: 'purple' },
     },
     riskByCallType: {
@@ -396,7 +396,7 @@ export const DUMMY_VIOLATIONS = {
       ],
       series: [
         { key: 'claims', label: 'Claims', color: '#ff3366' },
-        { key: 'guarantees', label: 'Guarantees', color: '#ff00e5' },
+        { key: 'guarantees', label: 'Guarantees', color: '#FFD93D' },
         { key: 'earnings', label: 'Earnings', color: '#ffb800' },
       ],
     },

@@ -124,7 +124,17 @@ ${scoreFields}
     }
   ],
   "coaching_notes": "<1-3 specific, actionable coaching points for the closer>",
-  "disqualification_reason": "<if outcome is Disqualified, explain why — otherwise null>"
+  "disqualification_reason": "<if outcome is Disqualified, explain why — otherwise null>",
+  "payment_plan_offered": "<full | deposit | installments | financed | none | null>",
+  "compliance_flags": [
+    {
+      "category": "<Claims | Guarantees | Earnings | Pressure>",
+      "exact_phrase": "<what was actually said>",
+      "timestamp": "<HH:MM:SS>",
+      "risk_level": "<high | medium | low>",
+      "explanation": "<why this is flagged>"
+    }
+  ]
 }
 
 ## RULES
@@ -133,7 +143,9 @@ ${scoreFields}
 - All scores must be numbers between ${scoringRubric.scale.min} and ${scoringRubric.scale.max}.
 - If the closer never pitched (outcome = "Not Pitched"), pitch_score and close_attempt_score should reflect that no attempt was made (typically 1-2).
 - If script_adherence cannot be assessed (no script provided), set script_adherence_score to null.
-- Be honest and critical in scoring. A score of 7 means "average" — most closers should land around 6-7 unless they're truly exceptional or poor.`;
+- Be honest and critical in scoring. A score of 7 means "average" — most closers should land around 6-7 unless they're truly exceptional or poor.
+- For "payment_plan_offered": set to "full" if prospect paid in full, "deposit" if a deposit was taken, "installments" if a payment plan was discussed, "financed" if third-party financing was offered, "none" if no payment discussion, or null if you can't determine.
+- For "compliance_flags": flag any statements that could be problematic from FTC/SEC perspective — income claims, guarantees of results, earnings promises, or high-pressure tactics. Return an empty array if none found.`;
   }
 
   /**

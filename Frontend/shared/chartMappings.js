@@ -85,7 +85,7 @@ const DAYS_TO_CLOSE_CHART_CONFIG = [
 const RISK_TREND_CHART_CONFIG = [
   { key: 'claims',     label: 'Claims',     color: 'red' },
   { key: 'guarantees', label: 'Guarantees', color: 'amber' },
-  { key: 'earnings',   label: 'Earnings',   color: 'magenta' },
+  { key: 'earnings',   label: 'Earnings',   color: 'cyan' },
   { key: 'pressure',   label: 'Pressure',   color: 'purple' },
 ];
 

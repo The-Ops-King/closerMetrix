@@ -5,7 +5,7 @@
  * Executive tier price. Shows risk flags, exact phrases closers used that
  * could trigger regulatory trouble, and links to recordings/transcripts.
  *
- * Red/magenta glow theme throughout — this page feels dangerous on purpose.
+ * Red glow theme throughout — this page feels dangerous on purpose.
  *
  * Layout Order:
  *   1. Risk Overview — 5 scorecards (columns=5, per-card glowColor)
@@ -151,7 +151,7 @@ export default function ViolationsPage() {
           {/* 4. Risk Category Trends — full-width line chart */}
           <ChartWrapper
             title="Risk Category Trends"
-            accentColor={COLORS.neon.magenta}
+            accentColor={COLORS.neon.red}
             loading={isLoading}
             error={error?.message}
             isEmpty={!charts.riskTrends?.data?.length}
@@ -171,7 +171,7 @@ export default function ViolationsPage() {
           <ScorecardGrid
             title="Risk by Call Type"
             metrics={sections.riskByCallType}
-            glowColor={COLORS.neon.magenta}
+            glowColor={COLORS.neon.red}
             columns={2}
           />
 

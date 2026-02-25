@@ -20,7 +20,7 @@
 import {
   OUTCOMES, FOLLOW_UP_OUTCOMES, DQ_OUTCOMES, REVENUE_OUTCOMES,
   ATTENDANCE, GHOST_SUBSTRINGS, CANCEL_SUBSTRINGS, RESCHEDULE_SUBSTRINGS,
-  CALL_TYPES, KEY_MOMENT_RISK_TYPES,
+  CALL_TYPES, FIRST_CALL_TYPES, FOLLOW_UP_TYPES, KEY_MOMENT_RISK_TYPES,
 } from '../../../shared/callValues.js';
 
 import {
@@ -248,11 +248,11 @@ function median(arr) {
 /** Call was attended (attendance = 'Show') */
 const isShow = c => c.attendance === ATTENDANCE.SHOW;
 
-/** First-time call (call_type = 'First Call') */
-const isFirstCall = c => c.callType === CALL_TYPES.FIRST_CALL;
+/** First-time call (First Call or Rescheduled - First Call) */
+const isFirstCall = c => FIRST_CALL_TYPES.includes(c.callType);
 
-/** Any follow-up call (anything that isn't First Call or blank) */
-const isFollowUp = c => c.callType !== CALL_TYPES.FIRST_CALL && c.callType !== '';
+/** Any follow-up call (Follow Up or Rescheduled - Follow Up) */
+const isFollowUp = c => FOLLOW_UP_TYPES.includes(c.callType);
 
 /** Outcome: Closed - Won */
 const isClosed = c => c.callOutcome === OUTCOMES.CLOSED_WON;
@@ -345,17 +345,24 @@ function computeOverview(calls, granularity, rawData, prev) {
   const firstCalls = calls.filter(isFirstCall);
   const firstHeld = firstCalls.filter(isShow);
 
-  const revenue = sum(held, 'revenueGenerated', hasRevenue);
-  const cash = sum(held, 'cashCollected', hasRevenue);
+  const revenueDeals = held.filter(hasRevenue);
+  const revenue = sum(revenueDeals, 'revenueGenerated');
+  const cash = sum(revenueDeals, 'cashCollected');
 
   // 1-call close % from close cycles
   const cycles = rawData?.closeCycles || [];
   const oneCallCloses = cycles.filter(c => c.callsToClose === 1).length;
   const oneCallPct = round(sd(oneCallCloses, cycles.length), 3);
 
-  // Potential violations — count risk-flagged key moments
+  // Potential violations — count from complianceFlags (preferred) or key moments (fallback)
   let violationCount = 0;
   for (const c of held) {
+    // Prefer structured complianceFlags from AI pipeline
+    if (Array.isArray(c.complianceFlags) && c.complianceFlags.length > 0) {
+      violationCount += c.complianceFlags.length;
+      continue;
+    }
+    // Fallback: parse keyMoments
     if (!c.keyMoments) continue;
     try {
       const km = typeof c.keyMoments === 'string' ? JSON.parse(c.keyMoments) : c.keyMoments;
@@ -370,13 +377,17 @@ function computeOverview(calls, granularity, rawData, prev) {
       revenue: m('Revenue Generated', revenue, 'currency', 'green'),
       cashCollected: m('Cash Collected', cash, 'currency', 'teal'),
       cashPerCall: m('Cash / Call Held', round(sd(cash, held.length)), 'currency', 'blue'),
-      avgDealSize: m('Average Deal Size', round(sd(revenue, closed.length)), 'currency', 'cyan'),
+      avgDealSize: m('Average Deal Size', round(sd(revenue, revenueDeals.length)), 'currency', 'cyan'),
       closedDeals: m('Closed Deals', closed.length, 'number', 'green'),
       potentialViolations: m('Potential Violations', violationCount, 'number', 'red'),
       oneCallClosePct: m('1 Call Close %', oneCallPct, 'percent', 'purple'),
       callsPerDeal: m('Calls Required per Deal', round(sd(held.length, closed.length), 1), 'decimal', 'amber'),
-      prospectsBooked: m('Unique Prospects Scheduled', firstCalls.length, 'number', 'cyan'),
-      prospectsHeld: m('Unique Appointments Held', firstHeld.length, 'number', 'cyan'),
+      prospectsBooked: m('Unique Prospects Scheduled',
+        new Set(firstCalls.filter(c => c.prospectEmail).map(c => c.prospectEmail)).size || firstCalls.length,
+        'number', 'cyan'),
+      prospectsHeld: m('Unique Appointments Held',
+        new Set(firstHeld.filter(c => c.prospectEmail).map(c => c.prospectEmail)).size || firstHeld.length,
+        'number', 'cyan'),
       showRate: m('Show Rate', round(sd(held.length, calls.length), 3), 'percent', 'green'),
       closeRate: m('Show \u2192 Close Rate', round(sd(closed.length, held.length), 3), 'percent', 'cyan'),
       scheduledCloseRate: m('Scheduled \u2192 Close Rate', round(sd(closed.length, calls.length), 3), 'percent', 'blue'),
@@ -397,12 +408,17 @@ function computeOverview(calls, granularity, rawData, prev) {
     const pLost = pHeld.filter(isLost);
     const pFirstCalls = pc.filter(isFirstCall);
     const pFirstHeld = pFirstCalls.filter(isShow);
-    const pRevenue = sum(pHeld, 'revenueGenerated', hasRevenue);
-    const pCash = sum(pHeld, 'cashCollected', hasRevenue);
+    const pRevDeals = pHeld.filter(hasRevenue);
+    const pRevenue = sum(pRevDeals, 'revenueGenerated');
+    const pCash = sum(pRevDeals, 'cashCollected');
 
     // Previous period violation count
     let pViolationCount = 0;
     for (const c of pHeld) {
+      if (Array.isArray(c.complianceFlags) && c.complianceFlags.length > 0) {
+        pViolationCount += c.complianceFlags.length;
+        continue;
+      }
       if (!c.keyMoments) continue;
       try {
         const km = typeof c.keyMoments === 'string' ? JSON.parse(c.keyMoments) : c.keyMoments;
@@ -421,13 +437,17 @@ function computeOverview(calls, granularity, rawData, prev) {
     s.revenue = withDelta(s.revenue, revenue, pRevenue, dl, 'up');
     s.cashCollected = withDelta(s.cashCollected, cash, pCash, dl, 'up');
     s.cashPerCall = withDelta(s.cashPerCall, sd(cash, held.length), sd(pCash, pHeld.length), dl, 'up');
-    s.avgDealSize = withDelta(s.avgDealSize, sd(revenue, closed.length), sd(pRevenue, pClosed.length), dl, 'up');
+    s.avgDealSize = withDelta(s.avgDealSize, sd(revenue, revenueDeals.length), sd(pRevenue, pRevDeals.length), dl, 'up');
     s.closedDeals = withDelta(s.closedDeals, closed.length, pClosed.length, dl, 'up');
     s.potentialViolations = withDelta(s.potentialViolations, violationCount, pViolationCount, dl, 'down');
     s.oneCallClosePct = withDelta(s.oneCallClosePct, oneCallPct, pOneCallPct, dl, 'up');
     s.callsPerDeal = withDelta(s.callsPerDeal, sd(held.length, closed.length), sd(pHeld.length, pClosed.length), dl, 'down');
-    s.prospectsBooked = withDelta(s.prospectsBooked, firstCalls.length, pFirstCalls.length, dl, 'up');
-    s.prospectsHeld = withDelta(s.prospectsHeld, firstHeld.length, pFirstHeld.length, dl, 'up');
+    const uniqueBooked = new Set(firstCalls.filter(c => c.prospectEmail).map(c => c.prospectEmail)).size || firstCalls.length;
+    const pUniqueBooked = new Set(pFirstCalls.filter(c => c.prospectEmail).map(c => c.prospectEmail)).size || pFirstCalls.length;
+    const uniqueHeld = new Set(firstHeld.filter(c => c.prospectEmail).map(c => c.prospectEmail)).size || firstHeld.length;
+    const pUniqueHeld = new Set(pFirstHeld.filter(c => c.prospectEmail).map(c => c.prospectEmail)).size || pFirstHeld.length;
+    s.prospectsBooked = withDelta(s.prospectsBooked, uniqueBooked, pUniqueBooked, dl, 'up');
+    s.prospectsHeld = withDelta(s.prospectsHeld, uniqueHeld, pUniqueHeld, dl, 'up');
     s.showRate = withDelta(s.showRate, sd(held.length, calls.length), sd(pHeld.length, pc.length), dl, 'up');
     s.closeRate = withDelta(s.closeRate, sd(closed.length, held.length), sd(pClosed.length, pHeld.length), dl, 'up');
     s.scheduledCloseRate = withDelta(s.scheduledCloseRate, sd(closed.length, calls.length), sd(pClosed.length, pc.length), dl, 'up');
@@ -550,7 +570,10 @@ function computeFinancial(calls, granularity, prev) {
       collectedPct: m('% Collected', round(sd(totalCash, totalRevenue), 3), 'percent', 'purple'),
       avgDealRevenue: m('Avg Revenue Per Deal', round(sd(closedRevenue, closed.length)), 'currency', 'green'),
       avgCashPerDeal: m('Avg Cash Per Deal', round(sd(closedCash, closed.length)), 'currency', 'teal'),
-      pifPct: m('% PIFs', 0, 'percent', 'amber'), // Would need payment plan data
+      pifPct: m('% PIFs', (() => {
+        const pifCount = revenueDeals.filter(c => c.paymentPlanOffered === 'full').length;
+        return round(sd(pifCount, revenueDeals.length), 3);
+      })(), 'percent', 'amber'),
       refundCount: m('# of Refunds', 0, 'number', 'red'),
       refundAmount: m('$ of Refunds', 0, 'currency', 'red'),
     },
@@ -669,10 +692,14 @@ function computeAttendance(calls, granularity, prev) {
 
   // Sections structured as column groups (page uses MetricColumn components)
   const sections = {
-    // Column 1: Unique Prospects (first calls only)
+    // Column 1: Unique Prospects (first calls only, distinct by email)
     uniqueProspects: {
-      scheduled: m('Scheduled', firstCalls.length, 'number'),
-      held: m('Held', firstHeld.length, 'number'),
+      scheduled: m('Scheduled',
+        new Set(firstCalls.filter(c => c.prospectEmail).map(c => c.prospectEmail)).size || firstCalls.length,
+        'number'),
+      held: m('Held',
+        new Set(firstHeld.filter(c => c.prospectEmail).map(c => c.prospectEmail)).size || firstHeld.length,
+        'number'),
       showRate: m('Show Rate', round(sd(firstHeld.length, firstCalls.length), 3), 'percent'),
     },
     // Column 2: Total Calls
@@ -695,7 +722,10 @@ function computeAttendance(calls, granularity, prev) {
     },
     // Standalone cards
     activeFollowUp: m('Active Follow Up', activeFollowUpCount, 'number'),
-    notYetHeld: m('Not Yet Held', calls.filter(c => !isShow(c) && !isGhost(c) && !isCanceled(c) && !isRescheduled(c)).length, 'number'),
+    notYetHeld: m('Not Yet Held', (() => {
+      const today = new Date().toISOString().split('T')[0];
+      return calls.filter(c => c.appointmentDate >= today && !isShow(c) && !isGhost(c) && !isCanceled(c) && !isRescheduled(c)).length;
+    })(), 'number'),
     // Calls Not Taken section
     callsNotTaken: {
       notTaken: m('Not Taken', noShows.length, 'number'),
@@ -1418,7 +1448,7 @@ function computeSalesCycle(calls, closeCycles, prev) {
   // Per-closer
   const closerMap = new Map();
   for (const c of closeCycles) {
-    const name = c.closerId || 'Unknown';
+    const name = c.closerName || c.closerId || 'Unknown';
     if (!closerMap.has(name)) closerMap.set(name, []);
     closerMap.get(name).push(c);
   }
@@ -1489,7 +1519,7 @@ function computeObjections(calls, objections, granularity, prev) {
       callsHeld: m('Calls Held', held.length, 'number', 'cyan'),
       objectionsFaced: m('Objections Faced', objections.length, 'number', 'amber'),
       pctCallsWithObj: m('% Calls w/ Objections', round(sd(callsWithObj.size, held.length), 3), 'percent', 'amber'),
-      avgObjPerCall: m('Avg Obj / Call', callsWithObj.size > 0 ? round(sd(objections.length, callsWithObj.size), 1) : 0, 'decimal', 'amber'),
+      avgObjPerCall: m('Avg Obj / Flagged Call', callsWithObj.size > 0 ? round(sd(objections.length, callsWithObj.size), 1) : 0, 'decimal', 'amber'),
       resolvedCount: m('Resolved', resolvedObj.length, 'number', 'green'),
       resolutionRate: m('Resolution Rate', round(sd(resolvedObj.length, objections.length), 3), 'percent', 'green'),
       objectionlessCloses: m('Objectionless Closes', closedNoObj.length, 'number', 'green'),
@@ -1786,6 +1816,29 @@ function computeViolations(calls, granularity, prev) {
   const riskCategories = RISK_CATEGORIES;
 
   for (const c of held) {
+    // Prefer structured complianceFlags from AI pipeline; fall back to keyMoments parsing
+    if (Array.isArray(c.complianceFlags) && c.complianceFlags.length > 0) {
+      for (const flag of c.complianceFlags) {
+        const category = flag.category;
+        if (category && riskCategories.some(rc => category.toLowerCase().includes(rc.toLowerCase()))) {
+          riskFlags.push({
+            date: c.appointmentDate,
+            closer: c.closerName,
+            closerId: c.closerId,
+            callType: c.callType,
+            riskCategory: category,
+            timestamp: flag.timestamp || '',
+            exactPhrase: flag.exact_phrase || '',
+            whyFlagged: flag.explanation || '',
+            recordingUrl: c.recordingUrl,
+            transcriptUrl: c.transcriptLink,
+          });
+        }
+      }
+      continue; // Already processed via complianceFlags, skip keyMoments
+    }
+
+    // Legacy fallback: parse keyMoments for risk flags
     if (!c.keyMoments) continue;
     let moments;
     try {
@@ -1827,8 +1880,8 @@ function computeViolations(calls, granularity, prev) {
   }
 
   // Risk by call type
-  const firstCallFlags = riskFlags.filter(f => f.callType === CALL_TYPES.FIRST_CALL).length;
-  const followUpFlags = riskFlags.filter(f => f.callType !== CALL_TYPES.FIRST_CALL).length;
+  const firstCallFlags = riskFlags.filter(f => FIRST_CALL_TYPES.includes(f.callType)).length;
+  const followUpFlags = riskFlags.filter(f => FOLLOW_UP_TYPES.includes(f.callType)).length;
   const firstCallTotal = held.filter(isFirstCall).length;
   const followUpTotal = held.filter(isFollowUp).length;
 
@@ -1837,7 +1890,7 @@ function computeViolations(calls, granularity, prev) {
       flagCount: m('Risk Flags', riskFlags.length, 'number', 'red'),
       uniqueCalls: m('Unique Calls w/ Risk', uniqueCallsWithRisk, 'number', 'red'),
       pctCalls: m('% Calls w/ Flags', round(sd(uniqueCallsWithRisk, held.length), 3), 'percent', 'amber'),
-      ftcSecCount: m('FTC / SEC Warnings', riskFlags.length, 'number', 'magenta'),
+      ftcSecCount: m('FTC / SEC Warnings', riskFlags.length, 'number', 'red'),
     },
     riskCategories: Object.fromEntries(
       RISK_CATEGORIES.map(rc => [
@@ -1847,7 +1900,7 @@ function computeViolations(calls, granularity, prev) {
     ),
     riskByCallType: {
       firstCallPct: m('First Call Infractions', round(sd(firstCallFlags, firstCallTotal), 3), 'percent', 'red'),
-      followUpPct: m('Follow-Up Infractions', round(sd(followUpFlags, followUpTotal), 3), 'percent', 'magenta'),
+      followUpPct: m('Follow-Up Infractions', round(sd(followUpFlags, followUpTotal), 3), 'percent', 'amber'),
     },
   };
 

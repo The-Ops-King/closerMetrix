@@ -47,15 +47,16 @@ export const COLORS = {
   },
 
   // Chart series colors — ordered palette
+  // Magenta is intentionally last (emergency backup for many-segment charts).
   chart: [
     '#4DD4E8',  // Cyan
-    '#ff00e5',  // Magenta
-    '#FFD93D',  // Amber
     '#6BCF7F',  // Green
+    '#FFD93D',  // Amber
     '#B84DFF',  // Purple
     '#4D7CFF',  // Blue
     '#FF4D6D',  // Red
-    '#06b6d4',  // Teal (matches neon.teal)
+    '#06b6d4',  // Teal
+    '#ff00e5',  // Magenta (only used if 8+ segments)
   ],
 
   // Gradients for chart area fills (top → bottom)
