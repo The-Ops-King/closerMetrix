@@ -26,6 +26,7 @@
 
 const bq = require('../BigQueryClient');
 const logger = require('../../utils/logger');
+const { NEON_HEX } = require('../../../shared/chartMappings');
 
 /**
  * Compute a human-readable delta label from a date range.
@@ -492,23 +493,23 @@ function getDemoData(filters = {}) {
         type: 'pie',
         label: 'Attendance Breakdown',
         data: [
-          { label: 'Show', value: 164, color: '#6BCF7F' },
-          { label: 'Ghosted', value: 14, color: '#FF4D6D' },
-          { label: 'No-Show', value: 8, color: '#ff00e5' },
-          { label: 'Rescheduled', value: 18, color: '#FFD93D' },
-          { label: 'Canceled', value: 14, color: '#64748b' },
+          { label: 'Show', value: 164, color: NEON_HEX.green },
+          { label: 'Ghosted', value: 14, color: NEON_HEX.red },
+          { label: 'No-Show', value: 8, color: NEON_HEX.magenta },
+          { label: 'Rescheduled', value: 18, color: NEON_HEX.amber },
+          { label: 'Canceled', value: 14, color: NEON_HEX.muted },
         ],
       },
       outcomeBreakdown: {
         type: 'pie',
         label: 'Call Outcomes',
         data: [
-          { label: 'Closed', value: 23, color: '#6BCF7F' },
-          { label: 'Follow-Up', value: 34, color: '#4DD4E8' },
-          { label: 'Lost', value: 12, color: '#FF4D6D' },
-          { label: 'DQ', value: 8, color: '#64748b' },
-          { label: 'Deposit', value: 18, color: '#FFD93D' },
-          { label: 'Other', value: 9, color: '#B84DFF' },
+          { label: 'Closed', value: 23, color: NEON_HEX.green },
+          { label: 'Follow-Up', value: 34, color: NEON_HEX.cyan },
+          { label: 'Lost', value: 12, color: NEON_HEX.red },
+          { label: 'DQ', value: 8, color: NEON_HEX.muted },
+          { label: 'Deposit', value: 18, color: NEON_HEX.amber },
+          { label: 'Other', value: 9, color: NEON_HEX.purple },
         ],
       },
       callVolume: {
@@ -527,9 +528,9 @@ function getDemoData(filters = {}) {
         type: 'pie',
         label: '1-Call vs Multi-Call Closes',
         data: [
-          { label: '1-Call Close', value: 9, color: '#6BCF7F' },
-          { label: '2-Call Close', value: 8, color: '#4DD4E8' },
-          { label: '3+ Call Close', value: 6, color: '#FFD93D' },
+          { label: '1-Call Close', value: 9, color: NEON_HEX.green },
+          { label: '2-Call Close', value: 8, color: NEON_HEX.cyan },
+          { label: '3+ Call Close', value: 6, color: NEON_HEX.amber },
         ],
       },
     },

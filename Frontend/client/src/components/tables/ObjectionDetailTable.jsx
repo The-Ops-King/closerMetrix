@@ -32,25 +32,17 @@ import { hexToRgba } from '../../utils/colors';
 import { useFilters } from '../../context/FilterContext';
 import SectionHeader from '../SectionHeader';
 import DateRangeFilter from '../filters/DateRangeFilter';
+import { OBJECTION_TYPES_ALL, OUTCOME_COLORS as OUTCOME_COLOR_NAMES } from '../../../../shared/categoryValues.js';
+import { ALL_CALL_OUTCOMES } from '../../../../shared/callValues.js';
+import { COLOR_MAP } from '../../utils/colors';
 
-const OBJECTION_TYPES = [
-  'Financial', 'Spouse/Partner', 'Think About It', 'Timing',
-  'Trust/Credibility', 'Already Tried', 'DIY', 'Not Ready',
-  'Competitor', 'Authority', 'Value', 'Commitment',
-  'Program Not a Fit', 'Other',
-];
+const OBJECTION_TYPES = OBJECTION_TYPES_ALL;
+const CALL_OUTCOMES = ALL_CALL_OUTCOMES;
 
-const CALL_OUTCOMES = ['Closed - Won', 'Deposit', 'Follow Up', 'Lost', 'Not Pitched', 'Disqualified'];
-
-/** Color mapping for call outcomes */
-const OUTCOME_COLORS = {
-  'Closed - Won': COLORS.neon.green,
-  'Deposit': COLORS.neon.amber,
-  'Follow Up': COLORS.neon.purple,
-  'Lost': COLORS.neon.red,
-  'Not Pitched': COLORS.neon.blue,
-  'Disqualified': COLORS.text.muted,
-};
+/** Color mapping for call outcomes — resolve color names to hex via COLOR_MAP */
+const OUTCOME_COLORS = Object.fromEntries(
+  Object.entries(OUTCOME_COLOR_NAMES).map(([k, colorName]) => [k, COLOR_MAP[colorName] || COLORS.text.muted])
+);
 
 /** Format an ISO date to "Feb 15, 2026" */
 function formatDate(dateStr) {

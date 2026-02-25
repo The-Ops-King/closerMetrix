@@ -12,7 +12,27 @@
  *   filters: { dateStart, dateEnd, closerId, granularity }
  *
  * Returns: { sections, charts, tables } — same shape each page expects.
+ *
+ * Domain values (call outcomes, attendance, risk categories, etc.) are
+ * imported from shared config files so they stay in sync with the server.
  */
+
+import {
+  OUTCOMES, FOLLOW_UP_OUTCOMES, DQ_OUTCOMES, REVENUE_OUTCOMES,
+  ATTENDANCE, GHOST_SUBSTRINGS, CANCEL_SUBSTRINGS, RESCHEDULE_SUBSTRINGS,
+  CALL_TYPES, KEY_MOMENT_RISK_TYPES,
+} from '../../../shared/callValues.js';
+
+import {
+  RISK_CATEGORIES, RISK_CATEGORY_LABELS, RISK_CATEGORY_COLORS,
+  SCRIPT_SECTIONS, CALLS_TO_CLOSE_BUCKETS, DAYS_TO_CLOSE_BUCKETS,
+} from '../../../shared/categoryValues.js';
+
+import {
+  OUTCOME_CHART_CONFIG, NOT_TAKEN_CHART_CONFIG,
+  RISK_TREND_CHART_CONFIG, CALLS_TO_CLOSE_CHART_CONFIG,
+  DAYS_TO_CLOSE_CHART_CONFIG,
+} from '../../../shared/chartMappings.js';
 
 // ─────────────────────────────────────────────────────────────
 // SHARED HELPERS
@@ -221,24 +241,51 @@ function median(arr) {
   return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
-// Common predicates — must match actual BigQuery data values
-// Attendance: 'Show', 'Ghosted - No Show', 'Cancelled', 'Canceled', 'Rescheduled', etc.
-// Call Type: 'First Call', 'Follow Up Call', 'Follow Up', 'Follow-Up'
-// Outcome: '', 'Lost', 'Follow Up', 'Closed - Won', 'Deposit', 'Not Pitched', 'DQ'
-const isShow = c => c.attendance === 'Show';
-const isFirstCall = c => c.callType === 'First Call';
-const isFollowUp = c => c.callType !== 'First Call' && c.callType !== '';
-const isClosed = c => c.callOutcome === 'Closed - Won';
-const isDeposit = c => c.callOutcome === 'Deposit';
-const isLost = c => c.callOutcome === 'Lost';
-const isDQ = c => c.callOutcome === 'DQ' || c.callOutcome === 'Disqualified';
-const isNotPitched = c => c.callOutcome === 'Not Pitched';
-const isFollowUpOutcome = c => c.callOutcome === 'Follow Up' || c.callOutcome === 'Follow-Up';
-const isGhost = c => c.attendance.includes('Ghost') || c.attendance.includes('No Show');
-const isCanceled = c => c.attendance.includes('Cancel');
-const isRescheduled = c => c.attendance.includes('Rescheduled');
+// ── Predicates ─────────────────────────────────────────────
+// All domain strings come from shared/callValues.js so a BigQuery
+// rename only needs updating in one place.
+
+/** Call was attended (attendance = 'Show') */
+const isShow = c => c.attendance === ATTENDANCE.SHOW;
+
+/** First-time call (call_type = 'First Call') */
+const isFirstCall = c => c.callType === CALL_TYPES.FIRST_CALL;
+
+/** Any follow-up call (anything that isn't First Call or blank) */
+const isFollowUp = c => c.callType !== CALL_TYPES.FIRST_CALL && c.callType !== '';
+
+/** Outcome: Closed - Won */
+const isClosed = c => c.callOutcome === OUTCOMES.CLOSED_WON;
+
+/** Outcome: Deposit */
+const isDeposit = c => c.callOutcome === OUTCOMES.DEPOSIT;
+
+/** Outcome: Lost */
+const isLost = c => c.callOutcome === OUTCOMES.LOST;
+
+/** Outcome: DQ or Disqualified (both spellings) */
+const isDQ = c => DQ_OUTCOMES.includes(c.callOutcome);
+
+/** Outcome: Not Pitched */
+const isNotPitched = c => c.callOutcome === OUTCOMES.NOT_PITCHED;
+
+/** Outcome: Follow Up (both spellings) */
+const isFollowUpOutcome = c => FOLLOW_UP_OUTCOMES.includes(c.callOutcome);
+
+/** Attendance: ghost/no-show (matches 'Ghosted', 'Ghosted - No Show', etc.) */
+const isGhost = c => GHOST_SUBSTRINGS.some(s => c.attendance.includes(s));
+
+/** Attendance: canceled */
+const isCanceled = c => CANCEL_SUBSTRINGS.some(s => c.attendance.includes(s));
+
+/** Attendance: rescheduled */
+const isRescheduled = c => RESCHEDULE_SUBSTRINGS.some(s => c.attendance.includes(s));
+
+/** Did NOT show up */
 const isNoShow = c => !isShow(c);
-const hasRevenue = c => isClosed(c) || isDeposit(c);
+
+/** Generated revenue (Closed or Deposit) */
+const hasRevenue = c => REVENUE_OUTCOMES.includes(c.callOutcome);
 
 /** Build a metric object for scorecards */
 function m(label, value, format, glowColor) {
@@ -313,7 +360,7 @@ function computeOverview(calls, granularity, rawData, prev) {
     try {
       const km = typeof c.keyMoments === 'string' ? JSON.parse(c.keyMoments) : c.keyMoments;
       if (Array.isArray(km)) {
-        violationCount += km.filter(m => m.type === 'risk' || m.type === 'violation' || m.type === 'compliance').length;
+        violationCount += km.filter(m => KEY_MOMENT_RISK_TYPES.includes(m.type)).length;
       }
     } catch (e) { /* ignore parse errors */ }
   }
@@ -441,15 +488,18 @@ function computeOverview(calls, granularity, rawData, prev) {
     { stage: 'Closed', count: closed.length },
   ];
 
-  // Outcome breakdown pie
-  const outcomeBreakdown = [
-    { label: 'Closed', value: closed.length },
-    { label: 'Deposit', value: deposits.length },
-    { label: 'Follow-Up', value: calls.filter(c => isShow(c) && isFollowUpOutcome(c)).length },
-    { label: 'Lost', value: lost.length },
-    { label: 'DQ', value: calls.filter(c => isShow(c) && isDQ(c)).length },
-    { label: 'Not Pitched', value: calls.filter(c => isShow(c) && isNotPitched(c)).length },
-  ].filter(d => d.value > 0);
+  // Outcome breakdown pie — built from OUTCOME_CHART_CONFIG
+  const outcomeCounts = {
+    closed: closed.length,
+    deposit: deposits.length,
+    followUp: calls.filter(c => isShow(c) && isFollowUpOutcome(c)).length,
+    lost: lost.length,
+    disqualified: calls.filter(c => isShow(c) && isDQ(c)).length,
+    notPitched: calls.filter(c => isShow(c) && isNotPitched(c)).length,
+  };
+  const outcomeBreakdown = OUTCOME_CHART_CONFIG
+    .map(cfg => ({ label: cfg.label, value: outcomeCounts[cfg.key], color: cfg.color }))
+    .filter(d => d.value > 0);
 
   return {
     sections,
@@ -470,10 +520,7 @@ function computeOverview(calls, granularity, rawData, prev) {
         { key: 'deposits', label: 'Deposits', color: 'amber' },
       ]},
       callFunnel: funnelData,
-      outcomeBreakdown: outcomeBreakdown.map((d, i) => ({
-        ...d,
-        color: ['green', 'amber', 'purple', 'red', 'muted', 'blue'][i],
-      })),
+      outcomeBreakdown,
     },
   };
 }
@@ -811,6 +858,83 @@ function computeAttendance(calls, granularity, prev) {
 
 
 // ─────────────────────────────────────────────────────────────
+// DEPOSIT LIFECYCLE — prospect-level tracking
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Compute deposit lifecycle metrics by grouping calls by prospectEmail.
+ * For each prospect with a Deposit call, check if they later had:
+ *   - Closed - Won → deposit won
+ *   - Lost → deposit lost
+ *   - Neither → deposit still open
+ *
+ * Counts PROSPECTS, not calls: one prospect with 3 deposit calls + 1 close = 1 won.
+ *
+ * @param {Array} allCalls - All calls in the filtered dataset
+ * @param {Array} depositCalls - Calls with callOutcome === 'Deposit' (pre-filtered)
+ * @returns {object} Deposit section metrics
+ */
+function computeDepositLifecycle(allCalls, depositCalls) {
+  // Group all calls by prospectEmail (skip empty emails)
+  const byProspect = new Map();
+  for (const call of allCalls) {
+    if (!call.prospectEmail) continue;
+    if (!byProspect.has(call.prospectEmail)) byProspect.set(call.prospectEmail, []);
+    byProspect.get(call.prospectEmail).push(call);
+  }
+
+  // Sort each prospect's calls by date ascending (oldest first)
+  for (const [, calls] of byProspect) {
+    calls.sort((a, b) => (a.appointmentDate || '').localeCompare(b.appointmentDate || ''));
+  }
+
+  // Find prospects who have at least one Deposit call
+  const depositProspects = new Set();
+  for (const call of depositCalls) {
+    if (call.prospectEmail) depositProspects.add(call.prospectEmail);
+  }
+
+  // Classify each deposit prospect
+  let depositsWon = 0;
+  let depositsLost = 0;
+  let depositsStillOpen = 0;
+
+  for (const email of depositProspects) {
+    const prospectCalls = byProspect.get(email) || [];
+    // Find the earliest deposit call date for this prospect
+    const depositDate = prospectCalls
+      .filter(c => c.callOutcome === OUTCOMES.DEPOSIT)
+      .map(c => c.appointmentDate)
+      .sort()[0];
+
+    // Look at all calls on or after the deposit date
+    const afterDeposit = prospectCalls.filter(c => c.appointmentDate >= depositDate);
+
+    if (afterDeposit.some(c => c.callOutcome === OUTCOMES.CLOSED_WON)) {
+      depositsWon++;
+    } else if (afterDeposit.some(c => c.callOutcome === OUTCOMES.LOST)) {
+      depositsLost++;
+    } else {
+      depositsStillOpen++;
+    }
+  }
+
+  const depositProspectCount = depositsWon + depositsLost + depositsStillOpen;
+
+  return {
+    depositsTaken: m('Deposits Taken', depositCalls.length, 'number'),
+    depositClosedPct: m('Deposit Closed %', round(sd(depositsWon, depositProspectCount), 3), 'percent'),
+    depositsLost: m('Deposits Lost', depositsLost, 'number'),
+    depositsStillOpen: m('Deposits Still Open', depositsStillOpen, 'number'),
+    // Raw counts for pie chart use (not displayed as scorecards)
+    _wonCount: depositsWon,
+    _lostCount: depositsLost,
+    _openCount: depositsStillOpen,
+  };
+}
+
+
+// ─────────────────────────────────────────────────────────────
 // CALL OUTCOMES PAGE
 // ─────────────────────────────────────────────────────────────
 
@@ -874,13 +998,8 @@ function computeCallOutcomes(calls, granularity, prev) {
       followUpCloses: m('Follow-Up Closes', followUpClosed.length, 'number'),
       followUpCloseRate: m('Follow-Up Close Rate', round(sd(followUpClosed.length, followUpHeld.length), 3), 'percent'),
     },
-    // Section 3: Deposits
-    deposits: {
-      depositsTaken: m('Deposits Taken', deposits.length, 'number'),
-      depositClosedPct: m('Deposit Closed %', 0, 'percent'),
-      depositsLost: m('Deposits Lost', 0, 'number'),
-      depositsStillOpen: m('Deposits Still Open', 0, 'number'),
-    },
+    // Section 3: Deposits — lifecycle tracking by prospect_email
+    deposits: computeDepositLifecycle(calls, deposits),
     // Section 4: Follow Up
     followUp: {
       scheduled: m('Follow-Ups Scheduled', followUps.length, 'number'),
@@ -953,6 +1072,13 @@ function computeCallOutcomes(calls, granularity, prev) {
     sections.lost.firstCallLostRate = withDelta(sections.lost.firstCallLostRate, sd(firstLost.length, firstHeld.length), sd(pFirstLost.length, pFirstHeld.length), dl, 'down');
     sections.lost.followUpLost = withDelta(sections.lost.followUpLost, followUpLost.length, pFULost.length, dl, 'down');
     sections.lost.followUpLostRate = withDelta(sections.lost.followUpLostRate, sd(followUpLost.length, followUpHeld.length), sd(pFULost.length, pFUHeld.length), dl, 'down');
+
+    // Deposit lifecycle deltas — compute previous period lifecycle for comparison
+    const prevDepositLifecycle = computeDepositLifecycle(pc, pDeposits);
+    sections.deposits.depositsTaken = withDelta(sections.deposits.depositsTaken, deposits.length, pDeposits.length, dl, 'up');
+    sections.deposits.depositClosedPct = withDelta(sections.deposits.depositClosedPct, sections.deposits.depositClosedPct.value, prevDepositLifecycle.depositClosedPct.value, dl, 'up');
+    sections.deposits.depositsLost = withDelta(sections.deposits.depositsLost, sections.deposits.depositsLost.value, prevDepositLifecycle.depositsLost.value, dl, 'down');
+    sections.deposits.depositsStillOpen = withDelta(sections.deposits.depositsStillOpen, sections.deposits.depositsStillOpen.value, prevDepositLifecycle.depositsStillOpen.value, dl, 'down');
   }
 
   // Time-series
@@ -1069,15 +1195,18 @@ function computeCallOutcomes(calls, granularity, prev) {
   }
   const lostReasonsPie = Object.entries(lostReasons).map(([label, value]) => ({ label, value }));
 
-  // Outcome breakdown pie
-  const outcomeBreakdown = [
-    { label: 'Closed', value: closed.length, color: 'green' },
-    { label: 'Deposit', value: deposits.length, color: 'amber' },
-    { label: 'Follow-Up', value: followUpOutcome.length, color: 'purple' },
-    { label: 'Lost', value: lost.length, color: 'red' },
-    { label: 'DQ', value: dq.length, color: 'muted' },
-    { label: 'Not Pitched', value: notPitched.length, color: 'blue' },
-  ].filter(d => d.value > 0);
+  // Outcome breakdown pie — driven by OUTCOME_CHART_CONFIG
+  const coOutcomeCounts = {
+    closed: closed.length,
+    deposit: deposits.length,
+    followUp: followUpOutcome.length,
+    lost: lost.length,
+    disqualified: dq.length,
+    notPitched: notPitched.length,
+  };
+  const outcomeBreakdown = OUTCOME_CHART_CONFIG
+    .map(cfg => ({ label: cfg.label, value: coOutcomeCounts[cfg.key], color: cfg.color }))
+    .filter(d => d.value > 0);
 
   // Follow-up outcomes pie
   const followUpOutcomes = [
@@ -1086,14 +1215,13 @@ function computeCallOutcomes(calls, granularity, prev) {
     { label: 'Lost', value: followUpLost.length, color: 'red' },
   ].filter(d => d.value > 0);
 
-  // Deposit outcomes pie — show deposit count by closer
-  const depositOutcomesData = [];
-  for (const [name, closerCalls] of closerBuckets) {
-    const depCount = closerCalls.filter(isDeposit).length;
-    if (depCount > 0) {
-      depositOutcomesData.push({ label: name, value: depCount });
-    }
-  }
+  // Deposit outcomes pie — lifecycle: Won / Lost / Still Open
+  // Reuse the already-computed deposit lifecycle from sections.deposits
+  const depositOutcomesData = [
+    { label: 'Won', value: sections.deposits._wonCount, color: 'green' },
+    { label: 'Lost', value: sections.deposits._lostCount, color: 'red' },
+    { label: 'Still Open', value: sections.deposits._openCount, color: 'amber' },
+  ].filter(d => d.value > 0);
 
   // Deposit rate by closer (bar chart)
   const depositByCloserData = [];
@@ -1149,20 +1277,13 @@ function computeCallOutcomes(calls, granularity, prev) {
     sections,
     charts: {
       outcomeBreakdown: { data: outcomeBreakdown },
-      outcomeByCloser: { data: sortDesc(outcomeByCloser, ['closed', 'deposit', 'followUp', 'lost', 'disqualified', 'notPitched']), series: [
-        { key: 'closed', label: 'Closed', color: 'green' },
-        { key: 'deposit', label: 'Deposit', color: 'amber' },
-        { key: 'followUp', label: 'Follow-Up', color: 'purple' },
-        { key: 'lost', label: 'Lost', color: 'red' },
-        { key: 'disqualified', label: 'DQ', color: 'muted' },
-        { key: 'notPitched', label: 'Not Pitched', color: 'blue' },
-      ]},
-      outcomesOverTime: { data: outcomesOverTime, series: [
-        { key: 'closed', label: 'Closed', color: 'green' },
-        { key: 'deposit', label: 'Deposit', color: 'amber' },
-        { key: 'followUp', label: 'Follow-Up', color: 'purple' },
-        { key: 'lost', label: 'Lost', color: 'red' },
-      ]},
+      outcomeByCloser: { data: sortDesc(outcomeByCloser, OUTCOME_CHART_CONFIG.map(c => c.key)), series:
+        OUTCOME_CHART_CONFIG.map(c => ({ key: c.key, label: c.label, color: c.color })),
+      },
+      outcomesOverTime: { data: outcomesOverTime, series:
+        OUTCOME_CHART_CONFIG.filter(c => c.key !== 'disqualified' && c.key !== 'notPitched')
+          .map(c => ({ key: c.key, label: c.label, color: c.color })),
+      },
       closesByProduct: { data: sortDesc(closesByProductData, productList), series: closesByProductSeries },
       closesOverTime: { data: closesOverTime, series: [
         { key: 'firstCall', label: 'First Call', color: 'green' },
@@ -1280,27 +1401,19 @@ function computeSalesCycle(calls, closeCycles, prev) {
     sections.daysToClose.medianDaysToClose = withDelta(sections.daysToClose.medianDaysToClose, median(daysToClose), median(pDaysToClose), dl, 'down');
   }
 
-  // Distribution pie
-  const callsDistribution = [
-    { label: '1 Call', value: oneCall, color: 'green' },
-    { label: '2 Calls', value: twoCall, color: 'cyan' },
-    { label: '3+ Calls', value: threePlus, color: 'amber' },
-  ].filter(d => d.value > 0);
+  // Calls-to-close distribution — driven by CALLS_TO_CLOSE_BUCKETS
+  const callsBucketCounts = { oneCall, twoCall, threePlus };
+  const callsBucketKeys = ['oneCall', 'twoCalls', 'threePlus']; // match data keys
+  const callsDistribution = CALLS_TO_CLOSE_CHART_CONFIG
+    .map((cfg, i) => ({ label: cfg.label, value: [oneCall, twoCall, threePlus][i], color: cfg.color }))
+    .filter(d => d.value > 0);
 
-  // Days distribution
-  const sameDay = daysToClose.filter(d => d === 0).length;
-  const oneToThree = daysToClose.filter(d => d >= 1 && d <= 3).length;
-  const fourToSeven = daysToClose.filter(d => d >= 4 && d <= 7).length;
-  const eightToFourteen = daysToClose.filter(d => d >= 8 && d <= 14).length;
-  const fifteenPlus = daysToClose.filter(d => d >= 15).length;
-
-  const daysDistribution = [
-    { label: 'Same Day', value: sameDay, color: 'green' },
-    { label: '1-3 Days', value: oneToThree, color: 'cyan' },
-    { label: '4-7 Days', value: fourToSeven, color: 'amber' },
-    { label: '8-14 Days', value: eightToFourteen, color: 'purple' },
-    { label: '15+ Days', value: fifteenPlus, color: 'red' },
-  ].filter(d => d.value > 0);
+  // Days-to-close distribution — driven by DAYS_TO_CLOSE_BUCKETS
+  const daysDistribution = DAYS_TO_CLOSE_BUCKETS.map(bucket => ({
+    label: bucket.label,
+    value: daysToClose.filter(d => d >= bucket.min && (bucket.max === Infinity ? true : d <= bucket.max)).length,
+    color: bucket.color,
+  })).filter(d => d.value > 0);
 
   // Per-closer
   const closerMap = new Map();
@@ -1669,7 +1782,8 @@ function computeViolations(calls, granularity, prev) {
   // Parse key_moments for risk flags
   // key_moments is a JSON string or plain text from AI
   const riskFlags = [];
-  const riskCategories = ['Claims', 'Guarantees', 'Earnings', 'Pressure'];
+  // Risk categories from shared config (single source of truth)
+  const riskCategories = RISK_CATEGORIES;
 
   for (const c of held) {
     if (!c.keyMoments) continue;
@@ -1713,8 +1827,8 @@ function computeViolations(calls, granularity, prev) {
   }
 
   // Risk by call type
-  const firstCallFlags = riskFlags.filter(f => f.callType === 'First Call').length;
-  const followUpFlags = riskFlags.filter(f => f.callType !== 'First Call').length;
+  const firstCallFlags = riskFlags.filter(f => f.callType === CALL_TYPES.FIRST_CALL).length;
+  const followUpFlags = riskFlags.filter(f => f.callType !== CALL_TYPES.FIRST_CALL).length;
   const firstCallTotal = held.filter(isFirstCall).length;
   const followUpTotal = held.filter(isFollowUp).length;
 
@@ -1725,12 +1839,12 @@ function computeViolations(calls, granularity, prev) {
       pctCalls: m('% Calls w/ Flags', round(sd(uniqueCallsWithRisk, held.length), 3), 'percent', 'amber'),
       ftcSecCount: m('FTC / SEC Warnings', riskFlags.length, 'number', 'magenta'),
     },
-    riskCategories: {
-      claims: m('Claims', catCounts.Claims, 'number', 'red'),
-      guarantees: m('Guarantees', catCounts.Guarantees, 'number', 'amber'),
-      earnings: m('Earnings / Income', catCounts.Earnings, 'number', 'magenta'),
-      pressure: m('Pressure / Urgency', catCounts.Pressure, 'number', 'purple'),
-    },
+    riskCategories: Object.fromEntries(
+      RISK_CATEGORIES.map(rc => [
+        rc.toLowerCase(),
+        m(RISK_CATEGORY_LABELS[rc], catCounts[rc], 'number', RISK_CATEGORY_COLORS[rc]),
+      ])
+    ),
     riskByCallType: {
       firstCallPct: m('First Call Infractions', round(sd(firstCallFlags, firstCallTotal), 3), 'percent', 'red'),
       followUpPct: m('Follow-Up Infractions', round(sd(followUpFlags, followUpTotal), 3), 'percent', 'magenta'),
@@ -1805,12 +1919,9 @@ function computeViolations(calls, granularity, prev) {
       flagsByCloser: { data: flagsByCloser, series: [
         { key: 'flags', label: 'Risk Flags', color: 'amber' },
       ]},
-      riskTrends: { data: riskTrendsData, series: [
-        { key: 'claims', label: 'Claims', color: 'red' },
-        { key: 'guarantees', label: 'Guarantees', color: 'amber' },
-        { key: 'earnings', label: 'Earnings', color: 'magenta' },
-        { key: 'pressure', label: 'Pressure', color: 'purple' },
-      ]},
+      riskTrends: { data: riskTrendsData, series:
+        RISK_TREND_CHART_CONFIG.map(c => ({ key: c.key, label: c.label, color: c.color })),
+      },
     },
     tables: {
       riskReview: { rows: riskFlags.slice(0, 50) }, // Limit to 50 for performance
@@ -1826,20 +1937,10 @@ function computeViolations(calls, granularity, prev) {
 function computeAdherence(calls, granularity, prev) {
   const held = calls.filter(c => isShow(c) && c.overallCallScore > 0);
 
-  // Score fields mapped to 8 radar axes
-  const scoreMap = {
-    intro: 'scriptAdherenceScore',
-    pain: 'discoveryScore',
-    discovery: 'discoveryScore',
-    goal: 'discoveryScore',
-    transition: 'scriptAdherenceScore',
-    pitch: 'pitchScore',
-    close: 'closeAttemptScore',
-    objections: 'objectionHandlingScore',
-  };
-
-  const axes = ['Intro', 'Pain', 'Discovery', 'Goal', 'Transition', 'Pitch', 'Close', 'Objections'];
-  const axisKeys = ['intro', 'pain', 'discovery', 'goal', 'transition', 'pitch', 'close', 'objections'];
+  // Score fields mapped to radar axes — driven by SCRIPT_SECTIONS config
+  const scoreMap = Object.fromEntries(SCRIPT_SECTIONS.map(s => [s.key, s.scoreField]));
+  const axes = SCRIPT_SECTIONS.map(s => s.label);
+  const axisKeys = SCRIPT_SECTIONS.map(s => s.key);
 
   // Overall scores
   const overallAdherence = round(avg(held, 'scriptAdherenceScore'), 1);

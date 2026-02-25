@@ -19,17 +19,9 @@
 const bq = require('../BigQueryClient');
 const logger = require('../../utils/logger');
 const { generateTimeSeries } = require('./demoTimeSeries');
-
-// Mirror client/src/theme/constants.js COLORS.neon — single source for pie chart hex values
-const NEON = {
-  cyan:    '#4DD4E8',
-  green:   '#6BCF7F',
-  amber:   '#FFD93D',
-  red:     '#FF4D6D',
-  purple:  '#B84DFF',
-  blue:    '#4D7CFF',
-  muted:   '#64748b',
-};
+const { OUTCOMES, ATTENDANCE, CALL_TYPES } = require('../../../shared/callValues');
+const { OUTCOME_COLORS, LOST_REASON_COLORS } = require('../../../shared/categoryValues');
+const { OUTCOME_CHART_CONFIG, LOST_REASON_CHART_CONFIG, NEON_HEX } = require('../../../shared/chartMappings');
 
 /**
  * Fetch all call outcomes data for a client.
@@ -229,12 +221,12 @@ async function queryBigQuery(clientId, filters, tier) {
       outcomeBreakdown: {
         type: 'pie', label: 'Call Outcomes Distribution',
         data: [
-          { label: 'Closed - Won', value: closes, color: NEON.green },
-          { label: 'Deposit', value: deposits, color: NEON.amber },
-          { label: 'Follow Up', value: followUps, color: NEON.purple },
-          { label: 'Lost', value: lost, color: NEON.red },
-          { label: 'Disqualified', value: dq, color: NEON.muted },
-          { label: 'Not Pitched', value: notPitched, color: NEON.blue },
+          { label: 'Closed - Won', value: closes, color: NEON_HEX.green },
+          { label: 'Deposit', value: deposits, color: NEON_HEX.amber },
+          { label: 'Follow Up', value: followUps, color: NEON_HEX.purple },
+          { label: 'Lost', value: lost, color: NEON_HEX.red },
+          { label: 'Disqualified', value: dq, color: NEON_HEX.muted },
+          { label: 'Not Pitched', value: notPitched, color: NEON_HEX.blue },
         ].filter(d => d.value > 0),
       },
       outcomesOverTime: {
@@ -268,11 +260,11 @@ async function queryBigQuery(clientId, filters, tier) {
       lostReasons: {
         type: 'pie', label: 'Lost Reasons',
         data: [
-          { label: "Can't Afford", value: num(sc.lost_cant_afford), color: NEON.amber },
-          { label: 'Closer Error', value: num(sc.lost_closer_error), color: NEON.red },
-          { label: 'Not Interested', value: num(sc.lost_not_interested), color: NEON.cyan },
-          { label: 'Timing', value: num(sc.lost_timing), color: NEON.purple },
-          { label: 'Other', value: num(sc.lost_other), color: NEON.muted },
+          { label: "Can't Afford", value: num(sc.lost_cant_afford), color: NEON_HEX.amber },
+          { label: 'Closer Error', value: num(sc.lost_closer_error), color: NEON_HEX.red },
+          { label: 'Not Interested', value: num(sc.lost_not_interested), color: NEON_HEX.cyan },
+          { label: 'Timing', value: num(sc.lost_timing), color: NEON_HEX.purple },
+          { label: 'Other', value: num(sc.lost_other), color: NEON_HEX.muted },
         ].filter(d => d.value > 0),
       },
     },
@@ -423,12 +415,12 @@ function getDemoData(tier = 'insight', filters = {}) {
         type: 'pie',
         label: 'Call Outcomes Distribution',
         data: [
-          { label: 'Closed - Won', value: 414,  color: NEON.green },
-          { label: 'Deposit',      value: 91,   color: NEON.amber },
-          { label: 'Follow Up',    value: 829,  color: NEON.purple },
-          { label: 'Lost',         value: 1197, color: NEON.red },
-          { label: 'Disqualified', value: 108,  color: NEON.muted },
-          { label: 'Not Pitched',  value: 92,   color: NEON.blue },
+          { label: 'Closed - Won', value: 414,  color: NEON_HEX.green },
+          { label: 'Deposit',      value: 91,   color: NEON_HEX.amber },
+          { label: 'Follow Up',    value: 829,  color: NEON_HEX.purple },
+          { label: 'Lost',         value: 1197, color: NEON_HEX.red },
+          { label: 'Disqualified', value: 108,  color: NEON_HEX.muted },
+          { label: 'Not Pitched',  value: 92,   color: NEON_HEX.blue },
         ],
       },
 
@@ -549,9 +541,9 @@ function getDemoData(tier = 'insight', filters = {}) {
         type: 'pie',
         label: 'Deposit Outcomes',
         data: [
-          { label: 'Closed',     value: 54, color: NEON.green },
-          { label: 'Still Open', value: 14, color: NEON.amber },
-          { label: 'Lost',       value: 23, color: NEON.red },
+          { label: 'Closed',     value: 54, color: NEON_HEX.green },
+          { label: 'Still Open', value: 14, color: NEON_HEX.amber },
+          { label: 'Lost',       value: 23, color: NEON_HEX.red },
         ],
       },
 
@@ -583,10 +575,10 @@ function getDemoData(tier = 'insight', filters = {}) {
         type: 'pie',
         label: 'Follow-Up Outcomes',
         data: [
-          { label: 'Closed',        value: 62,  color: NEON.green },
-          { label: 'Still Open',    value: 87,  color: NEON.purple },
-          { label: 'Lost',          value: 215, color: NEON.red },
-          { label: 'No Show',       value: 109, color: NEON.muted },
+          { label: 'Closed',        value: 62,  color: NEON_HEX.green },
+          { label: 'Still Open',    value: 87,  color: NEON_HEX.purple },
+          { label: 'Lost',          value: 215, color: NEON_HEX.red },
+          { label: 'No Show',       value: 109, color: NEON_HEX.muted },
         ],
       },
 
@@ -626,11 +618,11 @@ function getDemoData(tier = 'insight', filters = {}) {
         type: 'pie',
         label: 'Lost Reasons',
         data: [
-          { label: "Can't Afford",   value: 493, color: NEON.amber },
-          { label: 'Closer Error',   value: 491, color: NEON.red },
-          { label: 'Not Interested', value: 57,  color: NEON.cyan },
-          { label: 'Timing',         value: 108, color: NEON.purple },
-          { label: 'Other',          value: 48,  color: NEON.muted },
+          { label: "Can't Afford",   value: 493, color: NEON_HEX.amber },
+          { label: 'Closer Error',   value: 491, color: NEON_HEX.red },
+          { label: 'Not Interested', value: 57,  color: NEON_HEX.cyan },
+          { label: 'Timing',         value: 108, color: NEON_HEX.purple },
+          { label: 'Other',          value: 48,  color: NEON_HEX.muted },
         ],
       },
 

@@ -23,6 +23,7 @@
 const bq = require('../BigQueryClient');
 const logger = require('../../utils/logger');
 const { generateTimeSeries } = require('./demoTimeSeries');
+const { SCRIPT_SECTIONS } = require('../../../shared/categoryValues');
 
 /**
  * Fetch all script adherence data for a client.
@@ -163,7 +164,7 @@ async function queryBigQuery(clientId, filters, tier) {
       radarData: {
         type: 'radar',
         label: 'Script Adherence by Section',
-        axes: ['Intro', 'Pain', 'Discovery', 'Goal', 'Transition', 'Pitch', 'Close', 'Objections'],
+        axes: SCRIPT_SECTIONS.map(s => s.label),
         byCloser: radarByCloser,
       },
       adherenceByCloser: {
@@ -215,7 +216,7 @@ function getDemoData(tier = 'executive', filters = {}) {
       radarData: {
         type: 'radar',
         label: 'Script Adherence by Section',
-        axes: ['Intro', 'Pain', 'Discovery', 'Goal', 'Transition', 'Pitch', 'Close', 'Objections'],
+        axes: SCRIPT_SECTIONS.map(s => s.label),
         byCloser: [
           { label: 'Sarah', closerId: 'demo_closer_1', values: [9.2, 8.8, 8.5, 9.0, 8.9, 8.2, 7.8, 8.0] },
           { label: 'Mike', closerId: 'demo_closer_2', values: [7.4, 6.8, 6.2, 7.0, 7.2, 5.8, 4.9, 5.5] },

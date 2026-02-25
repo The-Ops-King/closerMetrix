@@ -39,20 +39,13 @@ import { hexToRgba } from '../../utils/colors';
 import { useFilters } from '../../context/FilterContext';
 import SectionHeader from '../SectionHeader';
 import DateRangeFilter from '../filters/DateRangeFilter';
+import { RISK_CATEGORIES, RISK_CATEGORY_COLORS as RISK_COLOR_NAMES } from '../../../../shared/categoryValues.js';
+import { COLOR_MAP } from '../../utils/colors';
 
-const RISK_CATEGORIES = ['Claims', 'Guarantees', 'Earnings', 'Pressure'];
-
-/**
- * Maps risk category names to their accent colors.
- * Claims = red (dangerous), Guarantees = amber (warning),
- * Earnings = magenta (financial), Pressure = purple (behavioral).
- */
-const RISK_CATEGORY_COLORS = {
-  Claims: COLORS.neon.red,
-  Guarantees: COLORS.neon.amber,
-  Earnings: COLORS.neon.magenta,
-  Pressure: COLORS.neon.purple,
-};
+/** Resolve color name strings to hex values for direct use in styles */
+const RISK_CATEGORY_COLORS = Object.fromEntries(
+  Object.entries(RISK_COLOR_NAMES).map(([k, colorName]) => [k, COLOR_MAP[colorName] || COLORS.neon.red])
+);
 
 /**
  * Returns the accent color for a given risk category.

@@ -24,17 +24,7 @@
 
 const bq = require('../BigQueryClient');
 const logger = require('../../utils/logger');
-
-// Mirror client/src/theme/constants.js COLORS.neon — single source for pie chart hex values
-const NEON = {
-  cyan:   '#4DD4E8',
-  green:  '#6BCF7F',
-  amber:  '#FFD93D',
-  red:    '#FF4D6D',
-  purple: '#B84DFF',
-  blue:   '#4D7CFF',
-  muted:  '#64748b',
-};
+const { NEON_HEX } = require('../../../shared/chartMappings');
 
 /**
  * Fetch all sales cycle data for a client.
@@ -170,9 +160,9 @@ async function queryBigQuery(clientId, filters, tier) {
       salesCyclePie: {
         type: 'pie', label: '1-Call vs Multi-Call Closes',
         data: [
-          { label: '1-Call Close', value: oneCall, color: NEON.green },
-          { label: '2-Call Close', value: twoCall, color: NEON.cyan },
-          { label: '3+ Call Close', value: threePlus, color: NEON.amber },
+          { label: '1-Call Close', value: oneCall, color: NEON_HEX.green },
+          { label: '2-Call Close', value: twoCall, color: NEON_HEX.cyan },
+          { label: '3+ Call Close', value: threePlus, color: NEON_HEX.amber },
         ].filter(d => d.value > 0),
       },
       callsToCloseBar: {
@@ -187,12 +177,12 @@ async function queryBigQuery(clientId, filters, tier) {
       daysToClosePie: {
         type: 'pie', label: 'Days to Close Distribution',
         data: [
-          { label: 'Same Day', value: num(sc.same_day), color: NEON.green },
-          { label: '1-3 Days', value: num(sc.days_1_3), color: NEON.cyan },
-          { label: '4-7 Days', value: num(sc.days_4_7), color: NEON.amber },
-          { label: '8-14 Days', value: num(sc.days_8_14), color: NEON.purple },
-          { label: '15-30 Days', value: num(sc.days_15_30), color: NEON.red },
-          { label: '30+ Days', value: num(sc.days_30_plus), color: NEON.muted },
+          { label: 'Same Day', value: num(sc.same_day), color: NEON_HEX.green },
+          { label: '1-3 Days', value: num(sc.days_1_3), color: NEON_HEX.cyan },
+          { label: '4-7 Days', value: num(sc.days_4_7), color: NEON_HEX.amber },
+          { label: '8-14 Days', value: num(sc.days_8_14), color: NEON_HEX.purple },
+          { label: '15-30 Days', value: num(sc.days_15_30), color: NEON_HEX.red },
+          { label: '30+ Days', value: num(sc.days_30_plus), color: NEON_HEX.muted },
         ].filter(d => d.value > 0),
       },
       daysToCloseBar: {
@@ -278,9 +268,9 @@ function getDemoData(tier = 'insight', filters = {}) {
         type: 'pie',
         label: '1-Call vs Multi-Call Closes',
         data: [
-          { label: '1-Call Close', value: 9, color: NEON.green },
-          { label: '2-Call Close', value: 8, color: NEON.cyan },
-          { label: '3+ Call Close', value: 6, color: NEON.amber },
+          { label: '1-Call Close', value: 9, color: NEON_HEX.green },
+          { label: '2-Call Close', value: 8, color: NEON_HEX.cyan },
+          { label: '3+ Call Close', value: 6, color: NEON_HEX.amber },
         ],
       },
 
@@ -303,12 +293,12 @@ function getDemoData(tier = 'insight', filters = {}) {
         type: 'pie',
         label: 'Days to Close Distribution',
         data: [
-          { label: 'Same Day',  value: 5, color: NEON.green },
-          { label: '1-3 Days',  value: 4, color: NEON.cyan },
-          { label: '4-7 Days',  value: 5, color: NEON.amber },
-          { label: '8-14 Days', value: 3, color: NEON.purple },
-          { label: '15-30 Days', value: 4, color: NEON.red },
-          { label: '30+ Days',  value: 2, color: NEON.muted },
+          { label: 'Same Day',  value: 5, color: NEON_HEX.green },
+          { label: '1-3 Days',  value: 4, color: NEON_HEX.cyan },
+          { label: '4-7 Days',  value: 5, color: NEON_HEX.amber },
+          { label: '8-14 Days', value: 3, color: NEON_HEX.purple },
+          { label: '15-30 Days', value: 4, color: NEON_HEX.red },
+          { label: '30+ Days',  value: 2, color: NEON_HEX.muted },
         ],
       },
 

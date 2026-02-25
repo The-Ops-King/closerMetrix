@@ -19,8 +19,7 @@ import IconButton from '@mui/material/IconButton';
 import CloseIcon from '@mui/icons-material/Close';
 import { COLORS } from '../../theme/constants';
 import { useFilters } from '../../context/FilterContext';
-
-const RISK_CATEGORIES = ['Claims', 'Guarantees', 'Earnings', 'Pressure'];
+import { RISK_CATEGORIES } from '../../../../shared/categoryValues.js';
 
 export default function RiskCategoryFilter() {
   const { riskCategory, setRiskCategory } = useFilters();

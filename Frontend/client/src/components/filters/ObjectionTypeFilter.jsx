@@ -18,16 +18,9 @@ import IconButton from '@mui/material/IconButton';
 import CloseIcon from '@mui/icons-material/Close';
 import { COLORS } from '../../theme/constants';
 import { useFilters } from '../../context/FilterContext';
+import { OBJECTION_TYPES_FILTER } from '../../../../shared/categoryValues.js';
 
-const OBJECTION_TYPES = [
-  'Financial',
-  'Think About It',
-  'Spouse/Partner',
-  'Timing',
-  'Already Tried',
-  'Not Interested',
-  'Other',
-];
+const OBJECTION_TYPES = OBJECTION_TYPES_FILTER;
 
 export default function ObjectionTypeFilter() {
   const { objectionType, setObjectionType } = useFilters();

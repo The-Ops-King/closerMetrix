@@ -101,7 +101,8 @@ async function queryBigQuery(clientId) {
       calls_recording_url,
       calls_transcript_link,
       calls_lost_reason,
-      calls_product_purchased
+      calls_product_purchased,
+      calls_prospect_email
     FROM ${callsView}
     WHERE clients_client_id = @clientId
     ORDER BY calls_appointment_date DESC`;
@@ -196,6 +197,7 @@ async function queryBigQuery(clientId) {
       transcriptLink: row.calls_transcript_link || '',
       lostReason: row.calls_lost_reason || '',
       productPurchased: row.calls_product_purchased || '',
+      prospectEmail: row.calls_prospect_email || '',
     };
   });
 
@@ -312,6 +314,26 @@ function generateDemoCalls() {
   // Lost reasons for variety
   const lostReasons = ["Can't Afford", 'Closer Error', 'Not Interested', 'Timing', 'Other'];
 
+  // Pool of prospect emails — some prospects will appear on multiple calls
+  // to enable deposit lifecycle tracking (Deposit → Closed-Won/Lost/Still Open)
+  const PROSPECT_EMAILS = [
+    'john.smith@example.com',      // 0
+    'jane.doe@example.com',        // 1
+    'bob.wilson@example.com',      // 2
+    'alice.johnson@example.com',   // 3
+    'charlie.brown@example.com',   // 4
+    'diana.prince@example.com',    // 5
+    'edward.norton@example.com',   // 6
+    'fiona.apple@example.com',     // 7
+    'greg.house@example.com',      // 8
+    'helen.troy@example.com',      // 9
+    'ivan.drago@example.com',      // 10
+    'julia.roberts@example.com',   // 11
+    'kevin.hart@example.com',      // 12
+    'lisa.simpson@example.com',    // 13
+    'mark.twain@example.com',      // 14
+  ];
+
   for (let i = 0; i < numCalls; i++) {
     // Spread calls over the last ~90 days
     const daysAgo = Math.floor((i / numCalls) * 90);
@@ -397,6 +419,11 @@ function generateDemoCalls() {
       callOutcome = 'No Show';
     }
 
+    // Assign prospect email — reuse emails for some prospects so they have
+    // multiple calls (needed for deposit lifecycle: Deposit → Closed-Won/Lost)
+    // Most calls get unique-ish prospects; some share to create multi-call patterns
+    const prospectEmail = PROSPECT_EMAILS[i % PROSPECT_EMAILS.length];
+
     calls.push({
       callId: `demo_call_${String(i + 1).padStart(3, '0')}`,
       appointmentDate,
@@ -418,6 +445,7 @@ function generateDemoCalls() {
       recordingUrl: attendance === 'Show' ? `https://app.closermetrix.com/recordings/demo_rec_${String(i + 1).padStart(3, '0')}` : '',
       transcriptLink: attendance === 'Show' ? `https://app.closermetrix.com/transcripts/demo_tr_${String(i + 1).padStart(3, '0')}` : '',
       lostReason,
+      prospectEmail,
     });
   }
 

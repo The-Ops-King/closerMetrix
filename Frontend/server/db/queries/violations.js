@@ -27,6 +27,8 @@
 const bq = require('../BigQueryClient');
 const logger = require('../../utils/logger');
 const { generateTimeSeries } = require('./demoTimeSeries');
+const { RISK_CATEGORIES, RISK_CATEGORY_LABELS, RISK_CATEGORY_COLORS } = require('../../../shared/categoryValues');
+const { RISK_TREND_CHART_CONFIG, NEON_HEX } = require('../../../shared/chartMappings');
 
 /**
  * Fetch all violations/compliance data for a client.
@@ -127,7 +129,7 @@ async function queryBigQuery(clientId, filters, tier) {
   const uniqueCallsWithRisk = uniqueCallIds.size;
 
   // Category counts
-  const categoryCounts = { Claims: 0, Guarantees: 0, Earnings: 0, Pressure: 0 };
+  const categoryCounts = Object.fromEntries(RISK_CATEGORIES.map(cat => [cat, 0]));
   risks.forEach(r => {
     if (categoryCounts[r.risk_category] !== undefined) categoryCounts[r.risk_category]++;
   });
@@ -158,7 +160,7 @@ async function queryBigQuery(clientId, filters, tier) {
     weekStart.setDate(weekStart.getDate() - weekStart.getDay());
     const key = weekStart.toISOString().split('T')[0];
     weekMap[key] = (weekMap[key] || 0) + 1;
-    if (!catWeekMap[key]) catWeekMap[key] = { claims: 0, guarantees: 0, earnings: 0, pressure: 0 };
+    if (!catWeekMap[key]) catWeekMap[key] = Object.fromEntries(RISK_CATEGORIES.map(cat => [cat.toLowerCase(), 0]));
     const cat = (r.risk_category || '').toLowerCase();
     if (catWeekMap[key][cat] !== undefined) catWeekMap[key][cat]++;
   });
@@ -194,12 +196,10 @@ async function queryBigQuery(clientId, filters, tier) {
         avgFlaggedPerCall: { value: uniqueCallsWithRisk > 0 ? riskFlagCount / uniqueCallsWithRisk : 0, label: 'Avg Flagged / Call', format: 'decimal', glowColor: 'amber' },
         ftcSecWarnings: { value: ftcSecWarnings, label: 'FTC / SEC Warnings', format: 'number', glowColor: 'magenta' },
       },
-      riskCategories: {
-        claims: { value: categoryCounts.Claims, label: 'Claims', format: 'number', glowColor: 'red' },
-        guarantees: { value: categoryCounts.Guarantees, label: 'Guarantees', format: 'number', glowColor: 'amber' },
-        earnings: { value: categoryCounts.Earnings, label: 'Earnings / Income', format: 'number', glowColor: 'magenta' },
-        pressure: { value: categoryCounts.Pressure, label: 'Pressure / Urgency', format: 'number', glowColor: 'purple' },
-      },
+      riskCategories: Object.fromEntries(RISK_CATEGORIES.map(cat => [
+        cat.toLowerCase(),
+        { value: categoryCounts[cat], label: RISK_CATEGORY_LABELS[cat], format: 'number', glowColor: RISK_CATEGORY_COLORS[cat] },
+      ])),
       riskByCallType: {
         firstCallRisk: { value: firstCalls > 0 ? firstCallRisks / firstCalls : 0, label: 'First Call Infractions', format: 'percent', glowColor: 'red' },
         followUpRisk: { value: followUps > 0 ? followUpRisks / followUps : 0, label: 'Follow-Up Infractions', format: 'percent', glowColor: 'red' },
@@ -218,12 +218,7 @@ async function queryBigQuery(clientId, filters, tier) {
       },
       riskTrends: {
         type: 'line', label: 'Risk Category Trends',
-        series: [
-          { key: 'claims', label: 'Claims', color: 'red' },
-          { key: 'guarantees', label: 'Guarantees', color: 'amber' },
-          { key: 'earnings', label: 'Earnings', color: 'magenta' },
-          { key: 'pressure', label: 'Pressure', color: 'purple' },
-        ],
+        series: RISK_TREND_CHART_CONFIG,
         data: trendData,
       },
     },
@@ -250,12 +245,12 @@ function getDemoData(tier = 'executive', filters = {}) {
         avgFlaggedPerCall: { value: 1.56, label: 'Avg Flagged / Call', format: 'decimal', glowColor: 'amber' },
         ftcSecWarnings: { value: 7, label: 'FTC / SEC Warnings', format: 'number', glowColor: 'magenta' },
       },
-      riskCategories: {
-        claims: { value: 4, label: 'Claims', format: 'number', glowColor: 'red' },
-        guarantees: { value: 3, label: 'Guarantees', format: 'number', glowColor: 'amber' },
-        earnings: { value: 5, label: 'Earnings / Income', format: 'number', glowColor: 'magenta' },
-        pressure: { value: 2, label: 'Pressure / Urgency', format: 'number', glowColor: 'purple' },
-      },
+      riskCategories: Object.fromEntries(
+        [4, 3, 5, 2].map((val, i) => [
+          RISK_CATEGORIES[i].toLowerCase(),
+          { value: val, label: RISK_CATEGORY_LABELS[RISK_CATEGORIES[i]], format: 'number', glowColor: RISK_CATEGORY_COLORS[RISK_CATEGORIES[i]] },
+        ])
+      ),
       riskByCallType: {
         firstCallRisk: { value: 0.038, label: 'First Call Infractions', format: 'percent', glowColor: 'red' },
         followUpRisk: { value: 0.072, label: 'Follow-Up Infractions', format: 'percent', glowColor: 'red' },
@@ -286,18 +281,12 @@ function getDemoData(tier = 'executive', filters = {}) {
       riskTrends: {
         type: 'line',
         label: 'Risk Category Trends',
-        series: [
-          { key: 'claims', label: 'Claims', color: 'red' },
-          { key: 'guarantees', label: 'Guarantees', color: 'amber' },
-          { key: 'earnings', label: 'Earnings', color: 'magenta' },
-          { key: 'pressure', label: 'Pressure', color: 'purple' },
-        ],
-        data: generateTimeSeries(filters, [
-          { key: 'claims', base: 1, variance: 1 },
-          { key: 'guarantees', base: 1, variance: 1 },
-          { key: 'earnings', base: 1, variance: 1 },
-          { key: 'pressure', base: 1, variance: 0.8 },
-        ]),
+        series: RISK_TREND_CHART_CONFIG,
+        data: generateTimeSeries(filters, RISK_TREND_CHART_CONFIG.map(({ key }) => ({
+          key,
+          base: 1,
+          variance: key === 'pressure' ? 0.8 : 1,
+        }))),
       },
     },
     tables: {

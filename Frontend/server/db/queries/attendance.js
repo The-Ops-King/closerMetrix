@@ -22,6 +22,7 @@
 const bq = require('../BigQueryClient');
 const logger = require('../../utils/logger');
 const { generateTimeSeries } = require('./demoTimeSeries');
+const { NEON_HEX } = require('../../../shared/chartMappings');
 
 /**
  * Fetch all attendance data for a client.
@@ -379,11 +380,11 @@ function getDemoData(tier = 'insight', filters = {}) {
         type: 'pie',
         label: 'Attendance Breakdown',
         data: [
-          { label: 'Show', value: 2516, color: '#6BCF7F' },
-          { label: 'Ghosted', value: 1037, color: '#FFD93D' },
-          { label: 'Rescheduled', value: 31, color: '#FF8C00' },
-          { label: 'Overbooked', value: 120, color: '#B84DFF' },
-          { label: 'Not Pitched', value: 80, color: '#FF4D6D' },
+          { label: 'Show', value: 2516, color: NEON_HEX.green },
+          { label: 'Ghosted', value: 1037, color: NEON_HEX.amber },
+          { label: 'Rescheduled', value: 31, color: NEON_HEX.purple },
+          { label: 'Overbooked', value: 120, color: NEON_HEX.blue },
+          { label: 'Not Pitched', value: 80, color: NEON_HEX.red },
         ],
       },
 
@@ -394,7 +395,7 @@ function getDemoData(tier = 'insight', filters = {}) {
         series: [
           { key: 'ghosted', label: '# Ghosted', color: 'amber' },
           { key: 'cancelled', label: 'Canceled', color: 'red' },
-          { key: 'rescheduled', label: 'Rescheduled', color: '#FF8C00' },
+          { key: 'rescheduled', label: 'Rescheduled', color: NEON_HEX.purple },
         ],
         data: generateTimeSeries(filters, [
           { key: 'ghosted', base: 18, variance: 8 },
@@ -408,10 +409,10 @@ function getDemoData(tier = 'insight', filters = {}) {
         type: 'pie',
         label: 'Not Taken Reason',
         data: [
-          { label: 'Ghosted - No Show', value: 1037, color: '#FFD93D' },
-          { label: 'Not Pitched',       value: 80,   color: '#FF4D6D' },
-          { label: 'Overbooked',        value: 60,   color: '#B84DFF' },
-          { label: 'Rescheduled',       value: 31,   color: '#FF8C00' },
+          { label: 'Ghosted - No Show', value: 1037, color: NEON_HEX.amber },
+          { label: 'Not Pitched',       value: 80,   color: NEON_HEX.red },
+          { label: 'Overbooked',        value: 60,   color: NEON_HEX.purple },
+          { label: 'Rescheduled',       value: 31,   color: NEON_HEX.blue },
         ],
       },
 
@@ -453,7 +454,7 @@ function getDemoData(tier = 'insight', filters = {}) {
         { key: 'show', label: 'Show', color: 'green' },
         { key: 'ghosted', label: 'Ghosted', color: 'amber' },
         { key: 'cancelled', label: 'Cancelled', color: 'red' },
-        { key: 'rescheduled', label: 'Rescheduled', color: '#FF8C00' },
+        { key: 'rescheduled', label: 'Rescheduled', color: NEON_HEX.purple },
         { key: 'notPitched', label: 'Not Pitched', color: 'magenta' },
       ],
       data: closerNames.map((name) => {

@@ -26,6 +26,8 @@
 const bq = require('../BigQueryClient');
 const logger = require('../../utils/logger');
 const { computeGranularity } = require('./demoTimeSeries');
+const { OBJECTION_TYPE_COLORS } = require('../../../shared/categoryValues');
+const { NEON_HEX } = require('../../../shared/chartMappings');
 
 /**
  * Fetch all objection intelligence data for a client.
@@ -256,16 +258,9 @@ async function queryBigQuery(clientId, filters, tier) {
 // DEMO DATA -- Filter-aware sample data for development and demos
 // ================================================================
 
-/** Color assigned to each objection type (used by pie chart) */
-const TYPE_COLORS = {
-  'Financial': 'cyan',
-  'Think About It': 'amber',
-  'Spouse/Partner': 'blue',
-  'Timing': 'green',
-  'Already Tried': 'red',
-  'Not Interested': 'purple',
-  'Other': 'muted',
-};
+/** Color assigned to each objection type (used by pie chart).
+ *  Delegates to shared OBJECTION_TYPE_COLORS from categoryValues.js. */
+const TYPE_COLORS = OBJECTION_TYPE_COLORS;
 
 /** Closer ID → display name mapping (matches tokenManager demo closers) */
 const CLOSER_MAP = {
@@ -309,16 +304,9 @@ const ALL_RECORDS = [
   { objectionType: 'Already Tried', resolved: false, closerId: 'demo_closer_4', closer: 'Alex', callOutcome: 'DQ', appointmentDate: '2026-01-01', recordingUrl: 'https://app.closermetrix.com/recordings/rec028' },
 ];
 
-/** Top-3 color assignments keyed by objection type */
-const TREND_COLORS = {
-  'Financial': 'cyan',
-  'Think About It': 'amber',
-  'Spouse/Partner': 'blue',
-  'Timing': 'green',
-  'Already Tried': 'red',
-  'Not Interested': 'purple',
-  'Other': 'muted',
-};
+/** Top-3 color assignments keyed by objection type.
+ *  Delegates to shared OBJECTION_TYPE_COLORS from categoryValues.js. */
+const TREND_COLORS = OBJECTION_TYPE_COLORS;
 
 /**
  * Build a time-series from actual records, bucketed by granularity.
