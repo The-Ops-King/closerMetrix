@@ -11,7 +11,7 @@
  *
  * Sections:
  *   overall -- 2 scorecards: overall script adherence, objection handling quality
- *   bySection -- 7 scorecards: one per script section (Intro through Objections)
+ *   bySection -- 8 scorecards: one per script section (Intro through Objections)
  *
  * Charts:
  *   radarData -- Radar: Script adherence by section (team avg + top performer)
@@ -54,12 +54,12 @@ async function getAdherenceData(clientId, filters = {}, tier = 'executive') {
  * Run real BigQuery queries for script adherence data.
  * Runs 3 queries in parallel: scorecard, per-closer, time-series.
  *
- * Score column mapping to 8 radar axes:
- *   Intro → script_adherence_score (proxy)
- *   Pain → discovery_score
+ * All 8 radar axes now have distinct score columns in the view:
+ *   Intro → intro_score
+ *   Pain → pain_score
  *   Discovery → discovery_score
- *   Goal → discovery_score (proxy)
- *   Transition → script_adherence_score (proxy)
+ *   Goal → goal_score
+ *   Transition → transition_score
  *   Pitch → pitch_score
  *   Close → close_attempt_score
  *   Objections → objection_handling_score
@@ -74,10 +74,13 @@ async function queryBigQuery(clientId, filters, tier) {
 
   // 1) Scorecard: average of each score column
   const scorecardSql = `SELECT
-      AVG(CAST(calls_overall_call_score AS FLOAT64)) as overall_score,
-      AVG(CAST(calls_objection_handling_score AS FLOAT64)) as obj_handling,
       AVG(CAST(calls_script_adherence_score AS FLOAT64)) as script_adherence,
+      AVG(CAST(calls_objection_handling_score AS FLOAT64)) as obj_handling,
+      AVG(CAST(calls_intro_score AS FLOAT64)) as intro,
+      AVG(CAST(calls_pain_score AS FLOAT64)) as pain,
       AVG(CAST(calls_discovery_score AS FLOAT64)) as discovery,
+      AVG(CAST(calls_goal_score AS FLOAT64)) as goal,
+      AVG(CAST(calls_transition_score AS FLOAT64)) as transition,
       AVG(CAST(calls_pitch_score AS FLOAT64)) as pitch,
       AVG(CAST(calls_close_attempt_score AS FLOAT64)) as close_attempt
     FROM ${VIEW} ${scoreWhere}`;
@@ -86,20 +89,23 @@ async function queryBigQuery(clientId, filters, tier) {
   const closerSql = `SELECT
       closers_name as closer_name,
       calls_closer_id as closer_id,
-      AVG(CAST(calls_overall_call_score AS FLOAT64)) as overall_score,
-      AVG(CAST(calls_objection_handling_score AS FLOAT64)) as obj_handling,
       AVG(CAST(calls_script_adherence_score AS FLOAT64)) as script_adherence,
+      AVG(CAST(calls_objection_handling_score AS FLOAT64)) as obj_handling,
+      AVG(CAST(calls_intro_score AS FLOAT64)) as intro,
+      AVG(CAST(calls_pain_score AS FLOAT64)) as pain,
       AVG(CAST(calls_discovery_score AS FLOAT64)) as discovery,
+      AVG(CAST(calls_goal_score AS FLOAT64)) as goal,
+      AVG(CAST(calls_transition_score AS FLOAT64)) as transition,
       AVG(CAST(calls_pitch_score AS FLOAT64)) as pitch,
       AVG(CAST(calls_close_attempt_score AS FLOAT64)) as close_attempt
     FROM ${VIEW} ${scoreWhere}
     GROUP BY closers_name, calls_closer_id
-    ORDER BY overall_score DESC`;
+    ORDER BY script_adherence DESC`;
 
   // 3) Time-series: weekly averages
   const tsSql = `SELECT
       ${tb} as bucket,
-      AVG(CAST(calls_overall_call_score AS FLOAT64)) as overall,
+      AVG(CAST(calls_script_adherence_score AS FLOAT64)) as overall,
       AVG(CAST(calls_close_attempt_score AS FLOAT64)) as close_score,
       AVG(CAST(calls_objection_handling_score AS FLOAT64)) as obj_score
     FROM ${VIEW} ${scoreWhere}
@@ -115,27 +121,19 @@ async function queryBigQuery(clientId, filters, tier) {
   const cl = clRows || [];
   const ts = tsRows || [];
 
-  // Map available scores to 8 radar axes
-  const scriptAdherence = num(sc.script_adherence);
-  const discovery = num(sc.discovery);
-  const pitch = num(sc.pitch);
-  const closeAttempt = num(sc.close_attempt);
-  const objHandlingVal = num(sc.obj_handling);
-
   // Build radar data per closer — 8 axes matching SCRIPT_SECTIONS
-  // Some axes share score columns (see comment at top of queryBigQuery)
   const radarByCloser = cl.map(r => ({
     label: r.closer_name,
     closerId: r.closer_id,
     values: [
-      num(r.script_adherence),  // Intro
-      num(r.discovery),         // Pain
-      num(r.discovery),         // Discovery
-      num(r.discovery),         // Goal
-      num(r.script_adherence),  // Transition
-      num(r.pitch),             // Pitch
-      num(r.close_attempt),     // Close
-      num(r.obj_handling),      // Objections
+      num(r.intro),        // Intro
+      num(r.pain),         // Pain
+      num(r.discovery),    // Discovery
+      num(r.goal),         // Goal
+      num(r.transition),   // Transition
+      num(r.pitch),        // Pitch
+      num(r.close_attempt),// Close
+      num(r.obj_handling), // Objections
     ],
   }));
 
@@ -149,18 +147,18 @@ async function queryBigQuery(clientId, filters, tier) {
   return {
     sections: {
       overall: {
-        overallScore: { value: scriptAdherence, label: 'Script Adherence Score', format: 'score' },
-        objectionHandling: { value: objHandlingVal, label: 'Objection Handling Quality', format: 'score' },
+        overallScore: { value: num(sc.script_adherence), label: 'Script Adherence Score', format: 'score' },
+        objectionHandling: { value: num(sc.obj_handling), label: 'Objection Handling Quality', format: 'score' },
       },
       bySection: {
-        intro: { value: scriptAdherence, label: 'Intro', format: 'score' },
-        pain: { value: discovery, label: 'Pain', format: 'score' },
-        discovery: { value: discovery, label: 'Discovery', format: 'score' },
-        goal: { value: discovery, label: 'Goal', format: 'score' },
-        transition: { value: scriptAdherence, label: 'Transition', format: 'score' },
-        pitch: { value: pitch, label: 'Pitch', format: 'score' },
-        close: { value: closeAttempt, label: 'Close', format: 'score' },
-        objections: { value: objHandlingVal, label: 'Objections', format: 'score' },
+        intro: { value: num(sc.intro), label: 'Intro', format: 'score' },
+        pain: { value: num(sc.pain), label: 'Pain', format: 'score' },
+        discovery: { value: num(sc.discovery), label: 'Discovery', format: 'score' },
+        goal: { value: num(sc.goal), label: 'Goal', format: 'score' },
+        transition: { value: num(sc.transition), label: 'Transition', format: 'score' },
+        pitch: { value: num(sc.pitch), label: 'Pitch', format: 'score' },
+        close: { value: num(sc.close_attempt), label: 'Close', format: 'score' },
+        objections: { value: num(sc.obj_handling), label: 'Objections', format: 'score' },
       },
     },
     charts: {
@@ -205,11 +203,11 @@ function getDemoData(tier = 'executive', filters = {}) {
         objectionHandling: { value: 6.8, label: 'Objection Handling Quality', format: 'score' },
       },
       bySection: {
-        intro: { value: 7.2, label: 'Intro', format: 'score' },
+        intro: { value: 8.1, label: 'Intro', format: 'score' },
         pain: { value: 7.4, label: 'Pain', format: 'score' },
-        discovery: { value: 7.4, label: 'Discovery', format: 'score' },
-        goal: { value: 7.4, label: 'Goal', format: 'score' },
-        transition: { value: 7.2, label: 'Transition', format: 'score' },
+        discovery: { value: 7.0, label: 'Discovery', format: 'score' },
+        goal: { value: 7.6, label: 'Goal', format: 'score' },
+        transition: { value: 7.8, label: 'Transition', format: 'score' },
         pitch: { value: 6.5, label: 'Pitch', format: 'score' },
         close: { value: 5.8, label: 'Close', format: 'score' },
         objections: { value: 6.2, label: 'Objections', format: 'score' },
@@ -221,10 +219,10 @@ function getDemoData(tier = 'executive', filters = {}) {
         label: 'Script Adherence by Section',
         axes: SCRIPT_SECTIONS.map(s => s.label),
         byCloser: [
-          { label: 'Sarah', closerId: 'demo_closer_1', values: [9.2, 8.8, 8.8, 8.8, 9.2, 8.2, 7.8, 8.0] },
-          { label: 'Mike', closerId: 'demo_closer_2', values: [7.4, 6.8, 6.8, 6.8, 7.4, 5.8, 4.9, 5.5] },
-          { label: 'Jessica', closerId: 'demo_closer_3', values: [8.0, 7.5, 7.5, 7.5, 8.0, 6.8, 6.0, 6.5] },
-          { label: 'Alex', closerId: 'demo_closer_4', values: [7.8, 6.5, 6.5, 6.5, 7.8, 5.2, 4.5, 5.0] },
+          { label: 'Sarah', closerId: 'demo_closer_1', values: [9.2, 8.5, 8.8, 8.9, 9.0, 8.2, 7.8, 8.0] },
+          { label: 'Mike', closerId: 'demo_closer_2', values: [7.4, 6.2, 6.8, 7.0, 7.2, 5.8, 4.9, 5.5] },
+          { label: 'Jessica', closerId: 'demo_closer_3', values: [8.0, 7.1, 7.5, 7.8, 7.9, 6.8, 6.0, 6.5] },
+          { label: 'Alex', closerId: 'demo_closer_4', values: [7.8, 6.0, 6.5, 6.6, 7.2, 5.2, 4.5, 5.0] },
         ],
       },
       adherenceByCloser: {

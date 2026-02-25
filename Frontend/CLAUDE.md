@@ -31,6 +31,26 @@ cd Frontend/client && nohup npm run dev > /tmp/closermetrix-vite.log 2>&1 &
 
 ---
 
+## TESTING — ALWAYS USE REAL DATA
+
+**NEVER test with demo tokens** (`demo-insight`, `demo-executive`). Demo data uses hardcoded fake values that can mask real bugs (wrong column names, missing BQ fields, broken queries). Always test with real BigQuery data using one of these tokens:
+
+| Token | Client | Tier | Use For |
+|-------|--------|------|---------|
+| `af3016c9-5377-43f3-9d16-03428af0cc4d` | himym (How I Met Your Mother Dating) | **executive** | Full testing — all pages including Violations & Adherence |
+| `eca9e04e-f035-4107-9f25-ebce1c64c89f` | friends_inc | **insight** | Testing insight-tier pages |
+
+**Playwright verification URLs:**
+```
+http://localhost:5173/d/af3016c9-5377-43f3-9d16-03428af0cc4d           # Overview (executive)
+http://localhost:5173/d/af3016c9-5377-43f3-9d16-03428af0cc4d/adherence  # Adherence page
+http://localhost:5173/d/af3016c9-5377-43f3-9d16-03428af0cc4d/violations # Violations page
+```
+
+If a query works with demo data but fails with real data, the bug is in the SQL column names or data mapping — check the BigQuery view `v_calls_joined_flat_prefixed` for actual column names.
+
+---
+
 ## REVIEW.MD — KEEP THIS UPDATED
 
 The file `review.md` at the project root is a complete reference of every page, scorecard, chart, table, formula, and color in the dashboard. **Whenever you change a metric formula, add/remove a scorecard, change a color, rename a label, add a new data field, or modify chart behavior, update `review.md` to match.** This file is Tyler's single reference for what the dashboard actually does — if it's wrong, he can't review the product accurately.

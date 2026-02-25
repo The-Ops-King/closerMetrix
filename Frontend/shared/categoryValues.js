@@ -136,11 +136,11 @@ const OUTCOME_COLORS = {
  * All 8 axes now have distinct score fields from the AI pipeline.
  */
 const SCRIPT_SECTIONS = [
-  { key: 'intro',      label: 'Intro',      scoreField: 'scriptAdherenceScore' },
-  { key: 'pain',       label: 'Pain',       scoreField: 'discoveryScore' },
+  { key: 'intro',      label: 'Intro',      scoreField: 'introScore' },
+  { key: 'pain',       label: 'Pain',       scoreField: 'painScore' },
   { key: 'discovery',  label: 'Discovery',  scoreField: 'discoveryScore' },
-  { key: 'goal',       label: 'Goal',       scoreField: 'discoveryScore' },
-  { key: 'transition', label: 'Transition', scoreField: 'scriptAdherenceScore' },
+  { key: 'goal',       label: 'Goal',       scoreField: 'goalScore' },
+  { key: 'transition', label: 'Transition', scoreField: 'transitionScore' },
   { key: 'pitch',      label: 'Pitch',      scoreField: 'pitchScore' },
   { key: 'close',      label: 'Close',      scoreField: 'closeAttemptScore' },
   { key: 'objections', label: 'Objections', scoreField: 'objectionHandlingScore' },

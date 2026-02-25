@@ -98,7 +98,12 @@ async function queryBigQuery(clientId) {
       calls_close_attempt_score,
       calls_objection_handling_score,
       calls_prospect_fit_score,
+      calls_intro_score,
+      calls_pain_score,
+      calls_goal_score,
+      calls_transition_score,
       calls_key_moments,
+      calls_compliance_flags,
       calls_payment_plan,
       calls_recording_url,
       calls_transcript_link,
@@ -198,7 +203,12 @@ async function queryBigQuery(clientId) {
       closeAttemptScore: num(row.calls_close_attempt_score),
       objectionHandlingScore: num(row.calls_objection_handling_score),
       prospectFitScore: num(row.calls_prospect_fit_score),
+      introScore: num(row.calls_intro_score),
+      painScore: num(row.calls_pain_score),
+      goalScore: num(row.calls_goal_score),
+      transitionScore: num(row.calls_transition_score),
       keyMoments: row.calls_key_moments || '',
+      complianceFlags: row.calls_compliance_flags ? (typeof row.calls_compliance_flags === 'string' ? JSON.parse(row.calls_compliance_flags) : row.calls_compliance_flags) : [],
       paymentPlan: row.calls_payment_plan || '',
       recordingUrl: row.calls_recording_url || '',
       transcriptLink: row.calls_transcript_link || '',
@@ -381,6 +391,11 @@ function generateDemoCalls() {
     let closeAttemptScore = 0;
     let objectionHandlingScore = 0;
     let prospectFitScore = 0;
+    let introScore = 0;
+    let painScore = 0;
+    let goalScore = 0;
+    let transitionScore = 0;
+    let complianceFlags = [];
     let lostReason = '';
     let paymentPlan = '';
 
@@ -425,6 +440,23 @@ function generateDemoCalls() {
       closeAttemptScore = randInt(4, 9, i * 7 + 12);
       objectionHandlingScore = randInt(4, 9, i * 7 + 13);
       prospectFitScore = randInt(4, 9, i * 7 + 14);
+      introScore = randInt(4, 9, i * 7 + 15);
+      painScore = randInt(4, 9, i * 7 + 16);
+      goalScore = randInt(4, 9, i * 7 + 17);
+      transitionScore = randInt(4, 9, i * 7 + 18);
+
+      // Compliance flags — add to ~20% of show calls
+      if (seededRandom(i * 7 + 19) < 0.20) {
+        const flagCategories = ['Claims', 'Guarantees', 'Earnings', 'Pressure'];
+        const flagCat = pick(flagCategories, i * 7 + 20);
+        complianceFlags = [{
+          category: flagCat,
+          exact_phrase: `Demo ${flagCat.toLowerCase()} flag — example phrase`,
+          timestamp: `00:${String(randInt(5, 45, i * 7 + 21)).padStart(2, '0')}:00`,
+          risk_level: pick(['high', 'medium', 'low'], i * 7 + 22),
+          explanation: `This is a demo ${flagCat.toLowerCase()} compliance flag for testing.`,
+        }];
+      }
 
       // Payment plan (for revenue deals)
       if (callOutcome === 'Closed - Won') {
@@ -461,7 +493,12 @@ function generateDemoCalls() {
       closeAttemptScore,
       objectionHandlingScore,
       prospectFitScore,
+      introScore,
+      painScore,
+      goalScore,
+      transitionScore,
       keyMoments: attendance === 'Show' ? 'Demo key moments summary' : '',
+      complianceFlags,
       paymentPlan,
       recordingUrl: attendance === 'Show' ? `https://app.closermetrix.com/recordings/demo_rec_${String(i + 1).padStart(3, '0')}` : '',
       transcriptLink: attendance === 'Show' ? `https://app.closermetrix.com/transcripts/demo_tr_${String(i + 1).padStart(3, '0')}` : '',
