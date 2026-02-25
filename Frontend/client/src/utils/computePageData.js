@@ -571,7 +571,7 @@ function computeFinancial(calls, granularity, prev) {
       avgDealRevenue: m('Avg Revenue Per Deal', round(sd(closedRevenue, closed.length)), 'currency', 'green'),
       avgCashPerDeal: m('Avg Cash Per Deal', round(sd(closedCash, closed.length)), 'currency', 'teal'),
       pifPct: m('% PIFs', (() => {
-        const pifCount = revenueDeals.filter(c => c.paymentPlanOffered === 'full').length;
+        const pifCount = revenueDeals.filter(c => (c.paymentPlan || '').toLowerCase() === 'full').length;
         return round(sd(pifCount, revenueDeals.length), 3);
       })(), 'percent', 'amber'),
       refundCount: m('# of Refunds', 0, 'number', 'red'),
@@ -2001,7 +2001,7 @@ function computeAdherence(calls, granularity, prev) {
 
   // Overall scores
   const overallAdherence = round(avg(held, 'scriptAdherenceScore'), 1);
-  const objHandling = round(avg(held, 'objectionAdherenceScore'), 1);
+  const objHandling = round(avg(held, 'objectionHandlingScore'), 1);
 
   const sections = {
     overall: {
@@ -2023,7 +2023,7 @@ function computeAdherence(calls, granularity, prev) {
     const pHeld = prev.calls.filter(c => isShow(c) && c.scriptAdherenceScore > 0);
     if (pHeld.length > 0) {
       const pAdherence = round(avg(pHeld, 'scriptAdherenceScore'), 1);
-      const pObjHandling = round(avg(pHeld, 'objectionAdherenceScore'), 1);
+      const pObjHandling = round(avg(pHeld, 'objectionHandlingScore'), 1);
       sections.overall.adherenceScore = withDelta(sections.overall.adherenceScore, overallAdherence || 0, pAdherence || 0, dl, 'up');
       sections.overall.objHandlingScore = withDelta(sections.overall.objHandlingScore, objHandling || 0, pObjHandling || 0, dl, 'up');
     }
@@ -2047,7 +2047,7 @@ function computeAdherence(calls, granularity, prev) {
     });
     objHandlingByCloser.push({
       date: name,
-      score: round(avg(closerCalls, 'objectionAdherenceScore'), 1) || 0,
+      score: round(avg(closerCalls, 'objectionHandlingScore'), 1) || 0,
     });
   }
   adherenceByCloser.sort((a, b) => b.score - a.score);

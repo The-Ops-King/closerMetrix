@@ -141,7 +141,7 @@ ${scoreFields}
 - Return ONLY the JSON object. No markdown code fences, no preamble, no explanation.
 - If no objections were raised, return an empty array for "objections".
 - All scores must be numbers between ${scoringRubric.scale.min} and ${scoringRubric.scale.max}.
-- If the closer never pitched (outcome = "Not Pitched"), pitch_adherence_score and close_adherence_score should reflect that no attempt was made (typically 1-2).
+- If the closer never pitched (outcome = "Not Pitched"), pitch_score and close_attempt_score should reflect that no attempt was made (typically 1-2).
 - If script_adherence cannot be assessed (no script provided), set script_adherence_score to null.
 - Be honest and critical in scoring. A score of 7 means "average" — most closers should land around 6-7 unless they're truly exceptional or poor.
 - For "payment_plan_offered": set to "full" if prospect paid in full, "deposit" if a deposit was taken, "installments" if a payment plan was discussed, "financed" if third-party financing was offered, "none" if no payment discussion, or null if you can't determine.

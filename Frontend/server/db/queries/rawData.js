@@ -93,16 +93,13 @@ async function queryBigQuery(clientId) {
       calls_duration_minutes,
       calls_overall_call_score,
       calls_script_adherence_score,
-      calls_pitch_adherence_score,
-      calls_close_adherence_score,
-      calls_objection_adherence_score,
-      calls_intro_score,
-      calls_pain_score,
-      calls_goal_score,
-      calls_transition_score,
+      calls_discovery_score,
+      calls_pitch_score,
+      calls_close_attempt_score,
+      calls_objection_handling_score,
+      calls_prospect_fit_score,
       calls_key_moments,
-      calls_compliance_flags,
-      calls_payment_plan_offered,
+      calls_payment_plan,
       calls_recording_url,
       calls_transcript_link,
       calls_lost_reason,
@@ -196,16 +193,13 @@ async function queryBigQuery(clientId) {
       durationMinutes: num(row.calls_duration_minutes),
       overallCallScore: num(row.calls_overall_call_score),
       scriptAdherenceScore: num(row.calls_script_adherence_score),
-      pitchAdherenceScore: num(row.calls_pitch_adherence_score),
-      closeAdherenceScore: num(row.calls_close_adherence_score),
-      objectionAdherenceScore: num(row.calls_objection_adherence_score),
-      introScore: num(row.calls_intro_score),
-      painScore: num(row.calls_pain_score),
-      goalScore: num(row.calls_goal_score),
-      transitionScore: num(row.calls_transition_score),
+      discoveryScore: num(row.calls_discovery_score),
+      pitchScore: num(row.calls_pitch_score),
+      closeAttemptScore: num(row.calls_close_attempt_score),
+      objectionHandlingScore: num(row.calls_objection_handling_score),
+      prospectFitScore: num(row.calls_prospect_fit_score),
       keyMoments: row.calls_key_moments || '',
-      complianceFlags: row.calls_compliance_flags ? JSON.parse(row.calls_compliance_flags) : [],
-      paymentPlanOffered: row.calls_payment_plan_offered || '',
+      paymentPlan: row.calls_payment_plan || '',
       recordingUrl: row.calls_recording_url || '',
       transcriptLink: row.calls_transcript_link || '',
       lostReason: row.calls_lost_reason || '',
@@ -382,16 +376,13 @@ function generateDemoCalls() {
     let durationMinutes = 0;
     let overallCallScore = 0;
     let scriptAdherenceScore = 0;
-    let pitchAdherenceScore = 0;
-    let closeAdherenceScore = 0;
-    let objectionAdherenceScore = 0;
+    let discoveryScore = 0;
+    let pitchScore = 0;
+    let closeAttemptScore = 0;
+    let objectionHandlingScore = 0;
+    let prospectFitScore = 0;
     let lostReason = '';
-    let introScore = 0;
-    let painScore = 0;
-    let goalScore = 0;
-    let transitionScore = 0;
-    let complianceFlags = [];
-    let paymentPlanOffered = '';
+    let paymentPlan = '';
 
     if (attendance === 'Show') {
       // Outcome distribution for shows:
@@ -429,33 +420,18 @@ function generateDemoCalls() {
       // AI scores for shows (varying quality)
       overallCallScore = randInt(5, 9, i * 7 + 8);
       scriptAdherenceScore = randInt(5, 9, i * 7 + 9);
-      pitchAdherenceScore = randInt(5, 9, i * 7 + 11);
-      closeAdherenceScore = randInt(4, 9, i * 7 + 12);
-      objectionAdherenceScore = randInt(4, 9, i * 7 + 13);
-      introScore = randInt(4, 9, i * 7 + 14);
-      painScore = randInt(4, 9, i * 7 + 15);
-      goalScore = randInt(4, 9, i * 7 + 16);
-      transitionScore = randInt(4, 9, i * 7 + 17);
+      discoveryScore = randInt(4, 9, i * 7 + 10);
+      pitchScore = randInt(5, 9, i * 7 + 11);
+      closeAttemptScore = randInt(4, 9, i * 7 + 12);
+      objectionHandlingScore = randInt(4, 9, i * 7 + 13);
+      prospectFitScore = randInt(4, 9, i * 7 + 14);
 
-      // Payment plan offered (for revenue deals)
+      // Payment plan (for revenue deals)
       if (callOutcome === 'Closed - Won') {
         const planRoll = seededRandom(i * 7 + 18);
-        paymentPlanOffered = planRoll < 0.40 ? 'full' : planRoll < 0.70 ? 'deposit' : planRoll < 0.90 ? 'installments' : 'none';
+        paymentPlan = planRoll < 0.40 ? 'Full' : planRoll < 0.70 ? 'Deposit' : planRoll < 0.90 ? 'Payment Plan' : '';
       } else if (callOutcome === 'Deposit') {
-        paymentPlanOffered = 'deposit';
-      }
-
-      // Compliance flags — add to ~20% of show calls
-      if (seededRandom(i * 7 + 19) < 0.20) {
-        const flagCategories = ['Claims', 'Guarantees', 'Earnings', 'Pressure'];
-        const flagCat = pick(flagCategories, i * 7 + 20);
-        complianceFlags = [{
-          category: flagCat,
-          exact_phrase: `Demo ${flagCat.toLowerCase()} flag — example phrase`,
-          timestamp: `00:${String(randInt(5, 45, i * 7 + 21)).padStart(2, '0')}:00`,
-          risk_level: pick(['high', 'medium', 'low'], i * 7 + 22),
-          explanation: `This is a demo ${flagCat.toLowerCase()} compliance flag for testing.`,
-        }];
+        paymentPlan = 'Deposit';
       }
     } else {
       // No-shows get no outcome, duration, or scores
@@ -480,16 +456,13 @@ function generateDemoCalls() {
       durationMinutes,
       overallCallScore,
       scriptAdherenceScore,
-      pitchAdherenceScore,
-      closeAdherenceScore,
-      objectionAdherenceScore,
-      introScore,
-      painScore,
-      goalScore,
-      transitionScore,
+      discoveryScore,
+      pitchScore,
+      closeAttemptScore,
+      objectionHandlingScore,
+      prospectFitScore,
       keyMoments: attendance === 'Show' ? 'Demo key moments summary' : '',
-      complianceFlags,
-      paymentPlanOffered,
+      paymentPlan,
       recordingUrl: attendance === 'Show' ? `https://app.closermetrix.com/recordings/demo_rec_${String(i + 1).padStart(3, '0')}` : '',
       transcriptLink: attendance === 'Show' ? `https://app.closermetrix.com/transcripts/demo_tr_${String(i + 1).padStart(3, '0')}` : '',
       lostReason,
