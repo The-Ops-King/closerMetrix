@@ -129,12 +129,12 @@ router.get('/clients/:clientId', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Client not found' });
     }
 
-    // Also fetch closers so the admin view can set up filters
+    // Fetch ALL closers (active + inactive) so admin can manage status
     const closerRows = await bq.runQuery(
-      `SELECT closer_id, name
+      `SELECT closer_id, name, status
        FROM ${bq.table('Closers')}
-       WHERE client_id = @clientId AND status = 'Active'
-       ORDER BY name`,
+       WHERE client_id = @clientId
+       ORDER BY LOWER(status) DESC, name`,
       { clientId }
     );
 
@@ -142,7 +142,7 @@ router.get('/clients/:clientId', async (req, res) => {
       success: true,
       data: {
         ...rows[0],
-        closers: closerRows.map((r) => ({ closer_id: r.closer_id, name: r.name })),
+        closers: closerRows.map((r) => ({ closer_id: r.closer_id, name: r.name, status: r.status })),
       },
     });
   } catch (err) {

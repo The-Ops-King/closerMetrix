@@ -62,9 +62,12 @@ export default function CloserFilter({ disabled = false }) {
     return null;
   }
 
-  // Build a lookup map for closer_id → name
+  // Build a lookup map for closer_id → display name
   const closerMap = {};
-  closers.forEach((c) => { closerMap[c.closer_id] = c.name; });
+  closers.forEach((c) => {
+    const isInactive = c.status && c.status.toLowerCase() !== 'active';
+    closerMap[c.closer_id] = isInactive ? `${c.name} (Inactive)` : c.name;
+  });
 
   const hasSelection = closerIds.length > 0;
 
@@ -146,23 +149,27 @@ export default function CloserFilter({ disabled = false }) {
           },
         }}
       >
-        {closers.map((closer) => (
-          <MenuItem
-            key={closer.closer_id}
-            value={closer.closer_id}
-            sx={{
-              color: COLORS.text.primary,
-              '&.Mui-selected': {
-                backgroundColor: 'rgba(77, 212, 232, 0.08)',
-              },
-              '&.Mui-selected:hover': {
-                backgroundColor: 'rgba(77, 212, 232, 0.12)',
-              },
-            }}
-          >
-            {closer.name}
-          </MenuItem>
-        ))}
+        {closers.map((closer) => {
+          const isInactive = closer.status && closer.status.toLowerCase() !== 'active';
+          return (
+            <MenuItem
+              key={closer.closer_id}
+              value={closer.closer_id}
+              sx={{
+                color: isInactive ? COLORS.text.muted : COLORS.text.primary,
+                fontStyle: isInactive ? 'italic' : 'normal',
+                '&.Mui-selected': {
+                  backgroundColor: 'rgba(77, 212, 232, 0.08)',
+                },
+                '&.Mui-selected:hover': {
+                  backgroundColor: 'rgba(77, 212, 232, 0.12)',
+                },
+              }}
+            >
+              {isInactive ? `${closer.name} (Inactive)` : closer.name}
+            </MenuItem>
+          );
+        })}
       </Select>
     </FormControl>
   );
