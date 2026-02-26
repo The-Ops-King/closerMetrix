@@ -28,6 +28,7 @@ import ObjectionsPage from './pages/client/ObjectionsPage';
 import ProjectionsPage from './pages/client/ProjectionsPage';
 import ViolationsPage from './pages/client/ViolationsPage';
 import AdherencePage from './pages/client/AdherencePage';
+import MarketInsightPage from './pages/client/MarketInsightPage';
 
 // Admin pages
 import AdminLogin from './pages/admin/AdminLogin';
@@ -59,6 +60,7 @@ export default function App() {
             <Route path="sales-cycle" element={<SalesCyclePage />} />
             <Route path="objections" element={<ObjectionsPage />} />
             <Route path="projections" element={<ProjectionsPage />} />
+            <Route path="market-insight" element={<MarketInsightPage />} />
 
             {/* Executive pages */}
             <Route path="violations" element={<ViolationsPage />} />
@@ -82,6 +84,7 @@ export default function App() {
             <Route path="sales-cycle" element={<SalesCyclePage />} />
             <Route path="objections" element={<ObjectionsPage />} />
             <Route path="projections" element={<ProjectionsPage />} />
+            <Route path="market-insight" element={<MarketInsightPage />} />
             <Route path="violations" element={<ViolationsPage />} />
             <Route path="adherence" element={<AdherencePage />} />
           </Route>

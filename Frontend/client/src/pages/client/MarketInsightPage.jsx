@@ -264,7 +264,8 @@ function VoiceTable({ rows, accentColor, emptyLabel }) {
 // ── Main Page ─────────────────────────────────────────────────────
 
 export default function MarketInsightPage() {
-  const { tier, token } = useAuth();
+  const { tier, token, mode, adminViewClientId } = useAuth();
+  const isAdmin = mode === 'admin';
   const hasAccess = meetsMinTier(tier, 'insight');
   const { data, isLoading, error } = useMetrics('market-insight', { enabled: hasAccess });
 
@@ -284,7 +285,7 @@ export default function MarketInsightPage() {
    * Fetch condensed themes from the Market Pulse API.
    * Non-blocking — errors are caught and displayed subtly.
    */
-  const fetchPulse = useCallback(async (type, texts) => {
+  const fetchPulse = useCallback(async (type, texts, force = false) => {
     if (!texts || texts.length === 0) return;
 
     setPulseLoading(prev => ({ ...prev, [type]: true }));
@@ -292,7 +293,8 @@ export default function MarketInsightPage() {
 
     try {
       const authOpts = token ? { token } : {};
-      const result = await apiPost('/dashboard/market-pulse', { texts, type }, authOpts);
+      if (isAdmin && adminViewClientId) authOpts.viewClientId = adminViewClientId;
+      const result = await apiPost('/dashboard/market-pulse', { texts, type, force }, authOpts);
       if (result.success && result.data?.themes) {
         if (type === 'pains') setPainThemes(result.data.themes);
         else setGoalThemes(result.data.themes);
@@ -302,7 +304,15 @@ export default function MarketInsightPage() {
     } finally {
       setPulseLoading(prev => ({ ...prev, [type]: false }));
     }
-  }, [token]);
+  }, [token, isAdmin, adminViewClientId]);
+
+  /** Admin: force-refresh all AI themes (bypasses cache) */
+  const handleForceRefresh = useCallback(() => {
+    const painTexts = (tables.pains || []).map(r => r.text).filter(Boolean);
+    const goalTexts = (tables.goals || []).map(r => r.text).filter(Boolean);
+    if (painTexts.length > 0) fetchPulse('pains', painTexts, true);
+    if (goalTexts.length > 0) fetchPulse('goals', goalTexts, true);
+  }, [tables.pains, tables.goals, fetchPulse]);
 
   // Trigger Market Pulse when raw data loads
   useEffect(() => {
@@ -328,13 +338,36 @@ export default function MarketInsightPage() {
   return (
     <Box>
       {/* Page header */}
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h4" sx={{ color: COLORS.text.primary, fontWeight: 700 }}>
-          Market Insight
-        </Typography>
-        <Typography sx={{ color: COLORS.text.muted, fontSize: '0.9rem', mt: 0.5 }}>
-          What are your prospects saying? — Last 30 Days
-        </Typography>
+      <Box sx={{ mb: 3, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <Box>
+          <Typography variant="h4" sx={{ color: COLORS.text.primary, fontWeight: 700 }}>
+            Market Insight
+          </Typography>
+          <Typography sx={{ color: COLORS.text.muted, fontSize: '0.9rem', mt: 0.5 }}>
+            What are your prospects saying? — Last 30 Days
+          </Typography>
+        </Box>
+        {isAdmin && data && (
+          <Box
+            component="button"
+            onClick={handleForceRefresh}
+            disabled={pulseLoading.pains || pulseLoading.goals}
+            sx={{
+              display: 'flex', alignItems: 'center', gap: 0.75,
+              px: 1.5, py: 0.75, mt: 0.5,
+              backgroundColor: 'rgba(184, 77, 255, 0.1)',
+              border: '1px solid rgba(184, 77, 255, 0.3)',
+              borderRadius: 1.5, cursor: 'pointer',
+              color: COLORS.neon.purple, fontSize: '0.75rem', fontWeight: 600,
+              letterSpacing: '0.05em', textTransform: 'uppercase',
+              transition: 'all 0.15s',
+              '&:hover': { backgroundColor: 'rgba(184, 77, 255, 0.2)', borderColor: COLORS.neon.purple },
+              '&:disabled': { opacity: 0.5, cursor: 'not-allowed' },
+            }}
+          >
+            {(pulseLoading.pains || pulseLoading.goals) ? 'Refreshing...' : 'Refresh AI'}
+          </Box>
+        )}
       </Box>
 
       {/* Loading state */}

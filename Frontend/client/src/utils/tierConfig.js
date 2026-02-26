@@ -19,6 +19,7 @@ export const NAV_ITEMS = [
   { key: 'salesCycle', label: 'Sales Cycle', icon: 'loop', path: '/sales-cycle', minTier: 'basic' },
   { key: 'objections', label: 'Objections', icon: 'record_voice_over', path: '/objections', minTier: 'insight' },
   { key: 'projections', label: 'Projections', icon: 'analytics', path: '/projections', minTier: 'insight' },
+  { key: 'marketInsight', label: 'Market Insight', icon: 'campaign', path: '/market-insight', minTier: 'insight' },
   { key: 'violations', label: 'Violations', icon: 'gpp_bad', path: '/violations', minTier: 'executive' },
   { key: 'adherence', label: 'Adherence', icon: 'fact_check', path: '/adherence', minTier: 'executive' },
 ];

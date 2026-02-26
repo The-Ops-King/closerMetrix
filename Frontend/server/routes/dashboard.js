@@ -302,7 +302,7 @@ router.post('/market-pulse', async (req, res) => {
       });
     }
 
-    const { texts, type } = req.body;
+    const { texts, type, force } = req.body;
 
     // Validate type
     if (!type || !['pains', 'goals'].includes(type)) {
@@ -322,7 +322,7 @@ router.post('/market-pulse', async (req, res) => {
 
     // Cap at 500
     const capped = texts.slice(0, 500);
-    const themes = await marketPulse.condenseTexts(req.clientId, type, capped);
+    const themes = await marketPulse.condenseTexts(req.clientId, type, capped, { force: !!force });
 
     res.json({
       success: true,

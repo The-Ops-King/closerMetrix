@@ -71,6 +71,7 @@ export default function TopBar({ companyName, tier, onMenuClick }) {
   const location = useLocation();
   const isObjectionsPage = location.pathname.includes('/objections');
   const isViolationsPage = location.pathname.includes('/violations');
+  const isMarketInsightPage = location.pathname.includes('/market-insight');
   const { token, mode, adminViewClientId } = useAuth();
   const { queryParams, dateRange } = useFilters();
   const [downloading, setDownloading] = useState(false);
@@ -148,22 +149,27 @@ export default function TopBar({ companyName, tier, onMenuClick }) {
 
       {/* Right: Filter controls + Download button — wraps to full width on mobile */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, md: 2 }, flexWrap: 'wrap', width: { xs: '100%', md: 'auto' } }}>
-        {meetsMinTier(tier, 'insight') ? (
-          <CloserFilter />
-        ) : (
-          <Tooltip title="Upgrade to Insight to filter by closer" arrow>
-            <span>
-              <CloserFilter disabled />
-            </span>
-          </Tooltip>
+        {/* Market Insight uses auto last-30-days — no user filters */}
+        {!isMarketInsightPage && (
+          <>
+            {meetsMinTier(tier, 'insight') ? (
+              <CloserFilter />
+            ) : (
+              <Tooltip title="Upgrade to Insight to filter by closer" arrow>
+                <span>
+                  <CloserFilter disabled />
+                </span>
+              </Tooltip>
+            )}
+            {isObjectionsPage && meetsMinTier(tier, 'insight') && (
+              <ObjectionTypeFilter />
+            )}
+            {isViolationsPage && meetsMinTier(tier, 'executive') && (
+              <RiskCategoryFilter />
+            )}
+            <DateRangeFilter />
+          </>
         )}
-        {isObjectionsPage && meetsMinTier(tier, 'insight') && (
-          <ObjectionTypeFilter />
-        )}
-        {isViolationsPage && meetsMinTier(tier, 'executive') && (
-          <RiskCategoryFilter />
-        )}
-        <DateRangeFilter />
         <Tooltip title="Download filtered calls as CSV" arrow>
           <IconButton
             onClick={handleDownload}

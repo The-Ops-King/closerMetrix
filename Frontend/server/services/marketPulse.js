@@ -4,15 +4,13 @@
  * Uses Claude Sonnet to cluster raw pain/goal texts from prospect calls
  * into ranked themes with counts. E.g., "100 people said X, 50 said Y".
  *
- * Features:
- *   - Lazy-init Anthropic client (only created when first called)
- *   - In-memory cache with 1-hour TTL keyed by clientId:type:hash(texts)
- *   - 500-text cap to keep prompt under ~12K tokens
- *   - Returns [{theme, count}] sorted by count desc
+ * All tunable settings live in config/marketPulse.js — prompts, model,
+ * cache TTL, text limits, theme counts, colors.
  */
 
 const crypto = require('crypto');
 const config = require('../config');
+const pulseConfig = require('../config/marketPulse');
 const logger = require('../utils/logger');
 
 let anthropicClient = null;
@@ -33,27 +31,40 @@ function getClient() {
 // ── In-memory cache ──────────────────────────────────────────────────
 // Key: "clientId:type:hash" → { themes: [...], expiresAt: timestamp }
 const cache = new Map();
-const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 /**
  * Generate a short hash of the texts array for cache keying.
  * Two identical text sets produce the same key, even if order differs.
  */
 function hashTexts(texts) {
-  // Sort for determinism, then hash
   const sorted = [...texts].sort();
   return crypto.createHash('md5').update(sorted.join('\n')).digest('hex').slice(0, 12);
 }
 
 /**
  * Clean expired entries from the cache.
- * Called lazily — no timer needed for a single-server in-memory cache.
  */
 function pruneCache() {
   const now = Date.now();
   for (const [key, entry] of cache) {
     if (entry.expiresAt <= now) cache.delete(key);
   }
+}
+
+/**
+ * Build the user prompt from the template in config.
+ * Replaces {{variables}} with actual values.
+ */
+function buildPrompt(type, texts) {
+  const typeLabel = pulseConfig.typeLabels[type] || type;
+  const numberedList = texts.map((t, i) => `${i + 1}. ${t}`).join('\n');
+
+  return pulseConfig.userPromptTemplate
+    .replace('{{count}}', texts.length)
+    .replace('{{typeLabel}}', typeLabel)
+    .replace('{{minThemes}}', pulseConfig.minThemes)
+    .replace('{{maxThemes}}', pulseConfig.maxThemes)
+    .replace('{{statements}}', numberedList);
 }
 
 // ── Core API ─────────────────────────────────────────────────────────
@@ -64,10 +75,12 @@ function pruneCache() {
  * @param {string} clientId - Client ID (for cache key + logging)
  * @param {'pains'|'goals'} type - Whether these are pain or goal statements
  * @param {string[]} texts - Raw text strings from individual calls
+ * @param {object} [options] - Options
+ * @param {boolean} [options.force] - Skip cache and force fresh AI call
  * @returns {Promise<{theme: string, count: number}[]>} Ranked themes
  * @throws {Error} If API key is missing or AI call fails
  */
-async function condenseTexts(clientId, type, texts) {
+async function condenseTexts(clientId, type, texts, options = {}) {
   if (!texts || texts.length === 0) return [];
 
   const client = getClient();
@@ -75,44 +88,29 @@ async function condenseTexts(clientId, type, texts) {
     throw new Error('ANTHROPIC_API_KEY not configured');
   }
 
-  // Cap at 500 texts to keep prompt reasonable
-  const capped = texts.slice(0, 500);
+  // Cap texts using config limit
+  const capped = texts.slice(0, pulseConfig.maxTexts);
 
-  // Check cache
+  // Check cache (skip if force refresh)
+  const cacheTtlMs = pulseConfig.cacheTtlMinutes * 60 * 1000;
   pruneCache();
   const cacheKey = `${clientId}:${type}:${hashTexts(capped)}`;
-  const cached = cache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) {
-    logger.debug('Market Pulse cache hit', { clientId, type, key: cacheKey });
-    return cached.themes;
+  if (!options.force) {
+    const cached = cache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      logger.debug('Market Pulse cache hit', { clientId, type, key: cacheKey });
+      return cached.themes;
+    }
   }
 
-  // Build prompt
-  const typeLabel = type === 'pains' ? 'pain points / problems' : 'goals / desired outcomes';
-  const numberedList = capped.map((t, i) => `${i + 1}. ${t}`).join('\n');
-
-  const prompt = `You are analyzing ${capped.length} raw ${typeLabel} statements extracted from sales calls for a business.
-
-Your job: group these into 5-15 distinct themes, counting how many statements belong to each theme.
-
-Rules:
-- Keep the prospect's actual voice/phrasing — don't corporate-ify it
-- Merge semantically similar statements (e.g., "more family time" = "spend time with kids")
-- Each theme label should be a short phrase (3-10 words) that a marketer could use
-- Sort by count descending (most common first)
-- Every input statement must be counted in exactly one theme
-
-Respond with ONLY a JSON array, no other text:
-[{"theme": "string", "count": number}, ...]
-
-Here are the statements:
-${numberedList}`;
+  const prompt = buildPrompt(type, capped);
 
   logger.info('Market Pulse AI request', { clientId, type, textCount: capped.length });
 
   const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 1024,
+    model: pulseConfig.model,
+    max_tokens: pulseConfig.maxTokens,
+    system: pulseConfig.systemPrompt,
     messages: [{ role: 'user', content: prompt }],
   });
 
@@ -124,7 +122,6 @@ ${numberedList}`;
 
   let themes;
   try {
-    // Try direct parse first, then extract from markdown code block
     const jsonStr = responseText.includes('[')
       ? responseText.slice(responseText.indexOf('['), responseText.lastIndexOf(']') + 1)
       : responseText;
@@ -138,7 +135,6 @@ ${numberedList}`;
     throw new Error('Failed to parse AI response');
   }
 
-  // Validate shape
   if (!Array.isArray(themes) || themes.length === 0) {
     throw new Error('AI returned empty or invalid themes');
   }
@@ -149,7 +145,7 @@ ${numberedList}`;
     .sort((a, b) => b.count - a.count);
 
   // Cache result
-  cache.set(cacheKey, { themes, expiresAt: Date.now() + CACHE_TTL_MS });
+  cache.set(cacheKey, { themes, expiresAt: Date.now() + cacheTtlMs });
   logger.info('Market Pulse AI success', { clientId, type, themeCount: themes.length });
 
   return themes;
@@ -157,7 +153,6 @@ ${numberedList}`;
 
 /**
  * Check whether the Market Pulse service is available.
- * Returns false if no API key is configured.
  */
 function isAvailable() {
   return Boolean(config.anthropicApiKey);
