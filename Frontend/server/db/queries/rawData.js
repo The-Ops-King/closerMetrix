@@ -110,7 +110,8 @@ async function queryBigQuery(clientId) {
       calls_transcript_link,
       calls_lost_reason,
       calls_product_purchased,
-      calls_prospect_email
+      calls_prospect_email,
+      calls_prospect_name
     FROM ${callsView}
     WHERE clients_client_id = @clientId
     ORDER BY calls_appointment_date DESC`;
@@ -160,8 +161,17 @@ async function queryBigQuery(clientId) {
     WHERE client_id = @clientId
     LIMIT 1`;
 
-  // Run all 4 in parallel, catching individual failures
-  const [callsResult, objectionsResult, closeCycleResult, clientResult] = await Promise.all([
+  // 5) Pains/goals text — from Calls table directly (not in the view)
+  //    Used by Market Insight page to show "voice of the market" themes
+  const callsTable = bq.table('Calls');
+  const painsGoalsSql = `
+    SELECT call_id, pains, goals
+    FROM ${callsTable}
+    WHERE client_id = @clientId
+      AND (pains IS NOT NULL OR goals IS NOT NULL)`;
+
+  // Run all 5 in parallel, catching individual failures
+  const [callsResult, objectionsResult, closeCycleResult, clientResult, painsGoalsResult] = await Promise.all([
     bq.runQuery(callsSql, params).catch(err => {
       logger.warn('Raw data: calls query failed', { error: err.message, clientId });
       return null;
@@ -176,6 +186,10 @@ async function queryBigQuery(clientId) {
     }),
     bq.runQuery(clientSql, params).catch(err => {
       logger.warn('Raw data: client query failed', { error: err.message, clientId });
+      return null;
+    }),
+    bq.runQuery(painsGoalsSql, params).catch(err => {
+      logger.warn('Raw data: pains/goals query failed', { error: err.message, clientId });
       return null;
     }),
   ]);
@@ -216,8 +230,24 @@ async function queryBigQuery(clientId) {
       lostReason: row.calls_lost_reason || '',
       productPurchased: row.calls_product_purchased || '',
       prospectEmail: row.calls_prospect_email || '',
+      prospectName: row.calls_prospect_name || '',
     };
   });
+
+  // Merge pains/goals text into calls by callId
+  if (painsGoalsResult) {
+    const pgMap = {};
+    for (const row of painsGoalsResult) {
+      pgMap[row.call_id] = { pains: row.pains || '', goals: row.goals || '' };
+    }
+    for (const call of calls) {
+      const pg = pgMap[call.callId];
+      if (pg) {
+        call.pains = pg.pains;
+        call.goals = pg.goals;
+      }
+    }
+  }
 
   // Parse objections into clean array
   const objections = (objectionsResult || []).map(row => {

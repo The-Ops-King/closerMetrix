@@ -40,6 +40,7 @@ const { getViolationsData } = require('../db/queries/violations');
 const { getAdherenceData } = require('../db/queries/adherence');
 const { getCallExportData } = require('../db/queries/callExport');
 const { getRawData } = require('../db/queries/rawData');
+const marketPulse = require('../services/marketPulse');
 
 const router = express.Router();
 
@@ -287,6 +288,55 @@ router.get('/raw-data', async (req, res) => {
   } catch (err) {
     logger.error('Raw data endpoint error', { error: err.message, clientId: req.clientId });
     res.status(500).json({ success: false, error: 'Failed to load raw data' });
+  }
+});
+
+// ── Market Pulse (AI Theme Condensing — Insight+) ───────────────
+
+router.post('/market-pulse', async (req, res) => {
+  try {
+    if (!marketPulse.isAvailable()) {
+      return res.status(503).json({
+        success: false,
+        error: 'Market Pulse AI is not configured',
+      });
+    }
+
+    const { texts, type } = req.body;
+
+    // Validate type
+    if (!type || !['pains', 'goals'].includes(type)) {
+      return res.status(400).json({
+        success: false,
+        error: 'type must be "pains" or "goals"',
+      });
+    }
+
+    // Validate texts
+    if (!Array.isArray(texts) || texts.length === 0) {
+      return res.json({
+        success: true,
+        data: { themes: [] },
+      });
+    }
+
+    // Cap at 500
+    const capped = texts.slice(0, 500);
+    const themes = await marketPulse.condenseTexts(req.clientId, type, capped);
+
+    res.json({
+      success: true,
+      data: { themes },
+    });
+  } catch (err) {
+    logger.error('Market Pulse endpoint error', {
+      error: err.message,
+      clientId: req.clientId,
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to generate market pulse themes',
+    });
   }
 });
 

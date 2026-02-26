@@ -30,6 +30,9 @@ const config = {
   // CORS — in dev, allow Vite dev server
   corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
 
+  // Anthropic API (Market Pulse AI)
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
+
   // Logging
   logLevel: process.env.LOG_LEVEL || 'info',
 };

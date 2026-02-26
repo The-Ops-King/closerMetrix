@@ -356,6 +356,7 @@ export function computePageData(section, rawData, filters) {
     case 'projections': return computeProjections(calls, closeCycles, rawData, filters);
     case 'violations': return computeViolations(calls, granularity, prev);
     case 'adherence': return computeAdherence(calls, granularity, prev);
+    case 'market-insight': return computeMarketInsight(rawData);
     default: return null;
   }
 }
@@ -2196,6 +2197,82 @@ function computeAdherence(calls, granularity, prev) {
       adherenceOverTime: { data: adherenceOverTime, series: [
         { key: 'score', label: 'Adherence Score', color: 'green' },
       ]},
+    },
+  };
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// MARKET INSIGHT PAGE (Insight+)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Compute Market Insight page data.
+ * "What are my prospects actually saying?" — raw pains and goals
+ * from the last 30 days of held calls, in their own words.
+ *
+ * Returns two tables (pains + goals) with date, closer, and the
+ * exact text the AI extracted. Most recent calls first.
+ */
+function computeMarketInsight(rawData) {
+  const allCalls = rawData.calls || [];
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now);
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const cutoff30 = thirtyDaysAgo.toISOString().split('T')[0];
+
+  // Last 30 days, held calls only
+  const recent30 = allCalls.filter(c =>
+    c.appointmentDate >= cutoff30 && isShow(c)
+  );
+
+  // Calls with pain or goal data
+  const withData = recent30.filter(c => (c.pains && c.pains.trim()) || (c.goals && c.goals.trim()));
+
+  // ── Scorecards ──
+  const callsAnalyzed = withData.length;
+  const avgPainScore = round(avg(withData, 'painScore'), 1);
+  const avgGoalScore = round(avg(withData, 'goalScore'), 1);
+  const dataCoverage = round(sd(withData.length, recent30.length), 3);
+
+  // Sort most recent first
+  const sorted = [...withData].sort((a, b) => b.appointmentDate.localeCompare(a.appointmentDate));
+
+  // ── Pains table — every call that has pain text ──
+  const painsRows = sorted
+    .filter(c => c.pains && c.pains.trim())
+    .map(c => ({
+      date: c.appointmentDate,
+      closerName: c.closerName || 'Unknown',
+      prospectName: c.prospectName || '',
+      text: c.pains.trim(),
+      callId: c.callId,
+    }));
+
+  // ── Goals table — every call that has goal text ──
+  const goalsRows = sorted
+    .filter(c => c.goals && c.goals.trim())
+    .map(c => ({
+      date: c.appointmentDate,
+      closerName: c.closerName || 'Unknown',
+      prospectName: c.prospectName || '',
+      text: c.goals.trim(),
+      callId: c.callId,
+    }));
+
+  return {
+    sections: {
+      summary: {
+        callsAnalyzed: m('Calls Analyzed', callsAnalyzed, 'number', 'cyan'),
+        avgPainDiscovery: m('Avg Pain Discovery', avgPainScore, 'score', 'red'),
+        avgGoalDiscovery: m('Avg Goal Discovery', avgGoalScore, 'score', 'green'),
+        dataCoverage: m('Data Coverage', dataCoverage, 'percent', 'amber'),
+      },
+    },
+    charts: {},
+    tables: {
+      pains: painsRows,
+      goals: goalsRows,
     },
   };
 }
