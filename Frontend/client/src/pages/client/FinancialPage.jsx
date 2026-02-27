@@ -27,6 +27,8 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { COLORS } from '../../theme/constants';
 import { useMetrics } from '../../hooks/useMetrics';
+import { useInsight } from '../../hooks/useInsight';
+import InsightCard from '../../components/InsightCard';
 import { useAuth } from '../../context/AuthContext';
 import { meetsMinTier } from '../../utils/tierConfig';
 import { DUMMY_FINANCIAL } from '../../utils/dummyData';
@@ -104,6 +106,7 @@ function getChart(apiCharts, key) {
 
 export default function FinancialPage() {
   const { data, isLoading, error } = useMetrics('financial');
+  const { text: insightText, generatedAt: insightGeneratedAt, isLoading: insightLoading, isOnDemandLoading, generateWithFilters, remainingAnalyses } = useInsight('financial', data);
   const { tier } = useAuth();
   const closerLocked = !meetsMinTier(tier, 'insight');
 
@@ -124,6 +127,8 @@ export default function FinancialPage() {
           Revenue, cash collection, and deal economics
         </Typography>
       </Box>
+
+      <InsightCard text={insightText} isLoading={insightLoading} generatedAt={insightGeneratedAt} isOnDemandLoading={isOnDemandLoading} onAnalyze={generateWithFilters} remainingAnalyses={remainingAnalyses} />
 
       {/* Error state — only show if no data at all */}
       {error && !data && (

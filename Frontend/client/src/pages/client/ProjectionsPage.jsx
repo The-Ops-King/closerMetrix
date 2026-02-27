@@ -24,6 +24,8 @@ import Button from '@mui/material/Button';
 import Switch from '@mui/material/Switch';
 import { COLORS } from '../../theme/constants';
 import { useMetrics } from '../../hooks/useMetrics';
+import { useInsight } from '../../hooks/useInsight';
+import InsightCard from '../../components/InsightCard';
 import { useAuth } from '../../context/AuthContext';
 import { meetsMinTier } from '../../utils/tierConfig';
 import { DUMMY_PROJECTIONS } from '../../utils/dummyData';
@@ -207,6 +209,7 @@ export default function ProjectionsPage() {
   const { tier } = useAuth();
   const hasAccess = meetsMinTier(tier, 'insight');
   const { data, isLoading, error, refetch } = useMetrics('projections', { enabled: hasAccess });
+  const { text: insightText, generatedAt: insightGeneratedAt, isLoading: insightLoading, isOnDemandLoading, generateWithFilters, remainingAnalyses } = useInsight('projections', data);
 
   // Slider state -- adjustments from baseline (0 = no change)
   const [showRateAdj, setShowRateAdj] = useState(0);
@@ -486,6 +489,8 @@ export default function ProjectionsPage() {
           Forecast and scenario modeling
         </Typography>
       </Box>
+
+      <InsightCard text={insightText} isLoading={insightLoading} generatedAt={insightGeneratedAt} isOnDemandLoading={isOnDemandLoading} onAnalyze={generateWithFilters} remainingAnalyses={remainingAnalyses} />
 
       {/* Loading state */}
       {isLoading && !data && (

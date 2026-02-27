@@ -23,6 +23,8 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { COLORS } from '../../theme/constants';
 import { useMetrics } from '../../hooks/useMetrics';
+import { useInsight } from '../../hooks/useInsight';
+import InsightCard from '../../components/InsightCard';
 import { useAuth } from '../../context/AuthContext';
 import { meetsMinTier } from '../../utils/tierConfig';
 import { DUMMY_SALES_CYCLE } from '../../utils/dummyData';
@@ -35,6 +37,7 @@ import TronPieChart from '../../components/charts/TronPieChart';
 
 export default function SalesCyclePage() {
   const { data, isLoading, error } = useMetrics('sales-cycle');
+  const { text: insightText, generatedAt: insightGeneratedAt, isLoading: insightLoading, isOnDemandLoading, generateWithFilters, remainingAnalyses } = useInsight('sales-cycle', data);
   const { tier } = useAuth();
   const closerLocked = !meetsMinTier(tier, 'insight');
 
@@ -52,6 +55,8 @@ export default function SalesCyclePage() {
           Time and calls to close analysis
         </Typography>
       </Box>
+
+      <InsightCard text={insightText} isLoading={insightLoading} generatedAt={insightGeneratedAt} isOnDemandLoading={isOnDemandLoading} onAnalyze={generateWithFilters} remainingAnalyses={remainingAnalyses} />
 
       {/* Loading state */}
       {isLoading && !data && (

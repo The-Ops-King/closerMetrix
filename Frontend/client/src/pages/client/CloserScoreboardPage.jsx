@@ -27,6 +27,8 @@ import FormControl from '@mui/material/FormControl';
 import { COLORS } from '../../theme/constants';
 import { hexToRgba } from '../../utils/colors';
 import { useMetrics } from '../../hooks/useMetrics';
+import { useInsight } from '../../hooks/useInsight';
+import InsightCard from '../../components/InsightCard';
 import { useAuth } from '../../context/AuthContext';
 import { meetsMinTier } from '../../utils/tierConfig';
 import ChartWrapper from '../../components/charts/ChartWrapper';
@@ -42,6 +44,7 @@ export default function CloserScoreboardPage() {
   const { tier } = useAuth();
   const hasAccess = meetsMinTier(tier, 'insight');
   const { data, isLoading, error } = useMetrics('closer-scoreboard', { enabled: hasAccess });
+  const { text: insightText, generatedAt: insightGeneratedAt, isLoading: insightLoading, isOnDemandLoading, generateWithFilters, remainingAnalyses } = useInsight('closer-scoreboard', data);
 
   const charts = data?.charts || {};
   const radarData = charts.radarData;
@@ -116,6 +119,8 @@ export default function CloserScoreboardPage() {
           Head-to-head closer rankings across every metric
         </Typography>
       </Box>
+
+      <InsightCard text={insightText} isLoading={insightLoading} generatedAt={insightGeneratedAt} isOnDemandLoading={isOnDemandLoading} onAnalyze={generateWithFilters} remainingAnalyses={remainingAnalyses} />
 
       {/* Loading state */}
       {isLoading && !data && (

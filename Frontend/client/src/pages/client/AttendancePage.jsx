@@ -24,6 +24,8 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { COLORS, LAYOUT } from '../../theme/constants';
 import { useMetrics } from '../../hooks/useMetrics';
+import { useInsight } from '../../hooks/useInsight';
+import InsightCard from '../../components/InsightCard';
 import { useAuth } from '../../context/AuthContext';
 import { meetsMinTier } from '../../utils/tierConfig';
 import { DUMMY_ATTENDANCE } from '../../utils/dummyData';
@@ -98,6 +100,7 @@ function MetricColumn({ title, columnData, color }) {
 
 export default function AttendancePage() {
   const { data, isLoading, error } = useMetrics('attendance');
+  const { text: insightText, generatedAt: insightGeneratedAt, isLoading: insightLoading, isOnDemandLoading, generateWithFilters, remainingAnalyses } = useInsight('attendance', data);
   const { tier } = useAuth();
   const closerLocked = !meetsMinTier(tier, 'insight');
 
@@ -115,6 +118,8 @@ export default function AttendancePage() {
           Volume, show rates, and attendance patterns
         </Typography>
       </Box>
+
+      <InsightCard text={insightText} isLoading={insightLoading} generatedAt={insightGeneratedAt} isOnDemandLoading={isOnDemandLoading} onAnalyze={generateWithFilters} remainingAnalyses={remainingAnalyses} />
 
       {/* Loading state */}
       {isLoading && !data && (

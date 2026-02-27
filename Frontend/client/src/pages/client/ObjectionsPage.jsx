@@ -19,6 +19,8 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { COLORS } from '../../theme/constants';
 import { useMetrics } from '../../hooks/useMetrics';
+import { useInsight } from '../../hooks/useInsight';
+import InsightCard from '../../components/InsightCard';
 import { useAuth } from '../../context/AuthContext';
 import { useFilters } from '../../context/FilterContext';
 import { meetsMinTier } from '../../utils/tierConfig';
@@ -37,6 +39,7 @@ export default function ObjectionsPage() {
   const { tier } = useAuth();
   const hasAccess = meetsMinTier(tier, 'insight');
   const { data, isLoading, error } = useMetrics('objections', { enabled: hasAccess });
+  const { text: insightText, generatedAt: insightGeneratedAt, isLoading: insightLoading, isOnDemandLoading, generateWithFilters, remainingAnalyses } = useInsight('objections', data);
   const { setAvailableObjectionTypes } = useFilters();
 
   // Local state for detail table filters (not linked to FilterContext)
@@ -82,6 +85,8 @@ export default function ObjectionsPage() {
           Objection patterns, resolution rates, and closer performance
         </Typography>
       </Box>
+
+      <InsightCard text={insightText} isLoading={insightLoading} generatedAt={insightGeneratedAt} isOnDemandLoading={isOnDemandLoading} onAnalyze={generateWithFilters} remainingAnalyses={remainingAnalyses} />
 
       {/* Loading state */}
       {isLoading && !data && (

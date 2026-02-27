@@ -28,6 +28,8 @@ import Typography from '@mui/material/Typography';
 import { COLORS, LAYOUT } from '../../theme/constants';
 import { useAuth } from '../../context/AuthContext';
 import { useMetrics } from '../../hooks/useMetrics';
+import { useInsight } from '../../hooks/useInsight';
+import InsightCard from '../../components/InsightCard';
 import Scorecard from '../../components/scorecards/Scorecard';
 import ChartWrapper from '../../components/charts/ChartWrapper';
 import TronLineChart from '../../components/charts/TronLineChart';
@@ -143,6 +145,7 @@ function getChartSeries(apiCharts, key) {
 export default function OverviewPage() {
   const { tier } = useAuth();
   const { data, isLoading, error } = useMetrics('overview');
+  const { text: insightText, generatedAt: insightGeneratedAt, isLoading: insightLoading, isOnDemandLoading, generateWithFilters, remainingAnalyses } = useInsight('overview', data);
 
 
   // Extract API data
@@ -165,6 +168,8 @@ export default function OverviewPage() {
           Sales performance overview
         </Typography>
       </Box>
+
+      <InsightCard text={insightText} isLoading={insightLoading} generatedAt={insightGeneratedAt} isOnDemandLoading={isOnDemandLoading} onAnalyze={generateWithFilters} remainingAnalyses={remainingAnalyses} />
 
       {/* Error state — only show if no data at all */}
       {error && !data && (

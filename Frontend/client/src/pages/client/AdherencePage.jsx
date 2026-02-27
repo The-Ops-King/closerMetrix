@@ -27,6 +27,8 @@ import FormControl from '@mui/material/FormControl';
 import { COLORS } from '../../theme/constants';
 import { hexToRgba } from '../../utils/colors';
 import { useMetrics } from '../../hooks/useMetrics';
+import { useInsight } from '../../hooks/useInsight';
+import InsightCard from '../../components/InsightCard';
 import { useAuth } from '../../context/AuthContext';
 import { meetsMinTier } from '../../utils/tierConfig';
 import { DUMMY_ADHERENCE } from '../../utils/dummyData';
@@ -42,6 +44,7 @@ export default function AdherencePage() {
   const { tier } = useAuth();
   const hasAccess = meetsMinTier(tier, 'executive');
   const { data, isLoading, error } = useMetrics('adherence', { enabled: hasAccess });
+  const { text: insightText, generatedAt: insightGeneratedAt, isLoading: insightLoading, isOnDemandLoading, generateWithFilters, remainingAnalyses } = useInsight('adherence', data);
 
   // Fall back to dummy data when the user doesn't have access
   const displayData = hasAccess ? data : DUMMY_ADHERENCE;
@@ -133,6 +136,8 @@ export default function AdherencePage() {
           Script adherence scores and closer benchmarks
         </Typography>
       </Box>
+
+      <InsightCard text={insightText} isLoading={insightLoading} generatedAt={insightGeneratedAt} isOnDemandLoading={isOnDemandLoading} onAnalyze={generateWithFilters} remainingAnalyses={remainingAnalyses} />
 
       {/* ── LOADING STATE ── */}
       {isLoading && !data && (

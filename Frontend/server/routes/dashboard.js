@@ -42,6 +42,8 @@ const { getCallExportData } = require('../db/queries/callExport');
 const { getRawData } = require('../db/queries/rawData');
 const { getSettingsData } = require('../db/queries/settings');
 const marketPulse = require('../services/marketPulse');
+const insightEngine = require('../services/insightEngine');
+const { getLatestInsight } = require('../db/queries/insightLog');
 
 const router = express.Router();
 
@@ -337,6 +339,104 @@ router.post('/market-pulse', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to generate market pulse themes',
+    });
+  }
+});
+
+// ── AI Insights — Pre-Generated Daily (GET) ──────────────────
+
+router.get('/insights', async (req, res) => {
+  try {
+    const { section } = req.query;
+
+    if (!section || typeof section !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'section query parameter is required',
+      });
+    }
+
+    const insight = await getLatestInsight(req.clientId, section);
+
+    if (!insight) {
+      return res.json({
+        success: true,
+        data: { text: null, generatedAt: null },
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        text: insight.text,
+        generatedAt: insight.generatedAt,
+      },
+    });
+  } catch (err) {
+    // Degrade gracefully — return empty rather than 500.
+    // This handles InsightLog table not existing yet, BQ errors, etc.
+    // The frontend will fall back to on-demand generation.
+    logger.warn('GET insight unavailable, returning empty', {
+      error: err.message,
+      clientId: req.clientId,
+      section: req.query?.section,
+    });
+    res.json({
+      success: true,
+      data: { text: null, generatedAt: null },
+    });
+  }
+});
+
+// ── AI Insights — On-Demand Generation (POST) ────────────────
+
+router.post('/insights', async (req, res) => {
+  try {
+    if (!insightEngine.isAvailable()) {
+      return res.status(503).json({
+        success: false,
+        error: 'AI Insights not configured',
+      });
+    }
+
+    const { section, metrics, force } = req.body;
+
+    // Validate section
+    if (!section || typeof section !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'section is required',
+      });
+    }
+
+    // Validate metrics
+    if (!metrics || typeof metrics !== 'object') {
+      return res.json({
+        success: true,
+        data: { text: '' },
+      });
+    }
+
+    const result = await insightEngine.generateInsight(
+      req.clientId,
+      section,
+      metrics,
+      { force: !!force }
+    );
+
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (err) {
+    logger.error('Insight endpoint error', {
+      error: err.message,
+      clientId: req.clientId,
+      section: req.body?.section,
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to generate insight',
     });
   }
 });

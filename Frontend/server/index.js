@@ -48,6 +48,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/backend', require('./routes/backendProxy'));
+app.use('/api/jobs', require('./routes/jobs'));
 app.use('/api/partner', require('./routes/partner'));
 
 // ── Static File Serving (Production) ──────────────────────────

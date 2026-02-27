@@ -22,6 +22,8 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { COLORS } from '../../theme/constants';
 import { useMetrics } from '../../hooks/useMetrics';
+import { useInsight } from '../../hooks/useInsight';
+import InsightCard from '../../components/InsightCard';
 import { useAuth } from '../../context/AuthContext';
 import { meetsMinTier } from '../../utils/tierConfig';
 import { DUMMY_CALL_OUTCOMES } from '../../utils/dummyData';
@@ -71,6 +73,7 @@ function HealthColumn({ title, color, col, hasCloseRate = false, desiredDirectio
 
 export default function CallOutcomesPage() {
   const { data, isLoading, error } = useMetrics('call-outcomes');
+  const { text: insightText, generatedAt: insightGeneratedAt, isLoading: insightLoading, isOnDemandLoading, generateWithFilters, remainingAnalyses } = useInsight('call-outcomes', data);
   const { tier } = useAuth();
   const closerLocked = !meetsMinTier(tier, 'insight');
 
@@ -88,6 +91,8 @@ export default function CallOutcomesPage() {
           Close rates, deposits, follow-ups, lost calls, and pipeline health
         </Typography>
       </Box>
+
+      <InsightCard text={insightText} isLoading={insightLoading} generatedAt={insightGeneratedAt} isOnDemandLoading={isOnDemandLoading} onAnalyze={generateWithFilters} remainingAnalyses={remainingAnalyses} />
 
       {/* Loading state */}
       {isLoading && !data && (

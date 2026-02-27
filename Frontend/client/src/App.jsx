@@ -43,6 +43,9 @@ import AdminApiConsole from './pages/admin/AdminApiConsole';
 // Partner pages
 import PartnerDashboard from './pages/partner/PartnerDashboard';
 
+// Global components
+import ChatBubble from './components/ChatBubble';
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -108,6 +111,7 @@ export default function App() {
           {/* ── Catch-all: redirect to admin login ── */}
           <Route path="*" element={<Navigate to="/admin/login" replace />} />
         </Routes>
+        <ChatBubble />
         </DataProvider>
       </AuthProvider>
     </BrowserRouter>
