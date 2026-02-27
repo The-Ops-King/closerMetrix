@@ -357,6 +357,7 @@ export function computePageData(section, rawData, filters) {
     case 'violations': return computeViolations(calls, granularity, prev);
     case 'adherence': return computeAdherence(calls, granularity, prev);
     case 'market-insight': return computeMarketInsight(rawData);
+    case 'closer-scoreboard': return computeCloserScoreboard(calls, objections, closeCycles, granularity, prev);
     default: return null;
   }
 }
@@ -1941,8 +1942,11 @@ function computeViolations(calls, granularity, prev) {
 
   for (const c of held) {
     // Prefer structured complianceFlags from AI pipeline; fall back to keyMoments parsing
-    if (Array.isArray(c.complianceFlags) && c.complianceFlags.length > 0) {
-      for (const flag of c.complianceFlags) {
+    // complianceFlags is an object: { flags: [...], categories_found, has_ftc_warning, total_flags }
+    const cf = c.complianceFlags;
+    const cfFlags = cf && Array.isArray(cf.flags) ? cf.flags : (Array.isArray(cf) ? cf : null);
+    if (cfFlags && cfFlags.length > 0) {
+      for (const flag of cfFlags) {
         const category = flag.category;
         if (category && riskCategories.some(rc => category.toLowerCase().includes(rc.toLowerCase()))) {
           riskFlags.push({
@@ -1951,9 +1955,9 @@ function computeViolations(calls, granularity, prev) {
             closerId: c.closerId,
             callType: c.callType,
             riskCategory: category,
-            timestamp: flag.timestamp || '',
-            exactPhrase: flag.exact_phrase || '',
-            whyFlagged: flag.explanation || '',
+            timestamp: flag.timestamp_seconds ? `${Math.floor(flag.timestamp_seconds / 60)}:${String(flag.timestamp_seconds % 60).padStart(2, '0')}` : (flag.timestamp || ''),
+            exactPhrase: flag.phrase || flag.exact_phrase || '',
+            whyFlagged: flag.why_flagged || flag.explanation || '',
             recordingUrl: c.recordingUrl,
             transcriptUrl: c.transcriptLink,
           });
@@ -2197,6 +2201,311 @@ function computeAdherence(calls, granularity, prev) {
       adherenceOverTime: { data: adherenceOverTime, series: [
         { key: 'score', label: 'Adherence Score', color: 'green' },
       ]},
+    },
+  };
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// CLOSER SCOREBOARD PAGE (Insight+)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Compute Closer Scoreboard data — ranks closers across every category.
+ * Power Score = weighted composite: Revenue 30%, Close Rate 25%, Cash 15%,
+ * Show Rate 10%, Call Quality 10%, Obj Handling 10%.
+ *
+ * Returns champion data, comparison table, bar charts, radar, and trends.
+ */
+function computeCloserScoreboard(calls, objections, closeCycles, granularity, prev) {
+  const held = calls.filter(isShow);
+
+  // Group by closer — exclude closers with < 3 held calls
+  const closerBuckets = groupByCloser(held);
+  const closerNames = [];
+  const closerStats = [];
+
+  for (const [name, closerCalls] of closerBuckets) {
+    if (closerCalls.length < 3) continue;
+
+    const allCalls = calls.filter(c => (c.closerName || c.closerId || 'Unknown') === name);
+    const closerHeld = closerCalls;
+    const closerClosed = closerHeld.filter(isClosed);
+    const closerRevenue = closerHeld.reduce((s, c) => s + (c.revenueGenerated || 0), 0);
+    const closerCash = closerHeld.reduce((s, c) => s + (c.cashCollected || 0), 0);
+    const closerScheduled = allCalls.length;
+    const showRate = sd(closerHeld.length, closerScheduled);
+    const closeRate = sd(closerClosed.length, closerHeld.length);
+    const avgDealSize = closerClosed.length > 0 ? closerRevenue / closerClosed.length : 0;
+    const callQuality = avg(closerHeld, 'overallCallScore') || 0;
+    const objHandling = avg(closerHeld, 'objectionHandlingScore') || 0;
+
+    // Objection resolution rate for this closer
+    const closerObjs = objections.filter(o => (o.closerName || o.closerId || 'Unknown') === name);
+    const objResolved = closerObjs.filter(o => o.resolved).length;
+    const objResRate = sd(objResolved, closerObjs.length);
+
+    // Days to close & calls to close from closeCycles
+    const closerCycles = closeCycles.filter(c => (c.closerName || c.closerId || 'Unknown') === name);
+    const avgDaysToClose = closerCycles.length > 0
+      ? closerCycles.reduce((s, c) => s + (c.daysToClose || 0), 0) / closerCycles.length : 0;
+    const avgCallsToClose = closerCycles.length > 0
+      ? closerCycles.reduce((s, c) => s + (c.callsToClose || 0), 0) / closerCycles.length : 0;
+
+    // Avg call duration (minutes)
+    const avgDuration = avg(closerHeld, 'durationMinutes') || 0;
+
+    closerNames.push(name);
+    closerStats.push({
+      name,
+      closerId: closerCalls[0]?.closerId,
+      revenue: closerRevenue,
+      cash: closerCash,
+      closeRate,
+      showRate,
+      dealsClosed: closerClosed.length,
+      avgDealSize: round(avgDealSize, 0),
+      daysToClose: round(avgDaysToClose, 1),
+      callsToClose: round(avgCallsToClose, 1),
+      callQuality: round(callQuality, 1),
+      objHandling: round(objHandling, 1),
+      objResRate: round(objResRate, 3),
+      avgDuration: round(avgDuration, 1),
+      heldCount: closerHeld.length,
+    });
+  }
+
+  // Edge case: fewer than 2 closers
+  if (closerStats.length < 2) {
+    return { isEmpty: true, message: 'Need at least 2 closers with 3+ held calls for the scoreboard.' };
+  }
+
+  // ── Power Score via min-max normalization ──
+  // Higher is better for all except daysToClose and callsToClose (lower is better)
+  const metrics = ['revenue', 'closeRate', 'cash', 'showRate', 'callQuality', 'objHandling'];
+  const weights = { revenue: 0.30, closeRate: 0.25, cash: 0.15, showRate: 0.10, callQuality: 0.10, objHandling: 0.10 };
+
+  // Min-max for each metric
+  const mins = {};
+  const maxs = {};
+  for (const key of metrics) {
+    const vals = closerStats.map(c => c[key]);
+    mins[key] = Math.min(...vals);
+    maxs[key] = Math.max(...vals);
+  }
+
+  // Normalize and compute power score
+  for (const closer of closerStats) {
+    let score = 0;
+    for (const key of metrics) {
+      const range = maxs[key] - mins[key];
+      const norm = range === 0 ? 0.5 : (closer[key] - mins[key]) / range;
+      score += norm * weights[key] * 100;
+    }
+    closer.powerScore = round(score, 1);
+  }
+
+  // Sort by power score descending
+  closerStats.sort((a, b) => b.powerScore - a.powerScore);
+  const sortedNames = closerStats.map(c => c.name);
+
+  // ── Champion data ──
+  const champ = closerStats[0];
+  const champion = {
+    name: champ.name,
+    powerScore: champ.powerScore,
+    stats: [
+      { label: 'Revenue', value: '$' + champ.revenue.toLocaleString() },
+      { label: 'Close Rate', value: round(champ.closeRate * 100, 1) + '%' },
+      { label: 'Cash', value: '$' + champ.cash.toLocaleString() },
+      { label: 'Deals', value: String(champ.dealsClosed) },
+      { label: 'Call Quality', value: String(champ.callQuality) },
+      { label: 'Show Rate', value: round(champ.showRate * 100, 1) + '%' },
+    ],
+  };
+
+  // ── Top Performers list (for TopPerformers component) ──
+  const topPerformers = closerStats.map(c => ({
+    name: c.name,
+    dealsClosed: c.dealsClosed,
+    revenue: c.revenue,
+    powerScore: c.powerScore,
+  }));
+
+  // ── Comparison table (grouped) ──
+  const comparisonMetrics = [
+    { type: 'group', key: 'grp-financial', label: 'Financial', color: '#6BCF7F' },
+    { label: 'Revenue', key: 'revenue', format: 'currency', desiredDirection: 'up' },
+    { label: 'Cash Collected', key: 'cash', format: 'currency', desiredDirection: 'up' },
+    { label: 'Avg Deal Size', key: 'avgDealSize', format: 'currency', desiredDirection: 'up' },
+    { type: 'group', key: 'grp-conversion', label: 'Conversion', color: '#4DD4E8' },
+    { label: 'Close Rate', key: 'closeRate', format: 'percent', desiredDirection: 'up' },
+    { label: 'Show Rate', key: 'showRate', format: 'percent', desiredDirection: 'up' },
+    { type: 'group', key: 'grp-volume', label: 'Volume', color: '#4D7CFF' },
+    { label: 'Deals Closed', key: 'dealsClosed', format: 'number', desiredDirection: 'up' },
+    { label: 'Calls Taken', key: 'heldCount', format: 'number', desiredDirection: 'up' },
+    { type: 'group', key: 'grp-efficiency', label: 'Efficiency', color: '#FFD93D' },
+    { label: 'Days to Close', key: 'daysToClose', format: 'decimal', desiredDirection: 'down' },
+    { label: 'Calls to Close', key: 'callsToClose', format: 'decimal', desiredDirection: 'down' },
+    { label: 'Avg Duration (min)', key: 'avgDuration', format: 'decimal', desiredDirection: 'up' },
+    { type: 'group', key: 'grp-quality', label: 'Quality', color: '#B84DFF' },
+    { label: 'Call Quality', key: 'callQuality', format: 'score', desiredDirection: 'up' },
+    { label: 'Obj Resolution Rate', key: 'objResRate', format: 'percent', desiredDirection: 'up' },
+  ].map(metric => {
+    if (metric.type === 'group') return metric;
+    return { ...metric, values: closerStats.map(c => c[metric.key]) };
+  });
+
+  const comparisonTable = {
+    closers: sortedNames,
+    metrics: comparisonMetrics,
+  };
+
+  // ── Bar charts (Section 3: Revenue & Close Rankings) ──
+  const revenueByCloser = {
+    data: closerStats.map(c => ({ date: c.name, value: c.revenue })).sort((a, b) => b.value - a.value),
+    series: [{ key: 'value', label: 'Revenue', color: 'green' }],
+  };
+  const closeRateByCloser = {
+    data: closerStats.map(c => ({ date: c.name, value: c.closeRate })).sort((a, b) => b.value - a.value),
+    series: [{ key: 'value', label: 'Close Rate', color: 'cyan' }],
+  };
+  const showRateByCloser = {
+    data: closerStats.map(c => ({ date: c.name, value: c.showRate })).sort((a, b) => b.value - a.value),
+    series: [{ key: 'value', label: 'Show Rate', color: 'blue' }],
+  };
+  const cashByCloser = {
+    data: closerStats.map(c => ({ date: c.name, value: c.cash })).sort((a, b) => b.value - a.value),
+    series: [{ key: 'value', label: 'Cash Collected', color: 'teal' }],
+  };
+
+  // ── Radar chart (Section 4: Skills Radar) ──
+  // 6 clean axes — all real data fields, no derived metrics
+  const radarAxes = ['Close Rate', 'Show Rate', 'Rev/Call', 'Call Quality', 'Obj Handling', 'Adherence'];
+  const maxRevPerCall = Math.max(...closerStats.map(s => s.heldCount > 0 ? s.revenue / s.heldCount : 0), 1);
+  const radarByCloser = closerStats.map(c => {
+    const revPerCall = c.heldCount > 0 ? c.revenue / c.heldCount : 0;
+    const adherence = avg(held.filter(h => (h.closerName || h.closerId || 'Unknown') === c.name), 'scriptAdherenceScore') || 0;
+    return {
+      label: c.name,
+      closerId: c.closerId,
+      values: [
+        round(c.closeRate * 10, 1),              // Close Rate (0-1 → 0-10)
+        round(c.showRate * 10, 1),                // Show Rate (0-1 → 0-10)
+        round((revPerCall / maxRevPerCall) * 10, 1), // Rev/Call (normalized to 0-10)
+        round(c.callQuality, 1),                  // Call Quality (already 0-10)
+        round(c.objHandling, 1),                  // Obj Handling (already 0-10)
+        round(adherence, 1),                      // Adherence (already 0-10)
+      ],
+    };
+  });
+
+  const radarData = { axes: radarAxes, byCloser: radarByCloser };
+
+  // ── Call Quality by Closer (Section 4 right side) ──
+  const callQualityByCloser = {
+    data: closerStats.map(c => ({ date: c.name, value: c.callQuality })).sort((a, b) => b.value - a.value),
+    series: [{ key: 'value', label: 'Call Quality', color: 'purple' }],
+  };
+
+  // ── Section 5: Efficiency & Speed ──
+  const daysToCloseByCloser = {
+    data: closerStats.filter(c => c.daysToClose > 0).map(c => ({ date: c.name, value: c.daysToClose })).sort((a, b) => a.value - b.value),
+    series: [{ key: 'value', label: 'Avg Days to Close', color: 'amber' }],
+  };
+  const callsToCloseByCloser = {
+    data: closerStats.filter(c => c.callsToClose > 0).map(c => ({ date: c.name, value: c.callsToClose })).sort((a, b) => a.value - b.value),
+    series: [{ key: 'value', label: 'Avg Calls to Close', color: 'purple' }],
+  };
+  const objResRateByCloser = {
+    data: closerStats.map(c => ({ date: c.name, value: c.objResRate })).sort((a, b) => b.value - a.value),
+    series: [{ key: 'value', label: 'Obj Resolution Rate', color: 'cyan' }],
+  };
+  const avgDurationByCloser = {
+    data: closerStats.filter(c => c.avgDuration > 0).map(c => ({ date: c.name, value: c.avgDuration })).sort((a, b) => b.value - a.value),
+    series: [{ key: 'value', label: 'Avg Duration (min)', color: 'blue' }],
+  };
+
+  // ── Leaderboards — ranked lists for multiple categories ──
+  const leaderboards = {
+    revenue: closerStats.map(c => ({ name: c.name, dealsClosed: c.dealsClosed, revenue: c.revenue })),
+    cash: [...closerStats].sort((a, b) => b.cash - a.cash).map(c => ({ name: c.name, dealsClosed: c.dealsClosed, revenue: c.cash })),
+    dealsClosed: [...closerStats].sort((a, b) => b.dealsClosed - a.dealsClosed).map(c => ({ name: c.name, dealsClosed: '$' + c.revenue.toLocaleString(), revenue: c.dealsClosed + ' deals' })),
+    closeRate: [...closerStats].sort((a, b) => b.closeRate - a.closeRate).map(c => ({ name: c.name, dealsClosed: c.heldCount + ' calls', revenue: round(c.closeRate * 100, 1) + '%' })),
+    showRate: [...closerStats].sort((a, b) => b.showRate - a.showRate).map(c => ({ name: c.name, dealsClosed: c.heldCount + ' held', revenue: round(c.showRate * 100, 1) + '%' })),
+    callQuality: [...closerStats].sort((a, b) => b.callQuality - a.callQuality).map(c => ({ name: c.name, dealsClosed: c.heldCount + ' calls', revenue: c.callQuality + '/10' })),
+    objResolved: [...closerStats].sort((a, b) => b.objResRate - a.objResRate).map(c => ({ name: c.name, dealsClosed: Math.round(c.objResRate * 100) + '% resolved', revenue: c.name })),
+    callsTaken: [...closerStats].sort((a, b) => b.heldCount - a.heldCount).map(c => ({ name: c.name, dealsClosed: c.dealsClosed + ' closed', revenue: c.heldCount + ' calls' })),
+    avgDealSize: [...closerStats].sort((a, b) => b.avgDealSize - a.avgDealSize).map(c => ({ name: c.name, dealsClosed: c.dealsClosed + ' deals', revenue: c.avgDealSize })),
+    speed: [...closerStats].filter(c => c.daysToClose > 0).sort((a, b) => a.daysToClose - b.daysToClose).map(c => ({ name: c.name, dealsClosed: c.dealsClosed + ' deals', revenue: c.daysToClose + ' days' })),
+    avgDuration: [...closerStats].filter(c => c.avgDuration > 0).sort((a, b) => b.avgDuration - a.avgDuration).map(c => ({ name: c.name, dealsClosed: c.heldCount + ' calls', revenue: round(c.avgDuration, 1) + ' min' })),
+  };
+
+  // ── Section 6: Trends Over Time (top 5 closers by power score) ──
+  // Force weekly granularity for trends — daily is too noisy per-closer
+  const trendGranularity = 'weekly';
+  const top5 = closerStats.slice(0, 5);
+  const rankColors = ['green', 'cyan', 'blue', 'purple', 'amber'];
+
+  // Pre-group ALL calls (not just held) by time bucket for close rate denominator
+  const allCallBuckets = groupByTime(calls, 'appointmentDate', trendGranularity);
+  const heldBuckets = groupByTime(held, 'appointmentDate', trendGranularity);
+
+  // Close Rate over time per closer (held / all scheduled per week)
+  const closeRateTrendData = [];
+  for (const [date] of heldBuckets) {
+    const row = { date };
+    const allBucket = allCallBuckets.get(date) || [];
+    const heldBucket = heldBuckets.get(date) || [];
+    for (let i = 0; i < top5.length; i++) {
+      const name = top5[i].name;
+      const closerHeldInBucket = heldBucket.filter(c => (c.closerName || c.closerId || 'Unknown') === name);
+      const closerAllInBucket = allBucket.filter(c => (c.closerName || c.closerId || 'Unknown') === name);
+      const closerClosedInBucket = closerHeldInBucket.filter(isClosed);
+      // Close rate = closed / held (not closed / scheduled)
+      row[`closer${i}`] = closerHeldInBucket.length >= 2 ? round(sd(closerClosedInBucket.length, closerHeldInBucket.length), 3) : null;
+    }
+    closeRateTrendData.push(row);
+  }
+  const closeRateTrend = {
+    data: closeRateTrendData,
+    series: top5.map((c, i) => ({ key: `closer${i}`, label: c.name, color: rankColors[i] })),
+  };
+
+  // Revenue over time per closer (weekly buckets)
+  const revenueTrendData = [];
+  for (const [date, bucket] of heldBuckets) {
+    const row = { date };
+    for (let i = 0; i < top5.length; i++) {
+      const name = top5[i].name;
+      const closerBucket = bucket.filter(c => (c.closerName || c.closerId || 'Unknown') === name);
+      row[`closer${i}`] = closerBucket.reduce((s, c) => s + (c.revenueGenerated || 0), 0) || null;
+    }
+    revenueTrendData.push(row);
+  }
+  const revenueTrend = {
+    data: revenueTrendData,
+    series: top5.map((c, i) => ({ key: `closer${i}`, label: c.name, color: rankColors[i] })),
+  };
+
+  return {
+    champion,
+    topPerformers,
+    comparisonTable,
+    leaderboards,
+    charts: {
+      revenueByCloser,
+      closeRateByCloser,
+      showRateByCloser,
+      cashByCloser,
+      radarData,
+      callQualityByCloser,
+      daysToCloseByCloser,
+      callsToCloseByCloser,
+      objResRateByCloser,
+      avgDurationByCloser,
+      closeRateTrend,
+      revenueTrend,
     },
   };
 }

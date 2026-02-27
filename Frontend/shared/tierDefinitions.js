@@ -24,7 +24,7 @@ const TIERS = {
   insight: {
     label: 'Insight',
     color: '#F59E0B',
-    pages: ['overview', 'financial', 'attendance', 'callOutcomes', 'salesCycle', 'objections', 'projections', 'marketInsight'],
+    pages: ['overview', 'financial', 'attendance', 'callOutcomes', 'salesCycle', 'objections', 'projections', 'marketInsight', 'closerScoreboard'],
     filters: ['dateRange', 'closer', 'objectionType', 'granularity'],
     features: {
       closerFilter: true,
@@ -38,7 +38,7 @@ const TIERS = {
   executive: {
     label: 'Executive',
     color: '#EF4444',
-    pages: ['overview', 'financial', 'attendance', 'callOutcomes', 'salesCycle', 'objections', 'projections', 'marketInsight', 'violations', 'adherence'],
+    pages: ['overview', 'financial', 'attendance', 'callOutcomes', 'salesCycle', 'objections', 'projections', 'marketInsight', 'closerScoreboard', 'violations', 'adherence'],
     filters: ['dateRange', 'closer', 'objectionType', 'granularity', 'riskCategory'],
     features: {
       closerFilter: true,

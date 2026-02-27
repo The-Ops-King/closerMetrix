@@ -114,11 +114,11 @@ export default function TopPerformers({
                   fontWeight: 400,
                 }}
               >
-                {closer.dealsClosed} deals closed
+                {typeof closer.dealsClosed === 'string' ? closer.dealsClosed : `${closer.dealsClosed} deals closed`}
               </Typography>
             </Box>
 
-            {/* Revenue amount — colored to match rank */}
+            {/* Value — colored to match rank */}
             <Typography
               sx={{
                 color: rankColor,
@@ -127,7 +127,7 @@ export default function TopPerformers({
                 flexShrink: 0,
               }}
             >
-              {fmtDollar(closer.revenue)}
+              {typeof closer.revenue === 'string' ? closer.revenue : fmtDollar(closer.revenue)}
             </Typography>
           </Box>
         );

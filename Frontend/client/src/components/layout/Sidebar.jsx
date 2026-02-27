@@ -16,8 +16,9 @@ import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
 import Typography from '@mui/material/Typography';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import SettingsIcon from '@mui/icons-material/Settings';
 import { COLORS, LAYOUT } from '../../theme/constants';
-import { NAV_ITEMS, meetsMinTier } from '../../utils/tierConfig';
+import { NAV_EVERYDAY, NAV_DEEP_DIVE, SETTINGS_NAV_ITEM, meetsMinTier } from '../../utils/tierConfig';
 
 export default function Sidebar({ tier, basePath, onNavigate }) {
   const navigate = useNavigate();
@@ -72,57 +73,131 @@ export default function Sidebar({ tier, basePath, onNavigate }) {
         </Typography>
       </Box>
 
-      {/* Navigation Items — show ALL items, lock icon on restricted ones */}
+      {/* Navigation Items — two sections with labels */}
       <List sx={{ px: 1, py: 2, flex: 1 }}>
-        {NAV_ITEMS.map((item) => {
-          const active = isActive(item);
-          const locked = !meetsMinTier(tier, item.minTier);
+        {[
+          { label: 'EVERYDAY', items: NAV_EVERYDAY },
+          { label: 'DEEP DIVE', items: NAV_DEEP_DIVE },
+        ].map((section, sIdx) => (
+          <React.Fragment key={section.label}>
+            {/* Section label with divider lines */}
+            <Box
+              sx={{
+                mx: 1,
+                mt: sIdx === 0 ? 0 : 2.5,
+                mb: 1,
+                borderTop: `1px solid ${COLORS.border.default}`,
+                borderBottom: `1px solid ${COLORS.border.default}`,
+                py: 0.75,
+              }}
+            >
+              <Typography
+                sx={{
+                  fontSize: '0.8rem',
+                  fontWeight: 800,
+                  letterSpacing: '0.14em',
+                  textTransform: 'uppercase',
+                  color: COLORS.text.secondary,
+                  px: 1,
+                  textAlign: 'center',
+                }}
+              >
+                {section.label}
+              </Typography>
+            </Box>
 
+            {section.items.map((item) => {
+              const active = isActive(item);
+              const locked = !meetsMinTier(tier, item.minTier);
+
+              return (
+                <ListItemButton
+                  key={item.key}
+                  onClick={() => { navigate(`${basePath}${item.path}`); onNavigate?.(); }}
+                  sx={{
+                    borderRadius: 1.5,
+                    mb: 0.5,
+                    py: 1.2,
+                    px: 2,
+                    backgroundColor: active ? 'rgba(77, 212, 232, 0.08)' : 'transparent',
+                    borderLeft: active ? `3px solid ${COLORS.neon.cyan}` : '3px solid transparent',
+                    '&:hover': {
+                      backgroundColor: active
+                        ? 'rgba(77, 212, 232, 0.12)'
+                        : 'rgba(255, 255, 255, 0.04)',
+                    },
+                  }}
+                >
+                  <ListItemText
+                    primary={item.label}
+                    primaryTypographyProps={{
+                      fontSize: { xs: '0.95rem', md: '0.85rem' },
+                      fontWeight: active ? 600 : 400,
+                      color: active
+                        ? COLORS.neon.cyan
+                        : locked
+                          ? COLORS.text.muted
+                          : COLORS.text.secondary,
+                      letterSpacing: '0.02em',
+                    }}
+                  />
+                  {locked && (
+                    <LockOutlinedIcon
+                      sx={{
+                        fontSize: '0.9rem',
+                        color: COLORS.text.muted,
+                        ml: 0.5,
+                        opacity: 0.6,
+                      }}
+                    />
+                  )}
+                </ListItemButton>
+              );
+            })}
+          </React.Fragment>
+        ))}
+      </List>
+
+      {/* Settings — gear icon pinned above footer */}
+      <Box sx={{ px: 1, pb: 1 }}>
+        {(() => {
+          const settingsActive = location.pathname.endsWith('/settings');
           return (
             <ListItemButton
-              key={item.key}
-              onClick={() => { navigate(`${basePath}${item.path}`); onNavigate?.(); }}
+              onClick={() => { navigate(`${basePath}${SETTINGS_NAV_ITEM.path}`); onNavigate?.(); }}
               sx={{
                 borderRadius: 1.5,
-                mb: 0.5,
                 py: 1.2,
                 px: 2,
-                backgroundColor: active ? 'rgba(77, 212, 232, 0.08)' : 'transparent',
-                borderLeft: active ? `3px solid ${COLORS.neon.cyan}` : '3px solid transparent',
+                backgroundColor: settingsActive ? 'rgba(77, 212, 232, 0.08)' : 'transparent',
+                borderLeft: settingsActive ? `3px solid ${COLORS.neon.cyan}` : '3px solid transparent',
                 '&:hover': {
-                  backgroundColor: active
+                  backgroundColor: settingsActive
                     ? 'rgba(77, 212, 232, 0.12)'
                     : 'rgba(255, 255, 255, 0.04)',
                 },
               }}
             >
+              <SettingsIcon
+                sx={{
+                  fontSize: '1.1rem',
+                  color: settingsActive ? COLORS.neon.cyan : COLORS.text.muted,
+                  mr: 1.5,
+                }}
+              />
               <ListItemText
-                primary={item.label}
+                primary={SETTINGS_NAV_ITEM.label}
                 primaryTypographyProps={{
                   fontSize: { xs: '0.95rem', md: '0.85rem' },
-                  fontWeight: active ? 600 : 400,
-                  color: active
-                    ? COLORS.neon.cyan
-                    : locked
-                      ? COLORS.text.muted
-                      : COLORS.text.secondary,
+                  fontWeight: settingsActive ? 600 : 400,
+                  color: settingsActive ? COLORS.neon.cyan : COLORS.text.secondary,
                   letterSpacing: '0.02em',
                 }}
               />
-              {locked && (
-                <LockOutlinedIcon
-                  sx={{
-                    fontSize: '0.9rem',
-                    color: COLORS.text.muted,
-                    ml: 0.5,
-                    opacity: 0.6,
-                  }}
-                />
-              )}
             </ListItemButton>
           );
-        })}
-      </List>
+        })()}
+      </Box>
 
       {/* Footer — subtle branding */}
       <Box sx={{ p: 2, borderTop: `1px solid ${COLORS.border.subtle}` }}>

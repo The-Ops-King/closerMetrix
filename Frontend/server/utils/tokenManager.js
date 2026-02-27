@@ -127,12 +127,12 @@ async function validateToken(tokenId) {
       return null;
     }
 
-    // Fetch closers for this client
+    // Fetch all closers (active + inactive) so inactive ones appear in filter dropdown
     const closerRows = await bq.runQuery(
-      `SELECT closer_id, name
+      `SELECT closer_id, name, status
        FROM ${bq.table('Closers')}
-       WHERE client_id = @clientId AND status = 'Active'
-       ORDER BY name`,
+       WHERE client_id = @clientId
+       ORDER BY LOWER(status) DESC, name`,
       { clientId: token.client_id }
     );
 
@@ -150,7 +150,7 @@ async function validateToken(tokenId) {
       client_id: token.client_id,
       company_name: token.company_name,
       plan_tier: token.plan_tier,
-      closers: closerRows.map((r) => ({ closer_id: r.closer_id, name: r.name })),
+      closers: closerRows.map((r) => ({ closer_id: r.closer_id, name: r.name, status: r.status })),
     };
   } catch (err) {
     logger.error('Token validation failed', { error: err.message, token: tokenId.slice(0, 8) });
@@ -354,12 +354,12 @@ async function getClientById(clientId) {
 
     const client = rows[0];
 
-    // Fetch closers for this client
+    // Fetch all closers (active + inactive) for filter dropdown and admin management
     const closerRows = await bq.runQuery(
-      `SELECT closer_id, name
+      `SELECT closer_id, name, status
        FROM ${bq.table('Closers')}
-       WHERE client_id = @clientId AND status = 'Active'
-       ORDER BY name`,
+       WHERE client_id = @clientId
+       ORDER BY LOWER(status) DESC, name`,
       { clientId }
     );
 
@@ -367,7 +367,7 @@ async function getClientById(clientId) {
       client_id: client.client_id,
       company_name: client.company_name,
       plan_tier: client.plan_tier,
-      closers: closerRows.map((r) => ({ closer_id: r.closer_id, name: r.name })),
+      closers: closerRows.map((r) => ({ closer_id: r.closer_id, name: r.name, status: r.status })),
     };
   } catch (err) {
     logger.error('getClientById failed', { error: err.message, clientId });

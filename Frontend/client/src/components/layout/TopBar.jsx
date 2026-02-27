@@ -72,6 +72,7 @@ export default function TopBar({ companyName, tier, onMenuClick }) {
   const isObjectionsPage = location.pathname.includes('/objections');
   const isViolationsPage = location.pathname.includes('/violations');
   const isMarketInsightPage = location.pathname.includes('/market-insight');
+  const isSettingsPage = location.pathname.endsWith('/settings');
   const { token, mode, adminViewClientId } = useAuth();
   const { queryParams, dateRange } = useFilters();
   const [downloading, setDownloading] = useState(false);
@@ -149,8 +150,8 @@ export default function TopBar({ companyName, tier, onMenuClick }) {
 
       {/* Right: Filter controls + Download button — wraps to full width on mobile */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, md: 2 }, flexWrap: 'wrap', width: { xs: '100%', md: 'auto' } }}>
-        {/* Market Insight uses auto last-30-days — no user filters */}
-        {!isMarketInsightPage && (
+        {/* Market Insight uses auto last-30-days; Settings has no data filters */}
+        {!isMarketInsightPage && !isSettingsPage && (
           <>
             {meetsMinTier(tier, 'insight') ? (
               <CloserFilter />
@@ -170,7 +171,7 @@ export default function TopBar({ companyName, tier, onMenuClick }) {
             <DateRangeFilter />
           </>
         )}
-        <Tooltip title="Download filtered calls as CSV" arrow>
+        {!isSettingsPage && <Tooltip title="Download filtered calls as CSV" arrow>
           <IconButton
             onClick={handleDownload}
             disabled={downloading}
@@ -193,7 +194,7 @@ export default function TopBar({ companyName, tier, onMenuClick }) {
               <FileDownloadOutlinedIcon fontSize="small" />
             )}
           </IconButton>
-        </Tooltip>
+        </Tooltip>}
       </Box>
     </Box>
   );

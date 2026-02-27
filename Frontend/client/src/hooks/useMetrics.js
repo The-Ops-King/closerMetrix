@@ -16,7 +16,7 @@
  *   const { data } = useMetrics('financial', { enabled: hasTierAccess });
  */
 
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { useFilters } from '../context/FilterContext';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
@@ -40,6 +40,9 @@ export function useMetrics(section, options = {}) {
   const authReady = Boolean(isAuthenticated);
   const adminViewReady = mode === 'admin' ? Boolean(adminViewClientId) : true;
   const enabled = callerEnabled && authReady && adminViewReady;
+
+  // Cache the last valid computed data so pages don't flash blank during transitions
+  const lastValidData = useRef(null);
 
   // Compute page data from raw data + current filters.
   // useMemo ensures this only re-runs when inputs actually change.
@@ -68,9 +71,17 @@ export function useMetrics(section, options = {}) {
     queryParams.riskCategory,
   ]);
 
+  // Update the cached data whenever we get a fresh computation
+  if (computedData !== null) {
+    lastValidData.current = computedData;
+  }
+
+  // Use cached data as fallback when computedData is null during transitions
+  const effectiveData = computedData ?? lastValidData.current;
+
   return {
-    data: computedData,
-    isLoading: isDataLoading && !rawData,
+    data: effectiveData,
+    isLoading: (isDataLoading && !rawData) || (computedData === null && lastValidData.current !== null),
     error: dataError ? new Error(dataError) : null,
     // Compatibility: refetch triggers a fresh raw data load from DataContext
     refetch: refetchData,

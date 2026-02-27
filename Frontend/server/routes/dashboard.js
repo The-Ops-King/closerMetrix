@@ -40,6 +40,7 @@ const { getViolationsData } = require('../db/queries/violations');
 const { getAdherenceData } = require('../db/queries/adherence');
 const { getCallExportData } = require('../db/queries/callExport');
 const { getRawData } = require('../db/queries/rawData');
+const { getSettingsData } = require('../db/queries/settings');
 const marketPulse = require('../services/marketPulse');
 
 const router = express.Router();
@@ -338,6 +339,121 @@ router.post('/market-pulse', async (req, res) => {
       error: 'Failed to generate market pulse themes',
     });
   }
+});
+
+// ── Settings (All Tiers — Client Config) ──────────────────────
+
+router.get('/settings', async (req, res) => {
+  try {
+    const result = await getSettingsData(req.clientId);
+    res.json({
+      success: true,
+      data: result,
+      meta: buildMeta(req),
+    });
+  } catch (err) {
+    logger.error('Settings endpoint error', { error: err.message, clientId: req.clientId });
+    res.status(500).json({ success: false, error: 'Failed to load settings data' });
+  }
+});
+
+// ── Settings Save (All Tiers — Update settings_json) ─────────
+
+router.put('/settings', async (req, res) => {
+  try {
+    const { settings_json } = req.body;
+
+    if (settings_json == null || typeof settings_json !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'settings_json must be a JSON string',
+      });
+    }
+
+    // Validate it's valid JSON
+    try {
+      JSON.parse(settings_json);
+    } catch {
+      return res.status(400).json({
+        success: false,
+        error: 'settings_json is not valid JSON',
+      });
+    }
+
+    if (bq.isAvailable()) {
+      await bq.runQuery(
+        `UPDATE ${bq.table('Clients')}
+         SET settings_json = @settingsJson,
+             last_modified = CURRENT_TIMESTAMP()
+         WHERE client_id = @clientId`,
+        { clientId: req.clientId, settingsJson: settings_json }
+      );
+      logger.info('Settings JSON saved', { clientId: req.clientId });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('Settings save error', { error: err.message, clientId: req.clientId });
+    res.status(500).json({ success: false, error: 'Failed to save settings' });
+  }
+});
+
+// ── Client-Facing Closer CRUD ─────────────────────────────────
+// These routes let authenticated clients manage their own closers.
+// clientIsolation already verified the client — we proxy to the Backend
+// using the server's admin key so the client doesn't need one.
+
+const config = require('../config');
+
+async function proxyCloserToBackend(req, res, backendPath, method) {
+  const httpMethod = method || req.method;
+  const url = new URL(backendPath, config.backendApiUrl);
+
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${config.adminApiKey}`,
+  };
+
+  const fetchOpts = { method: httpMethod, headers };
+  if (['POST', 'PUT', 'PATCH'].includes(httpMethod) && req.body) {
+    fetchOpts.body = JSON.stringify(req.body);
+  }
+
+  try {
+    const backendRes = await fetch(url.toString(), fetchOpts);
+    const data = await backendRes.json().catch(() => ({}));
+    res.status(backendRes.status).json(data);
+  } catch (err) {
+    logger.error('Closer proxy error', { path: backendPath, error: err.message });
+    res.status(502).json({ error: 'Backend unreachable', details: err.message });
+  }
+}
+
+router.get('/closers', (req, res) => {
+  proxyCloserToBackend(req, res, `/admin/clients/${req.clientId}/closers`);
+});
+
+router.post('/closers', (req, res) => {
+  proxyCloserToBackend(req, res, `/admin/clients/${req.clientId}/closers`);
+});
+
+router.put('/closers/:closerId', (req, res) => {
+  proxyCloserToBackend(req, res, `/admin/clients/${req.clientId}/closers/${req.params.closerId}`);
+});
+
+router.delete('/closers/:closerId', (req, res) => {
+  proxyCloserToBackend(req, res, `/admin/clients/${req.clientId}/closers/${req.params.closerId}`);
+});
+
+router.patch('/closers/:closerId/reactivate', (req, res) => {
+  proxyCloserToBackend(req, res, `/admin/clients/${req.clientId}/closers/${req.params.closerId}/reactivate`);
+});
+
+// ── Client-Facing Client Update (AI Prompts, Script) ─────────
+// Lets authenticated clients update their own client record fields.
+
+router.put('/client-config', (req, res) => {
+  proxyCloserToBackend(req, res, `/admin/clients/${req.clientId}`);
 });
 
 module.exports = router;
