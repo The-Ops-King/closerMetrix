@@ -30,6 +30,7 @@ import ViolationsPage from './pages/client/ViolationsPage';
 import AdherencePage from './pages/client/AdherencePage';
 import MarketInsightPage from './pages/client/MarketInsightPage';
 import CloserScoreboardPage from './pages/client/CloserScoreboardPage';
+import DataAnalysisPage from './pages/client/DataAnalysisPage';
 import SettingsPage from './pages/client/SettingsPage';
 
 // Admin pages
@@ -69,6 +70,9 @@ export default function App() {
             <Route path="violations" element={<ViolationsPage />} />
             <Route path="adherence" element={<AdherencePage />} />
 
+            {/* All tiers — coming soon */}
+            <Route path="data-analysis" element={<DataAnalysisPage />} />
+
             {/* Settings — all tiers */}
             <Route path="settings" element={<SettingsPage />} />
           </Route>
@@ -94,6 +98,7 @@ export default function App() {
             <Route path="closer-scoreboard" element={<CloserScoreboardPage />} />
             <Route path="violations" element={<ViolationsPage />} />
             <Route path="adherence" element={<AdherencePage />} />
+            <Route path="data-analysis" element={<DataAnalysisPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
 
