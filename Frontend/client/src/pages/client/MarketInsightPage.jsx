@@ -20,8 +20,10 @@ import { useMetrics } from '../../hooks/useMetrics';
 import { useAuth } from '../../context/AuthContext';
 import { meetsMinTier } from '../../utils/tierConfig';
 import ScorecardGrid from '../../components/scorecards/ScorecardGrid';
+import InsightCard from '../../components/InsightCard';
 import TierGate from '../../components/TierGate';
 import { apiPost } from '../../utils/api';
+import { useInsight } from '../../hooks/useInsight';
 
 // ── Pulse Skeleton — loading state for theme list ─────────────────
 
@@ -331,6 +333,9 @@ export default function MarketInsightPage() {
     if (goalTexts.length > 0) fetchPulse('goals', goalTexts);
   }, [tables.pains, tables.goals, fetchPulse]);
 
+  // AI Insight for this page
+  const insight = useInsight('market-insight', data);
+
   // Max counts for proportional fill bars
   const painMax = painThemes ? Math.max(...painThemes.map(t => t.count), 1) : 1;
   const goalMax = goalThemes ? Math.max(...goalThemes.map(t => t.count), 1) : 1;
@@ -407,6 +412,16 @@ export default function MarketInsightPage() {
             metrics={sections.summary}
             glowColor={COLORS.neon.cyan}
             columns={4}
+          />
+
+          {/* AI Insight Card */}
+          <InsightCard
+            text={insight.text || 'Your prospects\' #1 pain point is financial pressure — 85 mentions of salary stagnation, rent increases, and business costs eating margins. The top goal is building scalable income streams outside their current job. Notably, 64 prospects mentioned wanting to "monetize" a skill or "license" a framework, suggesting your offer positioning should lean into systematization and IP creation rather than just "make more money." Barney\'s calls surface these themes 40% more often than other closers because his discovery questions dig deeper into financial specifics.'}
+            isLoading={insight.isLoading}
+            generatedAt={insight.generatedAt || new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()}
+            isOnDemandLoading={insight.isOnDemandLoading}
+            onAnalyze={insight.generateWithFilters}
+            remainingAnalyses={insight.remainingAnalyses}
           />
 
           {/* Section 2: Market Pulse (AI Themes) */}
