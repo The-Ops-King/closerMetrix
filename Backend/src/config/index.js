@@ -103,6 +103,11 @@ const config = {
     minProspectUtterances: 3,
     minProspectWords: 50,
   },
+
+  /** Payment matching thresholds */
+  matching: {
+    jaroWinklerThreshold: parseFloat(process.env.FUZZY_MATCH_THRESHOLD) || 0.82,
+  },
 };
 
 module.exports = config;

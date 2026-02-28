@@ -317,6 +317,52 @@ module.exports = {
   },
 
   /**
+   * Finds a call by exact prospect name match (case-insensitive, trimmed).
+   * Used by MatchingService as Tier 2 of the matching chain.
+   *
+   * Returns the most recent call with attendance = Show or any post-Show state,
+   * matching the given name exactly (after lowering + trimming).
+   *
+   * @param {string} clientId — Client scope
+   * @param {string} name — Prospect name to match
+   * @returns {Object|null} Matching call record or null
+   */
+  async findCallByName(clientId, name) {
+    const rows = await bq.query(
+      `SELECT * FROM ${CALLS_TABLE}
+       WHERE client_id = @clientId
+         AND LOWER(TRIM(prospect_name)) = LOWER(TRIM(@name))
+         AND attendance IN ('Show', 'Follow Up', 'Lost', 'Closed - Won', 'Deposit', 'Disqualified', 'Not Pitched')
+       ORDER BY appointment_date DESC
+       LIMIT 1`,
+      { clientId, name }
+    );
+    return rows.length > 0 ? rows[0] : null;
+  },
+
+  /**
+   * Finds calls where the prospect has already made a payment.
+   * Used by MatchingService as the pool for Tier 3 fuzzy name matching.
+   *
+   * Only returns calls where cash_collected > 0 OR total_payment_amount > 0,
+   * enforced in SQL (not application code). This prevents fuzzy matching
+   * against prospects who have never paid — reducing false matches.
+   *
+   * @param {string} clientId — Client scope
+   * @returns {Array} Array of call records with existing payments
+   */
+  async findCallsByPayers(clientId) {
+    return bq.query(
+      `SELECT * FROM ${CALLS_TABLE}
+       WHERE client_id = @clientId
+         AND (cash_collected > 0 OR total_payment_amount > 0)
+         AND attendance IN ('Show', 'Follow Up', 'Lost', 'Closed - Won', 'Deposit', 'Disqualified', 'Not Pitched')
+       ORDER BY appointment_date DESC`,
+      { clientId }
+    );
+  },
+
+  /**
    * Inserts a new call record.
    */
   async create(callData) {
