@@ -1,5 +1,17 @@
 # CloserMetrix — Payment Webhook Enhancement
 
+## Current Milestone: v1.0 Payment Webhook Enhancement
+
+**Goal:** Upgrade the existing payment webhook system with first-payment vs total-payment tracking, three-tier matching chain, configurable closer credit attribution, and refund handling.
+
+**Target features:**
+- Redefine `cash_collected` = first payment only, add `total_payment_amount`
+- Three-tier matching: email → exact name → fuzzy name (against payers only)
+- Configurable closer credit attribution per client
+- Refund handling across both columns
+- Split-pay / payment plan tracking
+- Frontend surfaces both payment metrics
+
 ## What This Is
 
 Enhancement to CloserMetrix's existing payment webhook system. The Backend already has a PaymentService, ProspectService, and `/webhooks/payment` endpoint (Phase 5 complete). This milestone brings the payment system in line with Tyler's updated requirements: proper first-payment vs total-payment tracking, a three-tier matching chain (email → exact name → fuzzy name against previous payers), configurable closer credit attribution, and refund handling that reduces both columns.
@@ -116,4 +128,4 @@ Configurable per client:
 | cash_collected = first payment only | Aligns with "cash collected on close" metric Tyler wants to track separately | — Pending |
 
 ---
-*Last updated: 2026-02-28 after initialization*
+*Last updated: 2026-02-28 after milestone v1.0 started*
