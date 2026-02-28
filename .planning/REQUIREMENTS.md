@@ -62,26 +62,26 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SCHM-01 | — | Pending |
-| SCHM-02 | — | Pending |
-| SCHM-03 | — | Pending |
-| SCHM-04 | — | Pending |
-| MTCH-01 | — | Pending |
-| MTCH-02 | — | Pending |
-| MTCH-03 | — | Pending |
-| MTCH-04 | — | Pending |
-| PYMT-01 | — | Pending |
-| PYMT-02 | — | Pending |
-| PYMT-03 | — | Pending |
-| PYMT-04 | — | Pending |
-| PYMT-05 | — | Pending |
-| PYMT-06 | — | Pending |
+| SCHM-01 | Phase 1 | Pending |
+| SCHM-02 | Phase 1 | Pending |
+| SCHM-03 | Phase 1 | Pending |
+| SCHM-04 | Phase 1 | Pending |
+| MTCH-01 | Phase 3 | Pending |
+| MTCH-02 | Phase 2 | Pending |
+| MTCH-03 | Phase 2 | Pending |
+| MTCH-04 | Phase 4 | Pending |
+| PYMT-01 | Phase 3 | Pending |
+| PYMT-02 | Phase 3 | Pending |
+| PYMT-03 | Phase 3 | Pending |
+| PYMT-04 | Phase 3 | Pending |
+| PYMT-05 | Phase 3 | Pending |
+| PYMT-06 | Phase 3 | Pending |
 
 **Coverage:**
 - v1 requirements: 14 total
-- Mapped to phases: 0
-- Unmapped: 14 ⚠️
+- Mapped to phases: 14
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-02-28*
-*Last updated: 2026-02-28 after initial definition*
+*Last updated: 2026-02-28 after roadmap creation*
