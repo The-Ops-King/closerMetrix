@@ -26,6 +26,7 @@ const OUTCOMES = {
   DQ: 'DQ',
   DISQUALIFIED: 'Disqualified',  // Full-text variant of DQ
   NOT_PITCHED: 'Not Pitched',
+  REFUNDED: 'Refunded',
 };
 
 /** Both follow-up outcome spellings — use with Array.includes() */
@@ -48,6 +49,7 @@ const ALL_CALL_OUTCOMES = [
   OUTCOMES.LOST,
   OUTCOMES.NOT_PITCHED,
   OUTCOMES.DISQUALIFIED,
+  OUTCOMES.REFUNDED,
 ];
 
 // ─────────────────────────────────────────────────────────────

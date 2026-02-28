@@ -14,4 +14,5 @@ module.exports = [
   { key: 'lost',          label: 'Lost',             description: 'Prospect clearly declined or expressed no interest' },
   { key: 'disqualified',  label: 'Disqualified',     description: 'Prospect does not meet criteria for the offer' },
   { key: 'not_pitched',   label: 'Not Pitched',      description: 'Closer spoke with prospect but chose not to pitch — prospect wasn\'t ready, didn\'t qualify emotionally, or closer felt it wasn\'t the right time' },
+  { key: 'refunded',      label: 'Refunded',          description: 'Deal was closed but customer received a full refund' },
 ];

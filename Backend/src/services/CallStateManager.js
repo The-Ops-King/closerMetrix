@@ -89,7 +89,10 @@ const STATE_TRANSITIONS = {
     { to: 'Canceled',           trigger: 'calendar_cancelled_or_deleted_or_declined' },
   ],
   'Canceled': [],
-  'Closed - Won': [],
+  'Closed - Won': [
+    { to: 'Refunded',          trigger: 'full_refund_received' },
+  ],
+  'Refunded': [],  // Terminal state — deal was closed but customer received a full refund
   'Deposit': [
     { to: 'Closed - Won',       trigger: 'payment_received_full' },
   ],
@@ -487,7 +490,7 @@ class CallStateManager {
    */
   async _cancelCall(existingRecord, event, clientId) {
     // Only cancel if the call hasn't been held yet
-    const terminalStates = ['Show', 'Closed - Won', 'Deposit', 'Follow Up', 'Lost', 'Disqualified', 'Not Pitched'];
+    const terminalStates = ['Show', 'Closed - Won', 'Deposit', 'Follow Up', 'Lost', 'Disqualified', 'Not Pitched', 'Refunded'];
     if (terminalStates.includes(existingRecord.attendance)) {
       logger.info('Ignoring cancel for already-held call', {
         callId: existingRecord.call_id,

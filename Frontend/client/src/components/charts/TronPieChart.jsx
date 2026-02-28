@@ -62,13 +62,18 @@ export default function TronPieChart({
    */
   const pieData = useMemo(
     () =>
-      data.map((d, i) => ({
-        id: i,
-        value: d.value || 0,
-        label: d.label || `Segment ${i + 1}`,
-        color: resolveColor(d.color, i),
-      })),
-    [data]
+      data.map((d, i) => {
+        const val = d.value || 0;
+        const pct = total > 0 ? ((val / total) * 100).toFixed(1) : '0.0';
+        const name = d.label || `Segment ${i + 1}`;
+        return {
+          id: i,
+          value: val,
+          label: `${name}  ·  ${fmtNumber(val)}  ·  ${pct}%`,
+          color: resolveColor(d.color, i),
+        };
+      }),
+    [data, total]
   );
 
   /**

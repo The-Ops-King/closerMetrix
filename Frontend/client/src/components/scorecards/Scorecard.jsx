@@ -20,6 +20,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
+import Tooltip from '@mui/material/Tooltip';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { COLORS, LAYOUT } from '../../theme/constants';
 import { formatMetric } from '../../utils/formatters';
@@ -164,6 +165,7 @@ export default function Scorecard({
   subtitle = null,
   subtitleColor = null,
   reserveSubtitleSpace = false,
+  hoverText = null,
 }) {
   injectStyles();
 
@@ -187,7 +189,7 @@ export default function Scorecard({
   const displayValue = animatedValue != null ? animatedValue : formatMetric(value, format);
   const deltaColor = getDeltaColor(delta, desiredDirection);
 
-  return (
+  const card = (
     <Box
       onClick={onClick}
       sx={{
@@ -349,4 +351,35 @@ export default function Scorecard({
       )}
     </Box>
   );
+
+  if (hoverText) {
+    return (
+      <Tooltip
+        title={hoverText}
+        arrow
+        placement="top"
+        slotProps={{
+          tooltip: {
+            sx: {
+              bgcolor: COLORS.bg.elevated,
+              color: glowColor,
+              border: `1px solid ${hexToRgba(glowColor, 0.4)}`,
+              boxShadow: `0 0 20px ${hexToRgba(glowColor, 0.2)}`,
+              fontSize: '1.1rem',
+              fontWeight: 700,
+              letterSpacing: '0.02em',
+              px: 2,
+              py: 1,
+              borderRadius: '8px',
+            },
+          },
+          arrow: { sx: { color: COLORS.bg.elevated } },
+        }}
+      >
+        {card}
+      </Tooltip>
+    );
+  }
+
+  return card;
 }

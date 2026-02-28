@@ -35,6 +35,7 @@ const OUTCOME_CHART_CONFIG = [
   { value: 'Lost',          label: 'Lost',         color: 'red',    key: 'lost' },
   { value: 'Disqualified',  label: 'DQ',           color: 'muted',  key: 'disqualified' },
   { value: 'Not Pitched',   label: 'Not Pitched',  color: 'blue',   key: 'notPitched' },
+  { value: 'Refunded',      label: 'Refunded',     color: 'magenta', key: 'refunded' },
 ];
 
 // ─────────────────────────────────────────────────────────────

@@ -283,6 +283,9 @@ const isDQ = c => DQ_OUTCOMES.includes(c.callOutcome);
 /** Outcome: Not Pitched */
 const isNotPitched = c => c.callOutcome === OUTCOMES.NOT_PITCHED;
 
+/** Outcome: Refunded — excluded from active financial metrics (revenue, close rate) */
+const isRefunded = c => c.callOutcome === OUTCOMES.REFUNDED;
+
 /** Outcome: Follow Up (both spellings) */
 const isFollowUpOutcome = c => FOLLOW_UP_OUTCOMES.includes(c.callOutcome);
 
@@ -385,11 +388,13 @@ function computeOverview(calls, granularity, rawData, prev) {
   const oneCallPct = round(sd(oneCallCloses, cycles.length), 3);
 
   // Potential violations — count from complianceFlags (preferred) or key moments (fallback)
+  // complianceFlags can be an object { flags: [...] } or an array directly
   let violationCount = 0;
   for (const c of held) {
-    // Prefer structured complianceFlags from AI pipeline
-    if (Array.isArray(c.complianceFlags) && c.complianceFlags.length > 0) {
-      violationCount += c.complianceFlags.length;
+    const cf = c.complianceFlags;
+    const cfFlags = cf && Array.isArray(cf.flags) ? cf.flags : (Array.isArray(cf) ? cf : null);
+    if (cfFlags && cfFlags.length > 0) {
+      violationCount += cfFlags.length;
       continue;
     }
     // Fallback: parse keyMoments
@@ -445,8 +450,10 @@ function computeOverview(calls, granularity, rawData, prev) {
     // Previous period violation count
     let pViolationCount = 0;
     for (const c of pHeld) {
-      if (Array.isArray(c.complianceFlags) && c.complianceFlags.length > 0) {
-        pViolationCount += c.complianceFlags.length;
+      const pcf = c.complianceFlags;
+      const pcfFlags = pcf && Array.isArray(pcf.flags) ? pcf.flags : (Array.isArray(pcf) ? pcf : null);
+      if (pcfFlags && pcfFlags.length > 0) {
+        pViolationCount += pcfFlags.length;
         continue;
       }
       if (!c.keyMoments) continue;
@@ -539,6 +546,7 @@ function computeOverview(calls, granularity, rawData, prev) {
   ];
 
   // Outcome breakdown pie — built from OUTCOME_CHART_CONFIG
+  const refunded = calls.filter(c => isShow(c) && isRefunded(c));
   const outcomeCounts = {
     closed: closed.length,
     deposit: deposits.length,
@@ -546,6 +554,7 @@ function computeOverview(calls, granularity, rawData, prev) {
     lost: lost.length,
     disqualified: calls.filter(c => isShow(c) && isDQ(c)).length,
     notPitched: calls.filter(c => isShow(c) && isNotPitched(c)).length,
+    refunded: refunded.length,
   };
   const outcomeBreakdown = OUTCOME_CHART_CONFIG
     .map(cfg => ({ label: cfg.label, value: outcomeCounts[cfg.key], color: cfg.color }))
@@ -607,8 +616,20 @@ function computeFinancial(calls, granularity, prev) {
         }).length;
         return round(sd(pifCount, revenueDeals.length), 3);
       })(), 'percent', 'amber'),
-      refundCount: m('# of Refunds', '-', 'number', 'red'),
-      refundAmount: m('$ of Refunds', '-', 'currency', 'red'),
+      refundCount: (() => {
+        const cnt = held.filter(isRefunded).length;
+        const total = closed.length + cnt;
+        const metric = m('# of Refunds', cnt, 'number', 'red');
+        metric.hoverText = total > 0 ? `${round(sd(cnt, total) * 100, 1)}% of total closes` : null;
+        return metric;
+      })(),
+      refundAmount: (() => {
+        const amt = sum(held.filter(isRefunded), 'cashCollected');
+        const totalRev = closedRevenue + amt;
+        const metric = m('$ of Refunds', amt, 'currency', 'red');
+        metric.hoverText = totalRev > 0 ? `${round(sd(amt, totalRev) * 100, 1)}% of total revenue` : null;
+        return metric;
+      })(),
     },
   };
 
@@ -1350,6 +1371,7 @@ function computeCallOutcomes(calls, granularity, prev) {
     lost: lost.length,
     disqualified: dq.length,
     notPitched: notPitched.length,
+    refunded: held.filter(isRefunded).length,
   };
   const outcomeBreakdown = OUTCOME_CHART_CONFIG
     .map(cfg => ({ label: cfg.label, value: coOutcomeCounts[cfg.key], color: cfg.color }))
@@ -2015,10 +2037,9 @@ function computeViolations(calls, granularity, prev) {
 
   const sections = {
     overview: {
-      flagCount: m('Risk Flags', riskFlags.length, 'number', 'red'),
-      uniqueCalls: m('Unique Calls w/ Risk', uniqueCallsWithRisk, 'number', 'red'),
-      pctCalls: m('% Calls w/ Flags', round(sd(uniqueCallsWithRisk, held.length), 3), 'percent', 'amber'),
-      ftcSecCount: m('FTC / SEC Warnings', riskFlags.length, 'number', 'red'),
+      flagCount: m('FTC / SEC Red Flags', riskFlags.length, 'number', 'red'),
+      uniqueCalls: m('Unique Calls w/ Red Flags', uniqueCallsWithRisk, 'number', 'red'),
+      pctCalls: m('% Calls w/ Red Flags', round(sd(uniqueCallsWithRisk, held.length), 3), 'percent', 'amber'),
     },
     riskCategories: Object.fromEntries(
       RISK_CATEGORIES.map(rc => [
@@ -2059,11 +2080,18 @@ function computeViolations(calls, granularity, prev) {
     s.pctCalls = withDelta(s.pctCalls, sd(uniqueCallsWithRisk, held.length), sd(pCallsWithRisk.size, pHeld.length), dl, 'down');
   }
 
-  // Time-series
-  const timeBuckets = groupByTime(riskFlags.length > 0 ? riskFlags : [{ appointmentDate: new Date().toISOString().split('T')[0] }], 'date', granularity);
+  // Time-series — use ALL held calls as the date backbone so every time
+  // bucket gets a data point (zero when no flags exist). This prevents
+  // sparse charts when compliance flags only exist on a few dates.
+  const allCallBuckets = groupByTime(held, 'appointmentDate', granularity);
+  const flagBuckets = riskFlags.length > 0
+    ? groupByTime(riskFlags, 'date', granularity)
+    : new Map();
+
   const complianceOverTime = [];
-  for (const [date, bucket] of timeBuckets) {
-    complianceOverTime.push({ date, flags: riskFlags.length > 0 ? bucket.length : 0 });
+  for (const [date] of allCallBuckets) {
+    const bucket = flagBuckets.get(date);
+    complianceOverTime.push({ date, flags: bucket ? bucket.length : 0 });
   }
 
   // Per-closer
@@ -2076,19 +2104,20 @@ function computeViolations(calls, granularity, prev) {
     .map(([name, flags]) => ({ date: name, flags }))
     .sort((a, b) => b.flags - a.flags);
 
-  // Risk category trends over time
+  // Risk category trends over time — same backbone approach
   const riskTrendsData = [];
-  if (riskFlags.length > 0) {
-    const riskTimeBuckets = groupByTime(riskFlags, 'date', granularity);
-    for (const [date, bucket] of riskTimeBuckets) {
-      const point = { date };
-      for (const rc of riskCategories) {
-        point[rc.toLowerCase()] = bucket.filter(f =>
-          f.riskCategory.toLowerCase().includes(rc.toLowerCase())
-        ).length;
-      }
-      riskTrendsData.push(point);
+  const riskFlagBuckets = riskFlags.length > 0
+    ? groupByTime(riskFlags, 'date', granularity)
+    : new Map();
+  for (const [date] of allCallBuckets) {
+    const point = { date };
+    const bucket = riskFlagBuckets.get(date) || [];
+    for (const rc of riskCategories) {
+      point[rc.toLowerCase()] = bucket.filter(f =>
+        f.riskCategory.toLowerCase().includes(rc.toLowerCase())
+      ).length;
     }
+    riskTrendsData.push(point);
   }
 
   return {
@@ -2101,7 +2130,11 @@ function computeViolations(calls, granularity, prev) {
         { key: 'flags', label: 'Risk Flags', color: 'amber' },
       ]},
       riskTrends: { data: riskTrendsData, series:
-        RISK_TREND_CHART_CONFIG.map(c => ({ key: c.key, label: c.label, color: c.color })),
+        // Only include series that have actual data — zero-total categories
+        // would draw stacked lines on top of real data, visually hiding it.
+        RISK_TREND_CHART_CONFIG
+          .filter(c => riskTrendsData.some(d => (d[c.key] || 0) > 0))
+          .map(c => ({ key: c.key, label: c.label, color: c.color })),
       },
     },
     tables: {
@@ -2240,6 +2273,13 @@ function computeCloserScoreboard(calls, objections, closeCycles, granularity, pr
     const callQuality = avg(closerHeld, 'overallCallScore') || 0;
     const objHandling = avg(closerHeld, 'objectionHandlingScore') || 0;
 
+    // Script adherence + sub-scores per closer
+    const scoredCalls = closerHeld.filter(c => c.scriptAdherenceScore > 0);
+    const scriptAdherence = scoredCalls.length > 0 ? avg(scoredCalls, 'scriptAdherenceScore') : 0;
+    const discoveryScore = avg(closerHeld, 'discoveryScore') || 0;
+    const pitchScore = avg(closerHeld, 'pitchScore') || 0;
+    const closeAttemptScore = avg(closerHeld, 'closeAttemptScore') || 0;
+
     // Objection resolution rate for this closer
     const closerObjs = objections.filter(o => (o.closerName || o.closerId || 'Unknown') === name);
     const objResolved = closerObjs.filter(o => o.resolved).length;
@@ -2271,6 +2311,10 @@ function computeCloserScoreboard(calls, objections, closeCycles, granularity, pr
       objHandling: round(objHandling, 1),
       objResRate: round(objResRate, 3),
       avgDuration: round(avgDuration, 1),
+      scriptAdherence: round(scriptAdherence, 1),
+      discoveryScore: round(discoveryScore, 1),
+      pitchScore: round(pitchScore, 1),
+      closeAttemptScore: round(closeAttemptScore, 1),
       heldCount: closerHeld.length,
     });
   }
@@ -2489,6 +2533,7 @@ function computeCloserScoreboard(calls, objections, closeCycles, granularity, pr
   };
 
   return {
+    closerStats,
     champion,
     topPerformers,
     comparisonTable,

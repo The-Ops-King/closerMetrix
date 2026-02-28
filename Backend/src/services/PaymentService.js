@@ -396,15 +396,70 @@ class PaymentService {
       total_payment_amount: Math.max(0, oldTotal - amount),
     };
 
-    if (refundHitsFirstPayment) {
-      // Refunding the first payment — reduce cash_collected
+    // Check if this is a full refund BEFORE modifying cash_collected
+    const isFullRefund = callUpdates.total_payment_amount === 0 && call.call_outcome === 'Closed - Won';
+
+    // For full refunds → Refunded outcome: preserve cash_collected for reporting
+    // For partial refunds: reduce cash_collected if it hits the first payment
+    if (!isFullRefund && refundHitsFirstPayment) {
       callUpdates.cash_collected = Math.max(0, oldCash - amount);
     }
 
-    // If total goes to 0, revert outcome
-    if (callUpdates.total_payment_amount === 0 && call.call_outcome === 'Closed - Won') {
-      callUpdates.call_outcome = 'Lost';
-      callUpdates.lost_reason = `${paymentType === 'chargeback' ? 'Chargeback' : 'Full refund'}: $${amount}`;
+    // If total goes to 0, transition to Refunded (preserves cash_collected for reporting)
+    if (isFullRefund) {
+      // Attempt state machine transition Closed - Won → Refunded
+      const transitioned = await callStateManager.transitionState(
+        call.call_id,
+        clientId,
+        'Refunded',
+        'full_refund_received',
+        { ...callUpdates, call_outcome: 'Refunded' }
+      );
+
+      if (!transitioned) {
+        // Fallback: apply directly if state machine rejects
+        callUpdates.call_outcome = 'Refunded';
+      }
+
+      // Update prospect deal_status to 'refunded'
+      await prospectService.updateDealStatus(prospect, 'refunded', clientId);
+
+      await auditLogger.log({
+        clientId,
+        entityType: 'call',
+        entityId: call.call_id,
+        action: paymentType,
+        fieldChanged: 'call_outcome',
+        oldValue: 'Closed - Won',
+        newValue: 'Refunded',
+        triggerSource: 'payment_webhook',
+        triggerDetail: paymentType,
+        metadata: {
+          refund_amount: amount,
+          cash_collected_preserved: oldCash,
+          total_payment_amount_after: 0,
+          notes,
+        },
+      });
+
+      logger.info(`${paymentType} processed — outcome changed to Refunded`, {
+        callId: call.call_id,
+        clientId,
+        amount,
+        oldCash,
+        cashPreserved: true,
+      });
+
+      return {
+        status: 'ok',
+        action: 'refund',
+        prospect_id: prospect.prospect_id,
+        call_id: call.call_id,
+        refund_amount: amount,
+        remaining_cash: oldCash,
+        remaining_total: 0,
+        outcome: 'Refunded',
+      };
     }
 
     await callQueries.update(call.call_id, clientId, callUpdates);

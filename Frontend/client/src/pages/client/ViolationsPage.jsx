@@ -93,12 +93,12 @@ export default function ViolationsPage() {
       <TierGate requiredTier="executive" label="violation intelligence">
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
 
-          {/* 1. Risk Overview — 5 scorecards */}
+          {/* 1. Risk Overview — 3 scorecards full width */}
           <ScorecardGrid
             title="Risk Overview"
             metrics={sections.overview}
             glowColor={COLORS.neon.red}
-            columns={5}
+            columns={3}
           />
 
           {/* 2. Charts row — 2-col grid */}

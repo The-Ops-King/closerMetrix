@@ -111,9 +111,9 @@ class ProspectService {
       updates.deal_status = 'closed_won';
     }
 
-    // If refund brings cash to 0, consider reverting deal status
+    // If refund brings cash to 0, mark as refunded (not lost — preserves reporting distinction)
     if (isRefund && updates.total_cash_collected === 0) {
-      updates.deal_status = 'lost';
+      updates.deal_status = 'refunded';
     }
 
     await prospectQueries.update(prospect.prospect_id, clientId, updates);
@@ -135,6 +135,15 @@ class ProspectService {
     });
 
     return updated;
+  }
+
+  /**
+   * Directly updates a prospect's deal_status.
+   * Used when PaymentService needs to set 'refunded' independently of updateWithPayment.
+   */
+  async updateDealStatus(prospect, dealStatus, clientId) {
+    await prospectQueries.update(prospect.prospect_id, clientId, { deal_status: dealStatus });
+    return { ...prospect, deal_status: dealStatus };
   }
 
   /**
