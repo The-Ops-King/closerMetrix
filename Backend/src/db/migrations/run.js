@@ -12,6 +12,7 @@ require('dotenv').config();
 const migration001 = require('./001_create_prospects');
 const migration002 = require('./002_create_audit_log');
 const migration003 = require('./003_create_cost_tracking');
+const migration004 = require('./004_payment_enhancement');
 
 async function runAll() {
   console.log('Starting migrations...\n');
@@ -20,6 +21,7 @@ async function runAll() {
     await migration001.up();
     await migration002.up();
     await migration003.up();
+    await migration004.up();
     console.log('\nAll migrations completed successfully.');
   } catch (error) {
     console.error('Migration failed:', error.message);
