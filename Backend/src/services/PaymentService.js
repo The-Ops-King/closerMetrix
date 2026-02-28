@@ -121,7 +121,7 @@ class PaymentService {
     } else {
       result = await this._processPayment(
         matchedCall, finalProspect, amount, normalizedType, clientId,
-        payment_date, product_name, notes, attributionMode
+        payment_date, product_name, notes, attributionMode, payload
       );
     }
 
@@ -156,9 +156,9 @@ class PaymentService {
    * - first_only: closer gets credit only on first payment (call outcome transitions)
    * - all_installments: closer gets credit on every payment
    */
-  async _processPayment(call, prospect, amount, paymentType, clientId, paymentDate, productName, notes, attributionMode) {
+  async _processPayment(call, prospect, amount, paymentType, clientId, paymentDate, productName, notes, attributionMode, originalPayload) {
     if (!call) {
-      // No matching call — payment arrived without a call record
+      // MTCH-04: No matching call — log enriched audit entry and alert admin
       logger.warn('Payment received but no matching call found', {
         prospectEmail: prospect.prospect_email,
         clientId,
@@ -169,10 +169,28 @@ class PaymentService {
         clientId,
         entityType: 'prospect',
         entityId: prospect.prospect_id,
-        action: 'payment_received',
+        action: 'payment_no_match',
         triggerSource: 'payment_webhook',
         triggerDetail: paymentType,
-        metadata: { amount, note: 'no_matching_call' },
+        metadata: {
+          amount,
+          reason: 'No call matched via email, exact name, or fuzzy name',
+          original_payload: originalPayload,
+        },
+      });
+
+      // Alert admin for every no-match payment
+      await alertService.send({
+        severity: 'medium',
+        title: 'Unmatched Payment Received',
+        details: `Payment of $${amount} from ${prospect.prospect_email} could not be matched to any call record. Prospect record updated.`,
+        clientId,
+        metadata: {
+          prospect_email: prospect.prospect_email,
+          prospect_name: originalPayload?.prospect_name,
+          amount,
+          prospect_id: prospect.prospect_id,
+        },
       });
 
       return {
@@ -180,7 +198,7 @@ class PaymentService {
         action: 'payment_recorded',
         prospect_id: prospect.prospect_id,
         total_cash_collected: prospect.total_cash_collected,
-        note: 'No matching call found — payment recorded on prospect only',
+        note: 'No matching call found — payment recorded on prospect only, admin alerted',
       };
     }
 
@@ -319,13 +337,34 @@ class PaymentService {
         amount,
       });
 
+      await auditLogger.log({
+        clientId,
+        entityType: 'prospect',
+        entityId: prospect.prospect_id,
+        action: 'refund_no_match',
+        triggerSource: 'payment_webhook',
+        triggerDetail: paymentType,
+        metadata: {
+          amount,
+          reason: 'Refund could not be matched to any call record',
+        },
+      });
+
+      await alertService.send({
+        severity: 'medium',
+        title: 'Unmatched Refund Received',
+        details: `Refund of $${amount} for ${prospect.prospect_email} could not be matched to any call record.`,
+        clientId,
+        metadata: { prospect_email: prospect.prospect_email, amount },
+      });
+
       return {
         status: 'ok',
         action: 'refund',
         prospect_id: prospect.prospect_id,
         refund_amount: amount,
         remaining_cash: prospect.total_cash_collected,
-        note: 'No matching call found — refund applied to prospect record only',
+        note: 'No matching call found — refund applied to prospect record only, admin alerted',
       };
     }
 
