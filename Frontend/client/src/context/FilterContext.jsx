@@ -5,7 +5,7 @@
  * When any filter changes, all visible charts and scorecards refetch via TanStack Query.
  *
  * Filters:
- *   dateRange: { start: string, end: string } — ISO date strings, defaults to "This Month"
+ *   dateRange: { start: string, end: string } — ISO date strings, defaults to "Last 30 Days"
  *   closerIds: string[] — empty = all closers (Basic tier always empty)
  *   objectionType: string[] | null — multi-select, null = all types
  *   granularity: 'daily' | 'weekly' | 'monthly' — for time-series chart bucketing
@@ -18,19 +18,19 @@ import dayjs from 'dayjs';
 const FilterContext = createContext(null);
 
 /**
- * Get the default date range: "This Month" (start of current month to today).
+ * Get the default date range: "Last 30 Days" (30 days back from today).
  * Matches the default selection in DateRangeFilter.
  */
 function getDefaultDateRange() {
   return {
-    start: dayjs().startOf('month').format('YYYY-MM-DD'),
+    start: dayjs().subtract(30, 'day').format('YYYY-MM-DD'),
     end: dayjs().format('YYYY-MM-DD'),
   };
 }
 
 export function FilterProvider({ children }) {
   const [dateRange, setDateRange] = useState(getDefaultDateRange);
-  const [dateLabel, setDateLabel] = useState('This Month');
+  const [dateLabel, setDateLabel] = useState('Last 30 Days');
   const [closerIds, setCloserIds] = useState([]);
   const [objectionType, setObjectionType] = useState(null);
   const [granularity, setGranularity] = useState('auto');
@@ -42,7 +42,7 @@ export function FilterProvider({ children }) {
    */
   const resetFilters = useCallback(() => {
     setDateRange(getDefaultDateRange());
-    setDateLabel('This Month');
+    setDateLabel('Last 30 Days');
     setCloserIds([]);
     setObjectionType(null);
     setGranularity('auto');

@@ -111,65 +111,65 @@ Always compare the team's numbers to these benchmarks. Say "above/below industry
   // and what the AI should analyze. {{metrics}} is replaced with the
   // JSON metrics snapshot. {{dateRange}} is replaced if present.
   sectionPrompts: {
-    overview: `Sales team overview for {{dateRange}}:
+    overview: `Executive summary dashboard for {{dateRange}}:
 
 {{metrics}}
 
-Give a 2-3 sentence executive summary. Hit the big three: show rate, close rate, cash collection — compare each to industry benchmarks. If any closer is significantly dragging down or carrying the team, name them with their specific numbers. If CLIENT KPI TARGETS are provided in the data, compare actual performance to the client's own goals first.`,
+THIS IS THE OVERVIEW PAGE — it shows at-a-glance scorecards (booked, held, show rate, closed, close rate, revenue, cash, violations count). Give a 2-3 sentence exec summary hitting the big three: show rate, close rate, cash collection — compare each to benchmarks. If any closer is carrying or dragging the team, name them. If CLIENT KPI TARGETS are provided, compare actuals to the client's own goals first.`,
 
-    financial: `Financial data for {{dateRange}}:
-
-{{metrics}}
-
-Focus on the money: revenue, cash collected, collection ratio (benchmark: 65-75%), and deal sizes. Name any closer whose deal economics are notably different — higher avg deal size, worse collection rate, etc. If the gap between revenue and cash collected is concerning, say so directly. If CLIENT KPI TARGETS are provided, compare revenue and cash to the client's own monthly targets.`,
-
-    attendance: `Attendance data for {{dateRange}}:
+    financial: `Financial performance data for {{dateRange}}:
 
 {{metrics}}
 
-Evaluate show rate vs benchmark (60-70% avg, 75%+ strong). Break down first call vs follow-up show rates (follow-ups should be 75-85%). If ghost rate is high, flag it. Name any closer with a show rate 10+ points below the team average. If CLIENT KPI TARGETS are provided, compare show rate to the client's own target.`,
+THIS IS THE FINANCIAL PAGE — it shows revenue, cash collected, collection ratio, deal sizes, and per-closer financial breakdowns. Focus ONLY on money metrics: revenue vs cash gap (collection ratio benchmark: 65-75%), deal size trends, revenue per call held, and per-closer financial differences. Name any closer with notably different deal economics. Do NOT discuss show rates or close rates — those belong on other pages. If CLIENT KPI TARGETS are provided, compare revenue and cash to the client's own targets.`,
 
-    'call-outcomes': `Call outcomes data for {{dateRange}}:
-
-{{metrics}}
-
-Evaluate close rates: held-to-close (benchmark 20-30%), scheduled-to-close (15-22%). Compare first call vs follow-up conversion. Flag the lost call rate and DQ rate. Name the strongest and weakest closer by close rate with their specific numbers. If CLIENT KPI TARGETS are provided, compare close rates to the client's own targets.`,
-
-    'sales-cycle': `Sales cycle data for {{dateRange}}:
+    attendance: `Attendance and show rate data for {{dateRange}}:
 
 {{metrics}}
 
-Evaluate efficiency: avg calls to close (benchmark 1.5-2.5 is efficient, 3+ is slow), avg days to close (3-7 days fast, 14+ slow). What % are 1-call closes vs multi-call? Name any closer who takes significantly more calls/days to close than the team.`,
+THIS IS THE ATTENDANCE PAGE — it shows show rates, volume (booked vs held), ghost/cancel/reschedule breakdown, and per-closer attendance. Focus ONLY on attendance: show rate vs benchmark (60-70% avg, 75%+ strong), first call vs follow-up show rates (follow-ups should be 75-85%), ghost/cancel/reschedule split, and which closers have show rate problems. Do NOT discuss close rates or revenue — those belong on other pages. Name any closer with a show rate 10+ points below team average.`,
 
-    objections: `Objections data for {{dateRange}}:
-
-{{metrics}}
-
-Evaluate resolution rate (benchmark 50-65% avg, 75%+ strong). Which objection types are hardest to overcome? Name any closer who handles objections notably better or worse. If unresolved objections correlate with lost deals, say so.`,
-
-    projections: `Projections and pacing data for {{dateRange}}:
+    'call-outcomes': `Call outcome and conversion data for {{dateRange}}:
 
 {{metrics}}
 
-Are they on pace for their goals? What's the gap? Identify the highest-leverage improvement — which single metric change (show rate, close rate, deal size) would have the biggest revenue impact?`,
+THIS IS THE CALL OUTCOMES PAGE — it shows close rates, funnel conversion (booked→held→qualified→closed), deposits, DQ rate, lost reasons, and per-closer close rates. Focus ONLY on conversion: held-to-close (benchmark 20-30%), scheduled-to-close (15-22%), first call vs follow-up conversion, DQ rate, lost call rate, and lost reasons. Name the strongest and weakest closer by close rate. Do NOT discuss show rates or deal sizes — those belong on other pages.`,
 
-    violations: `Compliance/violations data for {{dateRange}}:
-
-{{metrics}}
-
-How many flags, what categories? Name any closer responsible for a disproportionate share. Are violations concentrated in specific script sections (pitch, close, objection handling)? Is the trend improving or worsening?`,
-
-    adherence: `Script adherence data for {{dateRange}}:
+    'sales-cycle': `Sales cycle speed data for {{dateRange}}:
 
 {{metrics}}
 
-Overall score vs benchmark (7+/10 solid, below 5 needs intervention). Which script sections are weakest across the team? Name any closer significantly below the team average with their specific score.`,
+THIS IS THE SALES CYCLE PAGE — it shows avg calls to close, avg days to close, 1-call vs 2-call vs 3+ call breakdown, and per-closer speed metrics. Focus ONLY on speed and efficiency: calls to close (benchmark 1.5-2.5 efficient, 3+ slow), days to close (3-7 fast, 14+ slow), 1-call close percentage, and which closers are slowest. Do NOT discuss close rates or revenue — those belong on other pages.`,
 
-    'closer-scoreboard': `Closer scoreboard comparison for {{dateRange}}:
+    objections: `Objection handling data for {{dateRange}}:
 
 {{metrics}}
 
-Rank and compare closers. Who's the top performer and why? Who needs coaching and in what specific area? Look for mismatches — e.g. high show rate but low close rate means the closer is getting opportunities but can't convert. Name names with numbers.`,
+THIS IS THE OBJECTIONS PAGE — it shows objection types, resolution rates, per-closer objection handling, and objection-to-outcome correlation. Focus ONLY on objections: overall resolution rate (benchmark 50-65% avg, 75%+ strong), which objection types are hardest to resolve, which closers handle objections best/worst, and whether unresolved objections correlate with lost deals. Do NOT discuss close rates or show rates — those belong on other pages.`,
+
+    projections: `Projections, pacing, and goal tracking data for {{dateRange}}:
+
+{{metrics}}
+
+THIS IS THE PROJECTIONS PAGE — it shows revenue pacing vs monthly/quarterly/yearly goals, EOM and EOY projections, and scenario sliders. Focus ONLY on pacing and goals: Are they ahead or behind pace for their monthly goal? What's the MTD revenue vs goal percentage? What's their projected EOM finish? If pacing is strong (120%+), suggest raising the goal. If pacing is weak (<80%), identify the single highest-leverage fix (more prospects, better show rate, better close rate, or higher deal size). Reference the actual pacing numbers and goal amounts. Do NOT give generic close rate or show rate advice — only mention those metrics in terms of their impact on hitting the revenue goal.`,
+
+    violations: `Compliance and risk flag data for {{dateRange}}:
+
+{{metrics}}
+
+THIS IS THE VIOLATIONS PAGE — it shows SEC/FTC risk flags, flag counts, risk categories (claims, guarantees, earnings, pressure), per-closer violations, risk by script section, and trending direction. Focus ONLY on compliance risk: total flag count, which categories are most common, which closers are responsible for disproportionate flags, whether violations are concentrated in specific script sections (pitch, close, objection handling), and whether the trend is improving or worsening. Do NOT discuss close rates or revenue — those belong on other pages.`,
+
+    adherence: `Script adherence scoring data for {{dateRange}}:
+
+{{metrics}}
+
+THIS IS THE ADHERENCE PAGE — it shows overall script adherence scores, per-section scores (intro, discovery, pitch, close, objections), and per-closer adherence. Focus ONLY on script adherence: overall score vs benchmark (7+/10 solid, below 5 needs intervention), which script sections are weakest across the team, and which closers are significantly below team average. Name specific closers with their scores. Do NOT discuss close rates or revenue — those belong on other pages.`,
+
+    'closer-scoreboard': `Closer ranking and comparison data for {{dateRange}}:
+
+{{metrics}}
+
+THIS IS THE CLOSER SCOREBOARD PAGE — it shows all closers ranked and compared across metrics. Focus on rankings and mismatches: Who's the top performer and why? Who needs coaching and in what area? Look for contradictions — high adherence but low close rate (script problem?), high show rate but low close rate (pitch problem?), low adherence but high close rate (maverick who should update the script?). Name every closer with their specific numbers.`,
 
     // ── Data Analysis Page Prompts (Sonnet — structured JSON output) ──
 

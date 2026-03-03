@@ -209,8 +209,6 @@ export default function ProjectionsPage() {
   const { tier } = useAuth();
   const hasAccess = meetsMinTier(tier, 'insight');
   const { data, isLoading, error, refetch } = useMetrics('projections', { enabled: hasAccess });
-  const { text: insightText, generatedAt: insightGeneratedAt, isLoading: insightLoading, isOnDemandLoading, generateWithFilters, remainingAnalyses } = useInsight('projections', data);
-
   // Slider state -- adjustments from baseline (0 = no change)
   const [showRateAdj, setShowRateAdj] = useState(0);
   const [closeRateAdj, setCloseRateAdj] = useState(0);
@@ -464,6 +462,87 @@ export default function ProjectionsPage() {
       },
     };
   }, [showRateAdj, closeRateAdj, dealSizeAdj, prospectsAdj, b]);
+
+  // ── Build pre-computed display metrics for AI ──────────────────────
+  // Send exactly what's on screen as formatted strings so the AI doesn't do math.
+  const displayMetrics = useMemo(() => {
+    if (!b || !p) return null;
+
+    const fmtD = (n) => '$' + Math.round(n).toLocaleString('en-US');
+    const fmtPct = (n) => (n * 100).toFixed(1) + '%';
+    const fmtN = (n) => Math.round(n).toLocaleString('en-US');
+
+    const result = {
+      baseline: {
+        'Prospects / Month': fmtN(b.prospectsBookedPerMonth),
+        'Show Rate': fmtPct(b.showRate),
+        'Close Rate': fmtPct(b.closeRate),
+        'Avg Deal Size': fmtD(b.avgDealSize),
+        'Avg Cash Collected': fmtD(b.avgCashCollected),
+        'Avg Calls to Close': b.avgCallsToClose?.toFixed(1),
+        'Monthly Revenue': fmtD(b.currentRevenue),
+        'Monthly Cash': fmtD(b.currentCash),
+        'Monthly Closes': fmtN(b.currentCloses),
+        'Date Range': `${b.dateRange} (${b.daysInPeriod} days)`,
+      },
+      eomProjection: {
+        mode: showFullMonth ? 'MTD actuals + projected remaining' : 'Full month projected',
+        'Calls Scheduled': fmtN(showFullMonth ? p.mtd.s : p.fm.s),
+        'Calls Held': fmtN(showFullMonth ? p.mtd.h : p.fm.h),
+        'Projected Closes': fmtN(showFullMonth ? p.mtd.c : p.fm.c),
+        'Projected Revenue': fmtD(showFullMonth ? p.mtd.r : p.fm.r),
+        'Projected Cash': fmtD(showFullMonth ? p.mtd.ca : p.fm.ca),
+      },
+      eoyProjection: {
+        mode: showFullYear ? 'YTD actuals + projected remaining' : 'Remaining only',
+        'Calls Scheduled': fmtN(showFullYear ? p.yf.s : p.yr.s),
+        'Calls Held': fmtN(showFullYear ? p.yf.h : p.yr.h),
+        'Projected Closes': fmtN(showFullYear ? p.yf.c : p.yr.c),
+        'Projected Revenue': fmtD(showFullYear ? p.yf.r : p.yr.r),
+        'Projected Cash': fmtD(showFullYear ? p.yf.ca : p.yr.ca),
+      },
+      mtdActuals: {
+        'MTD Revenue': fmtD(b.mtdRevenue),
+        'MTD Cash': fmtD(b.mtdCash),
+        'MTD Closes': fmtN(b.mtdCloses),
+        'Day of Month': `${b.dayOfMonth} / ${b.daysInCurrentMonth}`,
+      },
+      ytdActuals: {
+        'YTD Revenue': fmtD(b.ytdRevenue),
+        'YTD Cash': fmtD(b.ytdCash),
+        'YTD Closes': fmtN(b.ytdCloses),
+        'Day of Year': `${b.dayOfYear} / ${b.daysInYear}`,
+      },
+    };
+
+    // Add goals and pacing if goals are set
+    if (b.monthlyGoal > 0 || b.quarterlyGoal > 0 || b.yearlyGoal > 0) {
+      const pacing = {};
+      if (b.monthlyGoal > 0) {
+        const monthProgress = b.dayOfMonth / b.daysInCurrentMonth;
+        const paceRatio = monthProgress > 0 ? (b.mtdRevenue / b.monthlyGoal) / monthProgress : 0;
+        pacing['Monthly Goal'] = fmtD(b.monthlyGoal);
+        pacing['MTD Revenue vs Goal'] = fmtPct(b.mtdRevenue / b.monthlyGoal);
+        pacing['Monthly Pace'] = fmtPct(paceRatio);
+      }
+      if (b.quarterlyGoal > 0) {
+        pacing['Quarterly Goal'] = fmtD(b.quarterlyGoal);
+        pacing['QTD Revenue vs Goal'] = fmtPct(b.qtdRevenue / b.quarterlyGoal);
+      }
+      if (b.yearlyGoal > 0) {
+        const yearProgress = b.dayOfYear / b.daysInYear;
+        const paceRatio = yearProgress > 0 ? (b.ytdRevenue / b.yearlyGoal) / yearProgress : 0;
+        pacing['Yearly Goal'] = fmtD(b.yearlyGoal);
+        pacing['YTD Revenue vs Goal'] = fmtPct(b.ytdRevenue / b.yearlyGoal);
+        pacing['Yearly Pace'] = fmtPct(paceRatio);
+      }
+      result.goalsAndPacing = pacing;
+    }
+
+    return result;
+  }, [b, p, showFullMonth, showFullYear]);
+
+  const { text: insightText, generatedAt: insightGeneratedAt, isLoading: insightLoading, isOnDemandLoading, generateWithFilters, remainingAnalyses } = useInsight('projections', data, displayMetrics);
 
   // Determine which EOM/EOY data to display based on toggle state.
   // showFullMonth=true  -> MTD actuals + projected remaining days
