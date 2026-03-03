@@ -14,12 +14,13 @@
  * server boots and health-check works).
  */
 
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../../../.env') });
 
 const config = {
   /** Express / HTTP server */
   server: {
-    port: parseInt(process.env.PORT, 10) || 8080,
+    port: parseInt(process.env.BACKEND_PORT || process.env.PORT, 10) || 8080,
     nodeEnv: process.env.NODE_ENV || 'development',
     baseUrl: process.env.BASE_URL || 'http://localhost:8080',
   },
@@ -42,10 +43,14 @@ const config = {
     dataset: process.env.BQ_DATASET || 'CloserAutomation',
   },
 
-  /** Anthropic AI processing */
+  /** AI processing — multi-provider */
   ai: {
     apiKey: process.env.ANTHROPIC_API_KEY || '',
+    openaiApiKey: process.env.OPENAI_API_KEY || '',
+    googleAiApiKey: process.env.GOOGLE_AI_API_KEY || '',
     model: process.env.AI_MODEL || 'claude-sonnet-4-5-20250929',
+    openaiModel: process.env.OPENAI_MODEL || 'gpt-4o',
+    geminiModel: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
     maxTokens: parseInt(process.env.AI_MAX_TOKENS, 10) || 8000,
     inputCostPerMillion: parseFloat(process.env.AI_INPUT_COST_PER_MILLION) || 3.0,
     outputCostPerMillion: parseFloat(process.env.AI_OUTPUT_COST_PER_MILLION) || 15.0,

@@ -258,19 +258,11 @@ export function useInsight(section, pageData) {
   }, [section, fp, metrics, text, isLoading, isOnDemandLoading, authOptions]);
 
   // ── On-demand generation (button click) ────────────────────────────
+  // Always forces a fresh AI call — never returns cached data.
+  // The whole point of clicking the button is to get a NEW analysis.
   const generateWithFilters = useCallback(async () => {
     if (!metrics || !section) return;
     if (getRemainingAnalyses() <= 0) return;
-
-    // Check on-demand cache
-    const fp = fingerprint(metrics);
-    const cacheKey = `${section}:${fp}`;
-    const cached = onDemandCache.get(cacheKey);
-    if (cached) {
-      setText(cached);
-      setGeneratedAt(null); // On-demand has no stored timestamp
-      return;
-    }
 
     setIsOnDemandLoading(true);
     setError(null);
@@ -281,7 +273,7 @@ export function useInsight(section, pageData) {
 
       const res = await apiPost(
         '/dashboard/insights',
-        { section, metrics },
+        { section, metrics, force: true },
         authOptions
       );
 
@@ -289,6 +281,9 @@ export function useInsight(section, pageData) {
         const insightText = res.data.text;
         setText(insightText);
         setGeneratedAt(null); // On-demand — no stored timestamp
+        // Update cache so auto-fallback doesn't overwrite
+        const fp = fingerprint(metrics);
+        const cacheKey = `${section}:${fp}`;
         onDemandCache.set(cacheKey, insightText);
       }
     } catch (err) {

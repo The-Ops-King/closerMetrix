@@ -1,10 +1,11 @@
 /**
  * USE DATA ANALYSIS INSIGHT HOOK
  *
- * Fires all 4 tabs (overview, team, individual, compare) in parallel
- * on first page visit. Checks if today's AI insight exists in BigQuery
- * (GET), and if not, gathers all metrics from DataContext, formats
- * them as CSV-style tables, and POSTs to trigger Opus 4.6 generation.
+ * Fires tabs in parallel on first page visit — only the tabs the user's
+ * tier can access (basic = overview only, insight+ = all 4).
+ * Checks if today's AI insight exists in BigQuery (GET), and if not,
+ * gathers all metrics from DataContext, formats them as CSV-style
+ * tables, and POSTs to trigger Sonnet generation.
  *
  * Once generated, insights are cached for the day (BigQuery InsightLog).
  * Module-level Map cache prevents re-fetching within the same session.
@@ -25,6 +26,7 @@ import { computePageData } from '../utils/computePageData';
 const tabCache = new Map();
 
 const ALL_TABS = ['overview', 'team', 'individual', 'compare'];
+const BASIC_TABS = ['overview']; // Basic tier only gets overview — don't waste AI calls
 
 /**
  * Compute all metrics needed for data analysis AI prompts.
@@ -288,9 +290,12 @@ async function fetchTabInsight(tab, gathered, authOptions) {
  * Returns per-tab data plus loading state.
  */
 export function useDataAnalysisAllTabs() {
-  const { token, mode, adminViewClientId, kpiTargets } = useAuth();
+  const { token, mode, adminViewClientId, kpiTargets, tier } = useAuth();
   const { rawData } = useData();
   const { queryParams } = useFilters();
+
+  // Only fetch tabs the user's tier can access — basic only gets overview
+  const tabsToFetch = useMemo(() => tier === 'basic' ? BASIC_TABS : ALL_TABS, [tier]);
 
   // Fetch script template from settings (optional context for AI prompts)
   const [scriptTemplate, setScriptTemplate] = useState(null);
@@ -340,22 +345,22 @@ export function useDataAnalysisAllTabs() {
     if (fetchedRef.current) return;
     fetchedRef.current = true;
 
-    // Check if all tabs are cached
-    const allCached = ALL_TABS.every(t => tabCache.has(t));
+    // Check if all accessible tabs are cached
+    const allCached = tabsToFetch.every(t => tabCache.has(t));
     if (allCached) {
       const cached = {};
-      for (const t of ALL_TABS) {
+      for (const t of tabsToFetch) {
         cached[t] = { ...tabCache.get(t), error: null };
       }
-      setTabs(cached);
+      setTabs(prev => ({ ...prev, ...cached }));
       return;
     }
 
     setIsLoading(true);
 
-    // Fire all 4 tabs in parallel
+    // Fire only the tabs this tier can access — don't waste AI calls
     const results = await Promise.allSettled(
-      ALL_TABS.map(async (tab) => {
+      tabsToFetch.map(async (tab) => {
         // Check module cache first
         const cached = tabCache.get(tab);
         if (cached) return { tab, ...cached };
@@ -389,20 +394,20 @@ export function useDataAnalysisAllTabs() {
       compare: newTabs.compare || prev.compare,
     }));
     setIsLoading(false);
-  }, [gathered, authOptions]);
+  }, [gathered, authOptions, tabsToFetch]);
 
   // Trigger fetch when gathered data becomes available
   useEffect(() => {
     if (fetchedRef.current) return;
 
-    // Check all cached
-    const allCached = ALL_TABS.every(t => tabCache.has(t));
+    // Check all accessible tabs cached
+    const allCached = tabsToFetch.every(t => tabCache.has(t));
     if (allCached) {
       const cached = {};
-      for (const t of ALL_TABS) {
+      for (const t of tabsToFetch) {
         cached[t] = { ...tabCache.get(t), error: null };
       }
-      setTabs(cached);
+      setTabs(prev => ({ ...prev, ...cached }));
       return;
     }
 
@@ -410,7 +415,7 @@ export function useDataAnalysisAllTabs() {
     if (!gathered && !allCached) return;
 
     fetchAll();
-  }, [gathered, fetchAll]);
+  }, [gathered, fetchAll, tabsToFetch]);
 
   // Compute loading state per tab
   const anyLoading = isLoading;

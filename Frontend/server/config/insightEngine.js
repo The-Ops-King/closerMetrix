@@ -14,8 +14,8 @@ module.exports = {
   model: 'claude-sonnet-4-20250514',
   maxTokens: 512,
 
-  // ── Data Analysis Model (Opus for deeper analysis) ─────────────────
-  dataAnalysisModel: 'claude-opus-4-6',
+  // ── Data Analysis Model ────────────────────────────────────────────
+  dataAnalysisModel: 'claude-sonnet-4-20250514',
   dataAnalysisMaxTokens: 3000,
 
   // ── Caching ────────────────────────────────────────────────────────
@@ -171,7 +171,7 @@ Overall score vs benchmark (7+/10 solid, below 5 needs intervention). Which scri
 
 Rank and compare closers. Who's the top performer and why? Who needs coaching and in what specific area? Look for mismatches — e.g. high show rate but low close rate means the closer is getting opportunities but can't convert. Name names with numbers.`,
 
-    // ── Data Analysis Page Prompts (Opus — structured JSON output) ──
+    // ── Data Analysis Page Prompts (Sonnet — structured JSON output) ──
 
     'data-analysis-overview': `You are analyzing a high-ticket sales team's performance data for {{dateRange}}.
 

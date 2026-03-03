@@ -101,7 +101,8 @@ async function validateToken(tokenId) {
         t.expires_at,
         t.revoked_at,
         c.company_name,
-        c.plan_tier
+        c.plan_tier,
+        c.settings_json
       FROM ${bq.table('AccessTokens')} t
       JOIN ${bq.table('Clients')} c ON t.client_id = c.client_id
       WHERE t.token_id = @tokenId`,
@@ -146,11 +147,26 @@ async function validateToken(tokenId) {
       logger.error('Failed to update last_accessed_at', { error: err.message });
     });
 
+    // Parse kpi_targets and ai_provider from settings_json
+    let kpiTargets = null;
+    let aiProvider = 'claude';
+    if (token.settings_json) {
+      try {
+        const parsed = JSON.parse(token.settings_json);
+        kpiTargets = parsed.kpi_targets || null;
+        aiProvider = parsed.ai_provider || 'claude';
+      } catch {
+        // Ignore parse errors
+      }
+    }
+
     return {
       client_id: token.client_id,
       company_name: token.company_name,
       plan_tier: token.plan_tier,
       closers: closerRows.map((r) => ({ closer_id: r.closer_id, name: r.name, status: r.status })),
+      kpi_targets: kpiTargets,
+      ai_provider: aiProvider,
     };
   } catch (err) {
     logger.error('Token validation failed', { error: err.message, token: tokenId.slice(0, 8) });

@@ -9,146 +9,27 @@
  *   - Performance radar overlays for visual comparison
  *   - Actionable recommendations with priority levels
  *
- * Uses hardcoded demo data for showcase purposes.
+ * Uses real AI-generated insights via Sonnet, generated once per day,
+ * stored in BigQuery InsightLog. Falls back to loading skeletons while generating.
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import ButtonBase from '@mui/material/ButtonBase';
+import Skeleton from '@mui/material/Skeleton';
+import Tooltip from '@mui/material/Tooltip';
 import { COLORS, LAYOUT } from '../../theme/constants';
 import { hexToRgba } from '../../utils/colors';
 import { fmtDollar, fmtPercent, fmtNumber } from '../../utils/formatters';
 import SectionHeader from '../../components/SectionHeader';
 import TronRadarChart from '../../components/charts/TronRadarChart';
-
-/* ───────────────────────────────────────────────────────────────── */
-/*  DEMO DATA                                                       */
-/* ───────────────────────────────────────────────────────────────── */
-
-const CLOSERS = [
-  {
-    id: 'barney', name: 'Barney', avatar: 'B', color: COLORS.neon.green,
-    closeRate: 0.34, revenue: 138400, cash: 99648, callsHeld: 87, adherence: 6.8,
-    showRate: 0.76, avgDealSize: 5600, objResolution: 0.78, lostRate: 0.12,
-    callsToClose: 1.8, daysToClose: 3.2, oneCallClose: 0.38,
-    discoveryScore: 7.2, pitchScore: 8.8, closeAttemptScore: 9.1, objectionScore: 8.6,
-    depositRate: 0.44, cashPerCall: 1145, revenuePerCall: 1591, qualifiedCloseRate: 0.41,
-  },
-  {
-    id: 'ted', name: 'Ted', avatar: 'T', color: COLORS.neon.cyan,
-    closeRate: 0.22, revenue: 67300, cash: 48456, callsHeld: 64, adherence: 8.1,
-    showRate: 0.71, avgDealSize: 4200, objResolution: 0.55, lostRate: 0.18,
-    callsToClose: 2.3, daysToClose: 5.8, oneCallClose: 0.22,
-    discoveryScore: 8.0, pitchScore: 7.4, closeAttemptScore: 7.2, objectionScore: 6.8,
-    depositRate: 0.38, cashPerCall: 757, revenuePerCall: 1052, qualifiedCloseRate: 0.29,
-  },
-  {
-    id: 'lily', name: 'Lily', avatar: 'L', color: COLORS.neon.purple,
-    closeRate: 0.14, revenue: 42800, cash: 29960, callsHeld: 72, adherence: 9.2,
-    showRate: 0.79, avgDealSize: 5350, objResolution: 0.42, lostRate: 0.24,
-    callsToClose: 2.9, daysToClose: 8.1, oneCallClose: 0.12,
-    discoveryScore: 9.1, pitchScore: 8.2, closeAttemptScore: 5.8, objectionScore: 5.4,
-    depositRate: 0.32, cashPerCall: 416, revenuePerCall: 594, qualifiedCloseRate: 0.19,
-  },
-  {
-    id: 'marshal', name: 'Marshal', avatar: 'M', color: COLORS.neon.amber,
-    closeRate: 0.19, revenue: 59056, cash: 41339, callsHeld: 58, adherence: 7.5,
-    showRate: 0.61, avgDealSize: 6200, objResolution: 0.51, lostRate: 0.21,
-    callsToClose: 2.1, daysToClose: 5.4, oneCallClose: 0.26,
-    discoveryScore: 7.8, pitchScore: 8.4, closeAttemptScore: 7.6, objectionScore: 6.2,
-    depositRate: 0.41, cashPerCall: 713, revenuePerCall: 1018, qualifiedCloseRate: 0.25,
-  },
-];
-
-const TEAM_AVG = {
-  name: 'Team Avg', avatar: 'T', color: COLORS.text.muted, id: 'team',
-  closeRate: 0.22, revenue: 76889, cash: 54851, callsHeld: 70, adherence: 7.9,
-  showRate: 0.73, avgDealSize: 5100, objResolution: 0.52, lostRate: 0.19,
-  callsToClose: 2.3, daysToClose: 5.4, oneCallClose: 0.24,
-  discoveryScore: 8.0, pitchScore: 8.2, closeAttemptScore: 7.4, objectionScore: 6.8,
-  depositRate: 0.39, cashPerCall: 784, revenuePerCall: 1101, qualifiedCloseRate: 0.28,
-};
-
-const TEAM_INSIGHTS = [
-  {
-    id: 1, priority: 'high', category: 'Revenue Concentration', color: 'amber',
-    icon: 'warning',
-    title: '45% of revenue is coming from one closer',
-    body: 'Barney is responsible for 45% of all revenue generated this quarter ($138,400 of $307,556). While his performance is exceptional, this creates a significant single-point-of-failure risk. If Barney takes time off or leaves, nearly half your revenue pipeline disappears.',
-    action: 'Consider having Barney host a weekly training session, or have Lily, Marshal, and Ted review more of his recorded calls to model his techniques.',
-  },
-  {
-    id: 2, priority: 'high', category: 'Script vs. Results Mismatch', color: 'red',
-    icon: 'swap_horiz',
-    title: 'Highest script adherence is not translating to closes',
-    body: 'Lily scores 9.2/10 on script adherence (highest on the team) but has the lowest close rate at 14%. Meanwhile, Barney scores 6.8/10 on adherence but leads with a 34% close rate. This suggests the current script may not be optimized for conversions, or that Barney\'s deviations are actually what\'s working.',
-    action: 'Audit Barney\'s calls to identify where he deviates from the script. Consider updating the script to incorporate his natural objection handling and closing patterns.',
-  },
-  {
-    id: 3, priority: 'medium', category: 'Follow-Up Conversion', color: 'green',
-    icon: 'trending_up',
-    title: 'Follow-up calls are converting 2.3x better than first calls',
-    body: 'Your team\'s first-call close rate is 11% but follow-up close rate is 26%. This is significantly above industry average (18% follow-up). Your follow-up process is a competitive advantage — but 38% of scheduled follow-ups are being ghosted.',
-    action: 'Reduce follow-up ghost rate by implementing same-day confirmation texts. Even a 10% improvement would add an estimated $18,200/mo in revenue.',
-  },
-  {
-    id: 4, priority: 'medium', category: 'Scheduling Pattern', color: 'cyan',
-    icon: 'calendar_month',
-    title: 'Tuesday and Wednesday calls close at 2x the rate of Friday calls',
-    body: 'Close rate by day: Tue (28%), Wed (26%), Thu (21%), Mon (18%), Fri (12%). Friday appointments are dragging down your overall numbers. 23% of your booked calls land on Fridays.',
-    action: 'Shift booking weight toward Tue-Thu. Consider removing Friday call slots or reserving them for follow-ups only.',
-  },
-  {
-    id: 5, priority: 'low', category: 'Team Velocity', color: 'green',
-    icon: 'speed',
-    title: 'Average days to close has dropped from 8.2 to 5.4 days',
-    body: 'Over the last 60 days, your team is closing deals 34% faster. This is primarily driven by Marshal and Ted shortening their follow-up cadence from 5-7 days to 2-3 days between touches. One-call closes are also up from 18% to 24%.',
-    action: 'Reinforce the faster follow-up cadence in your next team meeting. The tighter cadence is keeping prospects engaged.',
-  },
-  {
-    id: 6, priority: 'medium', category: 'Objection Handling Gap', color: 'purple',
-    icon: 'psychology',
-    title: 'Financial objections are 3x more likely to result in a lost deal',
-    body: '"I can\'t afford it" and "It\'s too expensive" objections have a 68% loss rate, while "I need to think about it" and "Spouse" objections only have a 31% loss rate. Financial objections appear in 42% of lost calls but only 12% of closed calls.',
-    action: 'Build a dedicated financial objection framework. Have Barney (78% resolution rate) record his best financial objection rebuttals for the team playbook.',
-  },
-];
-
-const INDIVIDUAL_INSIGHTS = [
-  {
-    closer: CLOSERS[0],
-    insights: [
-      { type: 'strength', text: 'Highest converting closer at 34% close rate. Objection resolution rate is 78% — 50% higher than team average. His close attempt score (9.1) shows he confidently asks for the sale multiple times.' },
-      { type: 'opportunity', text: 'Script adherence is lowest on the team (6.8/10), but his results suggest his deviations are working. His discovery phase diverges most — he asks 40% more qualifying questions than the script calls for.' },
-      { type: 'action', text: 'Record and transcribe Barney\'s top 5 closes from this month. Extract his objection handling rebuttals and qualifying questions for the team playbook.' },
-    ],
-  },
-  {
-    closer: CLOSERS[1],
-    insights: [
-      { type: 'strength', text: 'Most improved closer over the last 30 days — close rate jumped from 16% to 22% after shortening follow-up cadence. Cash collection rate is highest on the team at 72%.' },
-      { type: 'concern', text: 'Average deal size ($4,200) is 18% below team average ($5,100). 0 of his last 12 closes included the VIP upsell, suggesting he may be discounting or not presenting premium options.' },
-      { type: 'action', text: 'Review Ted\'s pitch section recordings — he may be skipping the premium tier presentation. Coach on anchoring high before negotiating down.' },
-    ],
-  },
-  {
-    closer: CLOSERS[2],
-    insights: [
-      { type: 'strength', text: 'Highest script adherence on the team (9.2/10). Discovery and rapport scores are both 9+. Prospects consistently rate her calls as "helpful" in post-call surveys.' },
-      { type: 'concern', text: 'Despite highest adherence and rapport, Lily has the lowest close rate (14%). Close attempt score is 5.8/10 — she averages 1.2 close attempts per call vs. Barney\'s 3.1. She\'s building great relationships but not asking for the sale.' },
-      { type: 'action', text: 'Lily needs close attempt coaching, not script coaching. Have her shadow Barney\'s calls from pitch-to-close. Her rapport skills + stronger closing = potential top performer.' },
-    ],
-  },
-  {
-    closer: CLOSERS[3],
-    insights: [
-      { type: 'strength', text: 'Highest average deal size ($6,200). 4 of his last 8 closes included the VIP upsell. Pitch score is 8.4/10 — he\'s the best at presenting premium value.' },
-      { type: 'concern', text: 'Show rate on Marshal\'s booked calls is only 61% vs. team average of 73%. He\'s losing prospects before they even show up — costing an estimated $22,000/mo in unrealized revenue.' },
-      { type: 'action', text: 'Investigate pre-call confirmation process. Implement personalized video reminders before appointments. Improving show rate by 10% would add ~3 more closes per month ($18,600).' },
-    ],
-  },
-];
+import TierGate from '../../components/TierGate';
+import { useDataAnalysisAllTabs } from '../../hooks/useDataAnalysisInsight';
+import { useData } from '../../context/DataContext';
+import { useAuth } from '../../context/AuthContext';
+import { useFilters } from '../../context/FilterContext';
+import { computePageData } from '../../utils/computePageData';
 
 /* ───────────────────────────────────────────────────────────────── */
 /*  COMPARISON METRICS CONFIG                                       */
@@ -161,23 +42,114 @@ const COMPARISON_METRICS = [
   { key: 'avgDealSize', label: 'Avg Deal Size', format: 'currency', desiredDir: 'up' },
   { key: 'cashPerCall', label: 'Cash / Call', format: 'currency', desiredDir: 'up' },
   { key: 'revenuePerCall', label: 'Revenue / Call', format: 'currency', desiredDir: 'up' },
-  { key: 'adherence', label: 'Script Adherence', format: 'score', desiredDir: 'up' },
-  { key: 'objResolution', label: 'Objection Resolution', format: 'percent', desiredDir: 'up' },
-  { key: 'lostRate', label: 'Lost Rate', format: 'percent', desiredDir: 'down' },
+  { key: 'callQuality', label: 'Call Quality', format: 'score', desiredDir: 'up' },
+  { key: 'objResRate', label: 'Objection Resolution', format: 'percent', desiredDir: 'up' },
   { key: 'callsToClose', label: 'Calls to Close', format: 'decimal', desiredDir: 'down' },
   { key: 'daysToClose', label: 'Days to Close', format: 'decimal', desiredDir: 'down' },
-  { key: 'oneCallClose', label: '1-Call Close %', format: 'percent', desiredDir: 'up' },
-  { key: 'depositRate', label: 'Deposit Rate', format: 'percent', desiredDir: 'up' },
-  { key: 'qualifiedCloseRate', label: 'Qualified Close Rate', format: 'percent', desiredDir: 'up' },
 ];
 
 const RADAR_DIMENSIONS = [
-  { key: 'discoveryScore', label: 'Discovery' },
-  { key: 'pitchScore', label: 'Pitch' },
-  { key: 'closeAttemptScore', label: 'Close Attempt' },
-  { key: 'objectionScore', label: 'Objection Handling' },
-  { key: 'adherence', label: 'Adherence' },
+  { key: 'callQuality', label: 'Call Quality' },
+  { key: 'objHandling', label: 'Obj. Handling' },
+  { key: 'closeRate100', label: 'Close Rate' },
+  { key: 'showRate100', label: 'Show Rate' },
+  { key: 'objResRate100', label: 'Obj. Resolution' },
 ];
+
+/* ───────────────────────────────────────────────────────────────── */
+/*  CLOSER COLOR CYCLE                                              */
+/* ───────────────────────────────────────────────────────────────── */
+
+const CLOSER_COLORS = [
+  COLORS.neon.green, COLORS.neon.cyan, COLORS.neon.purple,
+  COLORS.neon.amber, COLORS.neon.red, COLORS.neon.blue,
+];
+
+function getCloserColor(index) {
+  return CLOSER_COLORS[index % CLOSER_COLORS.length];
+}
+
+/* ───────────────────────────────────────────────────────────────── */
+/*  HOOKS: Build live closer data from DataContext                  */
+/* ───────────────────────────────────────────────────────────────── */
+
+function useLiveCloserData() {
+  const { rawData } = useData();
+  const { queryParams } = useFilters();
+
+  return useMemo(() => {
+    if (!rawData || !rawData.calls) return { closers: [], teamAvg: null };
+
+    const filters = {
+      dateStart: queryParams.dateStart,
+      dateEnd: queryParams.dateEnd,
+      closerId: null,
+      granularity: 'weekly',
+      objectionType: null,
+      riskCategory: null,
+    };
+
+    const scoreboard = computePageData('closer-scoreboard', rawData, filters);
+    if (!scoreboard || scoreboard.isEmpty || !scoreboard.closerStats) {
+      return { closers: [], teamAvg: null };
+    }
+
+    const stats = scoreboard.closerStats;
+
+    // Build closer objects with colors
+    const closers = stats.map((c, i) => ({
+      id: c.closerId || c.name,
+      name: c.name,
+      avatar: c.name[0],
+      color: getCloserColor(i),
+      closeRate: c.closeRate,
+      revenue: c.revenue,
+      cash: c.cash,
+      callsHeld: c.heldCount,
+      showRate: c.showRate,
+      avgDealSize: c.avgDealSize,
+      objResRate: c.objResRate,
+      callQuality: c.callQuality,
+      objHandling: c.objHandling,
+      daysToClose: c.daysToClose,
+      callsToClose: c.callsToClose,
+      dealsClosed: c.dealsClosed,
+      cashPerCall: c.heldCount > 0 ? Math.round(c.cash / c.heldCount) : 0,
+      revenuePerCall: c.heldCount > 0 ? Math.round(c.revenue / c.heldCount) : 0,
+      // Scaled for radar (0-10)
+      closeRate100: c.closeRate * 100 / 5, // 20% = 4, 50% = 10
+      showRate100: c.showRate * 100 / 10, // 100% = 10
+      objResRate100: c.objResRate * 100 / 10,
+    }));
+
+    // Team average
+    if (closers.length > 0) {
+      const avg = (arr, key) => arr.reduce((s, c) => s + (c[key] || 0), 0) / arr.length;
+      const teamAvg = {
+        id: 'team', name: 'Team Avg', avatar: 'AVG', color: COLORS.text.muted,
+        closeRate: avg(closers, 'closeRate'),
+        revenue: Math.round(avg(closers, 'revenue')),
+        cash: Math.round(avg(closers, 'cash')),
+        callsHeld: Math.round(avg(closers, 'callsHeld')),
+        showRate: avg(closers, 'showRate'),
+        avgDealSize: Math.round(avg(closers, 'avgDealSize')),
+        objResRate: avg(closers, 'objResRate'),
+        callQuality: Number(avg(closers, 'callQuality').toFixed(1)),
+        objHandling: Number(avg(closers, 'objHandling').toFixed(1)),
+        daysToClose: Number(avg(closers, 'daysToClose').toFixed(1)),
+        callsToClose: Number(avg(closers, 'callsToClose').toFixed(1)),
+        cashPerCall: Math.round(avg(closers, 'cashPerCall')),
+        revenuePerCall: Math.round(avg(closers, 'revenuePerCall')),
+        closeRate100: avg(closers, 'closeRate100'),
+        showRate100: avg(closers, 'showRate100'),
+        objResRate100: avg(closers, 'objResRate100'),
+      };
+      return { closers, teamAvg };
+    }
+
+    return { closers, teamAvg: null };
+  }, [rawData, queryParams.dateStart, queryParams.dateEnd]);
+}
 
 /* ───────────────────────────────────────────────────────────────── */
 /*  SMALL COMPONENTS                                                */
@@ -257,23 +229,87 @@ function fmt(value, format) {
   switch (format) {
     case 'percent': return fmtPercent(value);
     case 'currency': return fmtDollar(value);
-    case 'score': return value.toFixed(1);
-    case 'decimal': return value.toFixed(1);
+    case 'score': return typeof value === 'number' ? value.toFixed(1) : value;
+    case 'decimal': return typeof value === 'number' ? value.toFixed(1) : value;
     default: return fmtNumber(value);
   }
 }
 
 /* ───────────────────────────────────────────────────────────────── */
-/*  SUMMARY ROW                                                     */
+/*  LOADING SKELETON                                                */
 /* ───────────────────────────────────────────────────────────────── */
 
-function SummaryRow() {
+function InsightSkeleton({ count = 3 }) {
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      {Array.from({ length: count }).map((_, i) => (
+        <Box
+          key={i}
+          sx={{
+            p: 2.5, borderRadius: `${LAYOUT.cardBorderRadius}px`,
+            background: COLORS.bg.secondary, border: `1px solid ${COLORS.border.subtle}`,
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
+            <Skeleton variant="rounded" width={32} height={32} sx={{ bgcolor: COLORS.bg.tertiary }} />
+            <Box sx={{ flex: 1 }}>
+              <Skeleton variant="text" width="30%" sx={{ bgcolor: COLORS.bg.tertiary, fontSize: '0.65rem' }} />
+              <Skeleton variant="text" width="70%" sx={{ bgcolor: COLORS.bg.tertiary, fontSize: '0.95rem' }} />
+            </Box>
+            <Skeleton variant="rounded" width={80} height={20} sx={{ bgcolor: COLORS.bg.tertiary }} />
+          </Box>
+          <Skeleton variant="text" width="100%" sx={{ bgcolor: COLORS.bg.tertiary }} />
+          <Skeleton variant="text" width="85%" sx={{ bgcolor: COLORS.bg.tertiary }} />
+          <Skeleton variant="rounded" width="100%" height={40} sx={{ bgcolor: COLORS.bg.tertiary, mt: 1 }} />
+        </Box>
+      ))}
+    </Box>
+  );
+}
+
+const AI_PROVIDER_LABELS = { claude: 'Claude (Anthropic)', chatgpt: 'ChatGPT (OpenAI)', gemini: 'Gemini (Google)' };
+
+function GeneratingBanner() {
+  const { aiProvider } = useAuth();
+  const providerLabel = AI_PROVIDER_LABELS[aiProvider] || AI_PROVIDER_LABELS.claude;
+  return (
+    <Box sx={{
+      mb: 3, p: 2, borderRadius: `${LAYOUT.cardBorderRadius}px`,
+      background: hexToRgba(COLORS.neon.purple, 0.06),
+      border: `1px solid ${hexToRgba(COLORS.neon.purple, 0.2)}`,
+      display: 'flex', alignItems: 'center', gap: 1.5,
+    }}>
+      <Box sx={{
+        width: 24, height: 24, borderRadius: '50%',
+        border: `2px solid ${COLORS.neon.purple}`,
+        borderTopColor: 'transparent',
+        animation: 'spin 1s linear infinite',
+        '@keyframes spin': { '100%': { transform: 'rotate(360deg)' } },
+      }} />
+      <Box>
+        <Typography sx={{ fontSize: '0.8rem', fontWeight: 600, color: COLORS.neon.purple }}>
+          Generating AI Analysis...
+        </Typography>
+        <Typography sx={{ fontSize: '0.7rem', color: COLORS.text.muted }}>
+          {providerLabel} is analyzing your team data. This may take 15-30 seconds on first visit.
+        </Typography>
+      </Box>
+    </Box>
+  );
+}
+
+/* ───────────────────────────────────────────────────────────────── */
+/*  SUMMARY ROW — Driven by AI data                                */
+/* ───────────────────────────────────────────────────────────────── */
+
+function SummaryRow({ summaryStats }) {
+  if (!summaryStats) return null;
   const stats = [
-    { label: 'Total Revenue', value: fmtDollar(307556), color: COLORS.neon.green },
-    { label: 'Team Close Rate', value: '22%', color: COLORS.neon.cyan },
-    { label: 'Calls Analyzed', value: '281', color: COLORS.neon.purple },
-    { label: 'Insights Generated', value: '15', color: COLORS.neon.amber },
-    { label: 'High Priority', value: '2', color: COLORS.neon.red },
+    { label: 'Total Revenue', value: summaryStats.totalRevenue != null ? fmtDollar(summaryStats.totalRevenue) : '—', color: COLORS.neon.green },
+    { label: 'Team Close Rate', value: summaryStats.teamCloseRate || '—', color: COLORS.neon.cyan },
+    { label: 'Calls Analyzed', value: summaryStats.callsAnalyzed != null ? fmtNumber(summaryStats.callsAnalyzed) : '—', color: COLORS.neon.purple },
+    { label: 'Insights Generated', value: summaryStats.insightsGenerated != null ? String(summaryStats.insightsGenerated) : '—', color: COLORS.neon.amber },
+    { label: 'High Priority', value: summaryStats.highPriorityCount != null ? String(summaryStats.highPriorityCount) : '—', color: COLORS.neon.red },
   ];
   return (
     <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
@@ -311,7 +347,7 @@ function TeamInsightCard({ insight }) {
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5, flexWrap: 'wrap' }}>
         <Box sx={{ width: 32, height: 32, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: hexToRgba(accent, 0.12), border: `1px solid ${hexToRgba(accent, 0.25)}`, flexShrink: 0 }}>
-          <span className="material-symbols-outlined" style={{ fontSize: 18, color: accent }}>{insight.icon}</span>
+          <span className="material-symbols-outlined" style={{ fontSize: 18, color: accent }}>{insight.icon || 'auto_awesome'}</span>
         </Box>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography sx={{ fontSize: '0.65rem', color: COLORS.text.muted, letterSpacing: '0.08em', textTransform: 'uppercase', mb: 0.25 }}>{insight.category}</Typography>
@@ -320,10 +356,12 @@ function TeamInsightCard({ insight }) {
         <PriorityBadge priority={insight.priority} />
       </Box>
       <Typography sx={{ fontSize: '0.85rem', color: COLORS.text.secondary, lineHeight: 1.6, mb: 2 }}>{insight.body}</Typography>
-      <Box sx={{ p: 1.5, borderRadius: '8px', background: hexToRgba(accent, 0.06), border: `1px solid ${hexToRgba(accent, 0.15)}`, display: 'flex', gap: 1, alignItems: 'flex-start' }}>
-        <span className="material-symbols-outlined" style={{ fontSize: 16, color: accent, marginTop: 2, flexShrink: 0 }}>arrow_forward</span>
-        <Typography sx={{ fontSize: '0.8rem', color: COLORS.text.primary, lineHeight: 1.5 }}>{insight.action}</Typography>
-      </Box>
+      {insight.action && (
+        <Box sx={{ p: 1.5, borderRadius: '8px', background: hexToRgba(accent, 0.06), border: `1px solid ${hexToRgba(accent, 0.15)}`, display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 16, color: accent, marginTop: 2, flexShrink: 0 }}>arrow_forward</span>
+          <Typography sx={{ fontSize: '0.8rem', color: COLORS.text.primary, lineHeight: 1.5 }}>{insight.action}</Typography>
+        </Box>
+      )}
     </Box>
   );
 }
@@ -332,8 +370,24 @@ function TeamInsightCard({ insight }) {
 /*  INDIVIDUAL CLOSER CARD                                          */
 /* ───────────────────────────────────────────────────────────────── */
 
-function CloserInsightCard({ data }) {
-  const c = data.closer;
+function CloserInsightCard({ data, liveCloser }) {
+  const colorMap = { green: COLORS.neon.green, cyan: COLORS.neon.cyan, purple: COLORS.neon.purple, amber: COLORS.neon.amber, red: COLORS.neon.red, blue: COLORS.neon.blue };
+  // Use live closer data for stats (more accurate), AI data for insights text
+  const c = {
+    name: data.name,
+    color: liveCloser?.color || colorMap[data.color] || COLORS.neon.cyan,
+    avatar: data.name?.[0] || '?',
+    closeRate: liveCloser?.closeRate ?? data.stats?.closeRate,
+    revenue: liveCloser?.revenue ?? data.stats?.revenue,
+    adherence: liveCloser?.callQuality ?? data.stats?.adherence,
+    callsHeld: liveCloser?.callsHeld ?? data.stats?.callsHeld,
+    showRate: liveCloser?.showRate ?? data.stats?.showRate,
+    avgDealSize: liveCloser?.avgDealSize ?? data.stats?.avgDealSize,
+    objResRate: liveCloser?.objResRate ?? data.stats?.objResolution,
+    cash: liveCloser?.cash ?? data.stats?.cash,
+    dealsClosed: liveCloser?.dealsClosed ?? data.stats?.dealsClosed,
+  };
+
   return (
     <Box
       sx={{
@@ -351,10 +405,12 @@ function CloserInsightCard({ data }) {
           <Typography sx={{ fontSize: '1.05rem', fontWeight: 700, color: COLORS.text.primary }}>{c.name}</Typography>
           <Box sx={{ display: 'flex', gap: 2, mt: 0.5, flexWrap: 'wrap' }}>
             {[
-              { label: 'Close Rate', value: fmtPercent(c.closeRate) },
-              { label: 'Revenue', value: fmtDollar(c.revenue) },
-              { label: 'Adherence', value: c.adherence.toFixed(1) },
-              { label: 'Calls', value: c.callsHeld },
+              { label: 'Close Rate', value: c.closeRate != null ? fmtPercent(c.closeRate) : '—' },
+              { label: 'Revenue', value: c.revenue != null ? fmtDollar(c.revenue) : '—' },
+              { label: 'Show Rate', value: c.showRate != null ? fmtPercent(c.showRate) : '—' },
+              { label: 'Calls Held', value: c.callsHeld != null ? fmtNumber(c.callsHeld) : '—' },
+              { label: 'Cash', value: c.cash != null ? fmtDollar(c.cash) : '—' },
+              { label: 'Call Quality', value: c.adherence != null ? Number(c.adherence).toFixed(1) : '—' },
             ].map(s => (
               <Box key={s.label} sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5 }}>
                 <Typography sx={{ fontSize: '0.6rem', color: COLORS.text.muted, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{s.label}</Typography>
@@ -365,7 +421,7 @@ function CloserInsightCard({ data }) {
         </Box>
       </Box>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-        {data.insights.map((ins, i) => (
+        {(data.insights || []).map((ins, i) => (
           <Box key={i}>
             <InsightTag type={ins.type} />
             <Typography sx={{ fontSize: '0.83rem', color: COLORS.text.secondary, lineHeight: 1.55, mt: 0.5 }}>{ins.text}</Typography>
@@ -377,55 +433,89 @@ function CloserInsightCard({ data }) {
 }
 
 /* ───────────────────────────────────────────────────────────────── */
-/*  COMPARISON TOOL                                                 */
+/*  COMPARISON TOOL — Uses live data + AI narrative from BQ         */
 /* ───────────────────────────────────────────────────────────────── */
 
-function ComparisonTool() {
-  const [leftId, setLeftId] = useState('barney');
-  const [rightId, setRightId] = useState('lily');
-  const options = [...CLOSERS, { ...TEAM_AVG, avatar: 'AVG' }];
+function ComparisonTool({ comparisons }) {
+  const { closers, teamAvg } = useLiveCloserData();
+  const options = teamAvg ? [...closers, teamAvg] : closers;
 
-  const left = options.find(c => c.id === leftId) || CLOSERS[0];
-  const right = options.find(c => c.id === rightId) || CLOSERS[2];
+  const [leftId, setLeftId] = useState(null);
+  const [rightId, setRightId] = useState(null);
+
+  // Default to first two closers when data loads
+  const left = options.find(c => c.id === leftId) || options[0];
+  const right = options.find(c => c.id === rightId) || (teamAvg || options[1]);
+
+  if (options.length < 2) {
+    return (
+      <Box sx={{ p: 3, textAlign: 'center' }}>
+        <Typography sx={{ color: COLORS.text.muted }}>Need at least 2 closers for comparison.</Typography>
+      </Box>
+    );
+  }
 
   /** Determine who "wins" each metric row */
   function getWinner(metric) {
-    const lv = left[metric.key];
-    const rv = right[metric.key];
+    const lv = left?.[metric.key];
+    const rv = right?.[metric.key];
     if (lv == null || rv == null || lv === rv) return 'tie';
     const leftBetter = metric.desiredDir === 'up' ? lv > rv : lv < rv;
     return leftBetter ? 'left' : 'right';
   }
 
-  // Radar data for both closers
-  const radarData = RADAR_DIMENSIONS.map(d => ({
-    label: d.label,
-    values: [left[d.key], right[d.key]],
-  }));
+  /** Whether one side is team average (triggers AI narrative) */
+  const isTeamComparison = left?.id === 'team' || right?.id === 'team';
 
-  // AI comparison summary
-  const comparisonInsight = useMemo(() => {
-    const leftWins = COMPARISON_METRICS.filter(m => getWinner(m) === 'left').length;
-    const rightWins = COMPARISON_METRICS.filter(m => getWinner(m) === 'right').length;
-    const winner = leftWins > rightWins ? left : right;
-    const loser = leftWins > rightWins ? right : left;
+  // AI narrative — only used for closer-vs-team comparisons
+  const aiNarrative = useMemo(() => {
+    if (!isTeamComparison || !comparisons || !left) return null;
+    const closerSide = left.id !== 'team' ? left : right;
+    const match = comparisons.find(c =>
+      c.closerId === closerSide?.id || c.closerName === closerSide?.name
+    );
+    return match?.comparisonSummary || null;
+  }, [comparisons, left, right, isTeamComparison]);
 
-    // Generate contextual comparison insight
-    if (left.id === 'barney' && right.id === 'lily') {
-      return `${left.name} outperforms ${right.name} in ${leftWins} of ${COMPARISON_METRICS.length} metrics, but the gap tells an interesting story. ${right.name}'s rapport and discovery skills (9.1) actually exceed ${left.name}'s (7.2) — she's building better relationships but not converting them. The key difference is close attempts: ${left.name} averages 3.1 per call vs ${right.name}'s 1.2. If ${right.name} adopted ${left.name}'s closing persistence while keeping her rapport skills, she could realistically reach a 25%+ close rate — adding an estimated $24,000/mo in revenue.`;
+  /** Templated factual summary for closer-vs-closer comparisons */
+  const templatedSummary = useMemo(() => {
+    if (isTeamComparison || !left || !right) return null;
+
+    const leftWins = [];
+    const rightWins = [];
+    const ties = [];
+
+    COMPARISON_METRICS.forEach(metric => {
+      const lv = left[metric.key];
+      const rv = right[metric.key];
+      if (lv == null || rv == null || lv === rv) { ties.push(metric); return; }
+      const leftBetter = metric.desiredDir === 'up' ? lv > rv : lv < rv;
+      const entry = { ...metric, leftVal: fmt(lv, metric.format), rightVal: fmt(rv, metric.format) };
+      if (leftBetter) leftWins.push(entry); else rightWins.push(entry);
+    });
+
+    const parts = [];
+
+    if (leftWins.length > 0) {
+      const list = leftWins.map(m => `${m.label} (${m.leftVal} vs ${m.rightVal})`).join(', ');
+      parts.push({ bold: `${left.name} outpaces ${right.name}`, rest: ` in ${list}.` });
     }
-    if (left.id === 'barney' && right.id === 'ted') {
-      return `${left.name} leads in ${leftWins} metrics, most notably close rate (34% vs 22%) and objection resolution (78% vs 55%). However, ${right.name} is the fastest improving closer — up 6 points in 30 days. ${right.name}'s biggest gap is deal size ($4,200 vs $5,600). Coaching ${right.name} on premium positioning could close the revenue gap significantly without needing more calls.`;
+
+    if (rightWins.length > 0) {
+      const list = rightWins.map(m => `${m.label} (${m.rightVal} vs ${m.leftVal})`).join(', ');
+      parts.push({ bold: `${right.name} edges out ${left.name}`, rest: ` in ${list}.` });
     }
-    if (right.id === 'team') {
-      const aboveAvg = COMPARISON_METRICS.filter(m => {
-        const lv = left[m.key]; const rv = right[m.key];
-        return m.desiredDir === 'up' ? lv > rv : lv < rv;
-      });
-      return `${left.name} outperforms the team average in ${aboveAvg.length} of ${COMPARISON_METRICS.length} metrics. Key strengths above average: ${aboveAvg.slice(0, 3).map(m => m.label).join(', ')}. Focus areas below team average: ${COMPARISON_METRICS.filter(m => !aboveAvg.includes(m)).slice(0, 3).map(m => m.label).join(', ')}.`;
-    }
-    return `${winner.name} leads in ${Math.max(leftWins, rightWins)} of ${COMPARISON_METRICS.length} tracked metrics. The most significant gaps are in close rate (${fmtPercent(left.closeRate)} vs ${fmtPercent(right.closeRate)}) and objection resolution (${fmtPercent(left.objResolution)} vs ${fmtPercent(right.objResolution)}). Consider pairing these two closers for peer coaching sessions.`;
-  }, [leftId, rightId]);
+
+    const leftCount = leftWins.length;
+    const rightCount = rightWins.length;
+    const total = COMPARISON_METRICS.length;
+    const overallWinner = leftCount > rightCount ? left.name : rightCount > leftCount ? right.name : null;
+    const overallLine = overallWinner
+      ? `Overall: ${overallWinner} wins ${Math.max(leftCount, rightCount)} of ${total} metrics.`
+      : `Overall: tied at ${leftCount} metrics each.`;
+
+    return { parts, overallLine };
+  }, [left, right, isTeamComparison]);
 
   return (
     <Box>
@@ -434,7 +524,7 @@ function ComparisonTool() {
         <Box>
           <Typography sx={{ fontSize: '0.6rem', color: COLORS.text.muted, letterSpacing: '0.1em', textTransform: 'uppercase', mb: 1 }}>Compare</Typography>
           <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
-            {options.map(c => <CloserPill key={c.id} closer={c} isActive={leftId === c.id} onClick={() => setLeftId(c.id)} />)}
+            {options.map(c => <CloserPill key={c.id} closer={c} isActive={(left?.id || options[0]?.id) === c.id} onClick={() => setLeftId(c.id)} />)}
           </Box>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', pt: 2 }}>
@@ -443,96 +533,110 @@ function ComparisonTool() {
         <Box>
           <Typography sx={{ fontSize: '0.6rem', color: COLORS.text.muted, letterSpacing: '0.1em', textTransform: 'uppercase', mb: 1 }}>Against</Typography>
           <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
-            {options.map(c => <CloserPill key={c.id} closer={c} isActive={rightId === c.id} onClick={() => setRightId(c.id)} />)}
+            {options.map(c => <CloserPill key={c.id} closer={c} isActive={(right?.id || (teamAvg?.id || options[1]?.id)) === c.id} onClick={() => setRightId(c.id)} />)}
           </Box>
         </Box>
       </Box>
 
-      {/* AI comparison insight */}
-      <Box sx={{ mb: 3, p: 2, borderRadius: `${LAYOUT.cardBorderRadius}px`, background: hexToRgba(COLORS.neon.purple, 0.06), border: `1px solid ${hexToRgba(COLORS.neon.purple, 0.2)}` }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.75 }}>
-          <span className="material-symbols-outlined" style={{ fontSize: 14, color: COLORS.neon.purple }}>auto_awesome</span>
-          <Typography sx={{ fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.1em', color: COLORS.neon.purple, textTransform: 'uppercase' }}>AI Comparison Analysis</Typography>
+      {/* AI comparison insight — only for closer vs team avg */}
+      {isTeamComparison && aiNarrative && (
+        <Box sx={{ mb: 3, p: 2, borderRadius: `${LAYOUT.cardBorderRadius}px`, background: hexToRgba(COLORS.neon.purple, 0.06), border: `1px solid ${hexToRgba(COLORS.neon.purple, 0.2)}` }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.75 }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 14, color: COLORS.neon.purple }}>auto_awesome</span>
+            <Typography sx={{ fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.1em', color: COLORS.neon.purple, textTransform: 'uppercase' }}>AI Comparison Analysis</Typography>
+          </Box>
+          <Typography sx={{ fontSize: '0.83rem', color: COLORS.text.primary, lineHeight: 1.55 }}>{aiNarrative}</Typography>
         </Box>
-        <Typography sx={{ fontSize: '0.83rem', color: COLORS.text.primary, lineHeight: 1.55 }}>{comparisonInsight}</Typography>
-      </Box>
+      )}
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 340px' }, gap: 3 }}>
-        {/* Metric comparison table */}
-        <Box sx={{ borderRadius: `${LAYOUT.cardBorderRadius}px`, background: COLORS.bg.secondary, border: `1px solid ${COLORS.border.subtle}`, overflow: 'hidden' }}>
-          {/* Table header */}
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px', p: 1.5, borderBottom: `1px solid ${COLORS.border.subtle}`, background: COLORS.bg.tertiary }}>
-            <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: COLORS.text.muted, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Metric</Typography>
-            <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: left.color, letterSpacing: '0.08em', textTransform: 'uppercase', textAlign: 'center' }}>{left.name}</Typography>
-            <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: right.color, letterSpacing: '0.08em', textTransform: 'uppercase', textAlign: 'center' }}>{right.name}</Typography>
+      {/* Templated factual summary — for closer vs closer */}
+      {!isTeamComparison && templatedSummary && (
+        <Box sx={{ mb: 3, p: 2, borderRadius: `${LAYOUT.cardBorderRadius}px`, background: hexToRgba(COLORS.neon.cyan, 0.04), border: `1px solid ${hexToRgba(COLORS.neon.cyan, 0.15)}` }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.75 }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 14, color: COLORS.neon.cyan }}>assessment</span>
+            <Typography sx={{ fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.1em', color: COLORS.neon.cyan, textTransform: 'uppercase' }}>Head-to-Head Summary</Typography>
           </Box>
-          {/* Table rows */}
-          {COMPARISON_METRICS.map((metric, i) => {
-            const winner = getWinner(metric);
-            return (
-              <Box
-                key={metric.key}
-                sx={{
-                  display: 'grid', gridTemplateColumns: '1fr 120px 120px', p: 1.25, px: 1.5,
-                  borderBottom: i < COMPARISON_METRICS.length - 1 ? `1px solid ${hexToRgba(COLORS.border.subtle, 0.5)}` : 'none',
-                  '&:hover': { background: hexToRgba(COLORS.neon.cyan, 0.03) },
-                }}
-              >
-                <Typography sx={{ fontSize: '0.8rem', color: COLORS.text.secondary }}>{metric.label}</Typography>
-                <Typography sx={{
-                  fontSize: '0.85rem', fontWeight: winner === 'left' ? 700 : 400, textAlign: 'center',
-                  color: winner === 'left' ? COLORS.neon.green : COLORS.text.primary,
-                }}>
-                  {fmt(left[metric.key], metric.format)} {winner === 'left' && '●'}
-                </Typography>
-                <Typography sx={{
-                  fontSize: '0.85rem', fontWeight: winner === 'right' ? 700 : 400, textAlign: 'center',
-                  color: winner === 'right' ? COLORS.neon.green : COLORS.text.primary,
-                }}>
-                  {fmt(right[metric.key], metric.format)} {winner === 'right' && '●'}
-                </Typography>
-              </Box>
-            );
-          })}
-          {/* Score summary */}
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px', p: 1.5, borderTop: `2px solid ${COLORS.border.default}`, background: COLORS.bg.tertiary }}>
-            <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: COLORS.text.primary, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Metrics Won</Typography>
-            <Typography sx={{ fontSize: '1rem', fontWeight: 700, textAlign: 'center', color: left.color }}>
-              {COMPARISON_METRICS.filter(m => getWinner(m) === 'left').length}
-            </Typography>
-            <Typography sx={{ fontSize: '1rem', fontWeight: 700, textAlign: 'center', color: right.color }}>
-              {COMPARISON_METRICS.filter(m => getWinner(m) === 'right').length}
-            </Typography>
-          </Box>
-        </Box>
-
-        {/* Radar chart */}
-        <Box sx={{ borderRadius: `${LAYOUT.cardBorderRadius}px`, background: COLORS.bg.secondary, border: `1px solid ${COLORS.border.subtle}`, p: 2, display: 'flex', flexDirection: 'column' }}>
-          <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: COLORS.text.muted, letterSpacing: '0.08em', textTransform: 'uppercase', mb: 1, textAlign: 'center' }}>
-            Skills Radar
-          </Typography>
-          <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <TronRadarChart
-              axes={RADAR_DIMENSIONS.map(d => d.label)}
-              datasets={[
-                { label: left.name, values: RADAR_DIMENSIONS.map(d => left[d.key]), color: left.color },
-                { label: right.name, values: RADAR_DIMENSIONS.map(d => right[d.key]), color: right.color },
-              ]}
-              maxValue={10}
-              height={280}
-            />
-          </Box>
-          {/* Legend */}
-          <Box sx={{ display: 'flex', justifyContent: 'center', gap: 3, mt: 1 }}>
-            {[left, right].map(c => (
-              <Box key={c.id} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                <Box sx={{ width: 10, height: 10, borderRadius: '50%', background: c.color }} />
-                <Typography sx={{ fontSize: '0.75rem', color: COLORS.text.secondary }}>{c.name}</Typography>
-              </Box>
+          <Typography sx={{ fontSize: '0.83rem', color: COLORS.text.primary, lineHeight: 1.7 }}>
+            {templatedSummary.parts.map((p, i) => (
+              <React.Fragment key={i}>
+                {i > 0 && ' '}
+                <strong>{p.bold}</strong>{p.rest}
+              </React.Fragment>
             ))}
+            {' '}{templatedSummary.overallLine}
+          </Typography>
+        </Box>
+      )}
+
+      {left && right && (
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 340px' }, gap: 3 }}>
+          {/* Metric comparison table */}
+          <Box sx={{ borderRadius: `${LAYOUT.cardBorderRadius}px`, background: COLORS.bg.secondary, border: `1px solid ${COLORS.border.subtle}`, overflow: 'hidden' }}>
+            {/* Table header */}
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px', p: 1.5, borderBottom: `1px solid ${COLORS.border.subtle}`, background: COLORS.bg.tertiary }}>
+              <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: COLORS.text.muted, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Metric</Typography>
+              <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: left.color, letterSpacing: '0.08em', textTransform: 'uppercase', textAlign: 'center' }}>{left.name}</Typography>
+              <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: right.color, letterSpacing: '0.08em', textTransform: 'uppercase', textAlign: 'center' }}>{right.name}</Typography>
+            </Box>
+            {/* Table rows */}
+            {COMPARISON_METRICS.map((metric, i) => {
+              const winner = getWinner(metric);
+              return (
+                <Box
+                  key={metric.key}
+                  sx={{
+                    display: 'grid', gridTemplateColumns: '1fr 120px 120px', p: 1.25, px: 1.5,
+                    borderBottom: i < COMPARISON_METRICS.length - 1 ? `1px solid ${hexToRgba(COLORS.border.subtle, 0.5)}` : 'none',
+                    '&:hover': { background: hexToRgba(COLORS.neon.cyan, 0.03) },
+                  }}
+                >
+                  <Typography sx={{ fontSize: '0.8rem', color: COLORS.text.secondary }}>{metric.label}</Typography>
+                  <Typography sx={{
+                    fontSize: '0.85rem', fontWeight: winner === 'left' ? 700 : 400, textAlign: 'center',
+                    color: winner === 'left' ? COLORS.neon.green : COLORS.text.primary,
+                  }}>
+                    {fmt(left[metric.key], metric.format)} {winner === 'left' && '\u25cf'}
+                  </Typography>
+                  <Typography sx={{
+                    fontSize: '0.85rem', fontWeight: winner === 'right' ? 700 : 400, textAlign: 'center',
+                    color: winner === 'right' ? COLORS.neon.green : COLORS.text.primary,
+                  }}>
+                    {fmt(right[metric.key], metric.format)} {winner === 'right' && '\u25cf'}
+                  </Typography>
+                </Box>
+              );
+            })}
+            {/* Score summary */}
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px', p: 1.5, borderTop: `2px solid ${COLORS.border.default}`, background: COLORS.bg.tertiary }}>
+              <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: COLORS.text.primary, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Metrics Won</Typography>
+              <Typography sx={{ fontSize: '1rem', fontWeight: 700, textAlign: 'center', color: left.color }}>
+                {COMPARISON_METRICS.filter(m => getWinner(m) === 'left').length}
+              </Typography>
+              <Typography sx={{ fontSize: '1rem', fontWeight: 700, textAlign: 'center', color: right.color }}>
+                {COMPARISON_METRICS.filter(m => getWinner(m) === 'right').length}
+              </Typography>
+            </Box>
+          </Box>
+
+          {/* Radar chart */}
+          <Box sx={{ borderRadius: `${LAYOUT.cardBorderRadius}px`, background: COLORS.bg.secondary, border: `1px solid ${COLORS.border.subtle}`, p: 2, display: 'flex', flexDirection: 'column' }}>
+            <Typography sx={{ fontSize: '0.65rem', fontWeight: 600, color: COLORS.text.muted, letterSpacing: '0.08em', textTransform: 'uppercase', mb: 1, textAlign: 'center' }}>
+              Skills Radar
+            </Typography>
+            <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <TronRadarChart
+                axes={RADAR_DIMENSIONS.map(d => d.label)}
+                datasets={[
+                  { label: left.name, values: RADAR_DIMENSIONS.map(d => left[d.key] || 0), color: left.color },
+                  { label: right.name, values: RADAR_DIMENSIONS.map(d => right[d.key] || 0), color: right.color },
+                ]}
+                maxValue={10}
+                height={280}
+              />
+            </Box>
           </Box>
         </Box>
-      </Box>
+      )}
     </Box>
   );
 }
@@ -541,28 +645,63 @@ function ComparisonTool() {
 /*  TAB SWITCHER                                                    */
 /* ───────────────────────────────────────────────────────────────── */
 
-function TabSwitcher({ tabs, activeTab, onTabChange }) {
+function TabSwitcher({ tabs, activeTab, onTabChange, lockedTabs }) {
   return (
     <Box sx={{ display: 'flex', gap: 0.5, mb: 3, p: 0.5, borderRadius: 2, background: COLORS.bg.secondary, border: `1px solid ${COLORS.border.subtle}`, width: 'fit-content' }}>
-      {tabs.map(tab => (
-        <ButtonBase
-          key={tab.id}
-          onClick={() => onTabChange(tab.id)}
-          sx={{
-            px: 2, py: 0.75, borderRadius: 1.5,
-            background: activeTab === tab.id ? hexToRgba(COLORS.neon.cyan, 0.12) : 'transparent',
-            border: activeTab === tab.id ? `1px solid ${hexToRgba(COLORS.neon.cyan, 0.3)}` : '1px solid transparent',
-            transition: 'all 0.2s ease',
-            display: 'flex', alignItems: 'center', gap: 0.75,
-            '&:hover': { background: hexToRgba(COLORS.neon.cyan, 0.06) },
-          }}
-        >
-          <span className="material-symbols-outlined" style={{ fontSize: 16, color: activeTab === tab.id ? COLORS.neon.cyan : COLORS.text.muted }}>{tab.icon}</span>
-          <Typography sx={{ fontSize: '0.78rem', fontWeight: activeTab === tab.id ? 600 : 400, color: activeTab === tab.id ? COLORS.neon.cyan : COLORS.text.secondary }}>
-            {tab.label}
-          </Typography>
-        </ButtonBase>
-      ))}
+      {tabs.map(tab => {
+        const isLocked = lockedTabs?.has(tab.id);
+        const isActive = activeTab === tab.id && !isLocked;
+
+        const button = (
+          <ButtonBase
+            key={tab.id}
+            onClick={() => !isLocked && onTabChange(tab.id)}
+            sx={{
+              px: 2, py: 0.75, borderRadius: 1.5,
+              background: isActive ? hexToRgba(COLORS.neon.cyan, 0.12) : 'transparent',
+              border: isActive ? `1px solid ${hexToRgba(COLORS.neon.cyan, 0.3)}` : '1px solid transparent',
+              transition: 'all 0.2s ease',
+              display: 'flex', alignItems: 'center', gap: 0.75,
+              opacity: isLocked ? 0.4 : 1,
+              cursor: isLocked ? 'default' : 'pointer',
+              '&:hover': isLocked ? {} : { background: hexToRgba(COLORS.neon.cyan, 0.06) },
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 16, color: isActive ? COLORS.neon.cyan : COLORS.text.muted }}>{isLocked ? 'lock' : tab.icon}</span>
+            <Typography sx={{ fontSize: '0.78rem', fontWeight: isActive ? 600 : 400, color: isActive ? COLORS.neon.cyan : COLORS.text.secondary }}>
+              {tab.label}
+            </Typography>
+          </ButtonBase>
+        );
+
+        if (isLocked) {
+          return (
+            <Tooltip
+              key={tab.id}
+              title="Upgrade to Insight for team & individual analysis"
+              arrow
+              placement="bottom"
+              slotProps={{
+                tooltip: {
+                  sx: {
+                    bgcolor: COLORS.bg.elevated,
+                    color: COLORS.text.primary,
+                    border: `1px solid ${COLORS.tier?.insight || COLORS.neon.amber}`,
+                    fontSize: '0.8rem',
+                    py: 1, px: 1.5,
+                    boxShadow: `0 0 12px ${hexToRgba(COLORS.neon.amber, 0.2)}`,
+                  },
+                },
+                arrow: { sx: { color: COLORS.bg.elevated } },
+              }}
+            >
+              <span>{button}</span>
+            </Tooltip>
+          );
+        }
+
+        return button;
+      })}
     </Box>
   );
 }
@@ -580,6 +719,129 @@ const TABS = [
 
 export default function DataAnalysisPage() {
   const [activeTab, setActiveTab] = useState('overview');
+  const { tabs: allTabs, isLoading: anyLoading } = useDataAnalysisAllTabs();
+  const { closers: liveClosers, teamAvg } = useLiveCloserData();
+  const { tier } = useAuth();
+
+  // Basic tier can only see the Overview tab — lock closer-specific tabs
+  const isBasic = tier === 'basic';
+  const lockedTabs = useMemo(() => {
+    if (!isBasic) return null;
+    return new Set(['team', 'individual', 'compare']);
+  }, [isBasic]);
+
+  // Get current tab data
+  const aiData = allTabs[activeTab]?.data || null;
+  const generatedAt = allTabs[activeTab]?.generatedAt || null;
+  const isLoading = anyLoading && !aiData;
+
+  // Format "last updated" from generatedAt
+  const lastUpdated = useMemo(() => {
+    if (!generatedAt) return null;
+    try {
+      const d = new Date(generatedAt);
+      return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    } catch { return null; }
+  }, [generatedAt]);
+
+  // Download all AI insights as a text document
+  const handleDownload = useCallback(() => {
+    const lines = [];
+    const now = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    lines.push(`CLOSERMETRIX — AI DATA ANALYSIS REPORT`);
+    lines.push(`Generated: ${now}`);
+    lines.push(`Closers: ${liveClosers.length}`);
+    lines.push('='.repeat(60));
+    lines.push('');
+
+    // Overview
+    const ov = allTabs.overview?.data;
+    if (ov) {
+      lines.push('EXECUTIVE OVERVIEW');
+      lines.push('-'.repeat(40));
+      if (ov.executiveSummary) lines.push(ov.executiveSummary);
+      lines.push('');
+      if (ov.summaryStats) {
+        const ss = ov.summaryStats;
+        if (ss.totalRevenue != null) lines.push(`Total Revenue: ${fmtDollar(ss.totalRevenue)}`);
+        if (ss.teamCloseRate) lines.push(`Team Close Rate: ${ss.teamCloseRate}`);
+        if (ss.callsAnalyzed != null) lines.push(`Calls Analyzed: ${fmtNumber(ss.callsAnalyzed)}`);
+      }
+      if (ov.priorityActions?.length > 0) {
+        lines.push('');
+        lines.push('Priority Actions:');
+        ov.priorityActions.forEach((a, i) => {
+          lines.push(`  ${i + 1}. [${(a.priority || '').toUpperCase()}] ${a.title}`);
+          lines.push(`     ${a.body}`);
+          if (a.action) lines.push(`     -> ${a.action}`);
+        });
+      }
+      lines.push('');
+    }
+
+    // Team
+    const tm = allTabs.team?.data;
+    if (tm?.insights?.length > 0) {
+      lines.push('TEAM INSIGHTS');
+      lines.push('-'.repeat(40));
+      tm.insights.forEach((ins, i) => {
+        lines.push(`${i + 1}. [${(ins.priority || '').toUpperCase()}] ${ins.category}: ${ins.title}`);
+        lines.push(`   ${ins.body}`);
+        if (ins.action) lines.push(`   -> ${ins.action}`);
+        lines.push('');
+      });
+    }
+
+    // Individual
+    const ind = allTabs.individual?.data;
+    if (ind?.closers?.length > 0) {
+      lines.push('INDIVIDUAL CLOSER INSIGHTS');
+      lines.push('-'.repeat(40));
+      ind.closers.forEach(cl => {
+        const live = liveClosers.find(c => c.name === cl.name || c.id === cl.closerId);
+        lines.push(`${cl.name}`);
+        if (live) {
+          lines.push(`  Close Rate: ${fmtPercent(live.closeRate)} | Revenue: ${fmtDollar(live.revenue)} | Show Rate: ${fmtPercent(live.showRate)} | Calls: ${live.callsHeld}`);
+        }
+        (cl.insights || []).forEach(ins => {
+          lines.push(`  [${(ins.type || '').toUpperCase()}] ${ins.text}`);
+        });
+        lines.push('');
+      });
+    }
+
+    // Compare
+    const cmp = allTabs.compare?.data;
+    if (cmp?.comparisons?.length > 0) {
+      lines.push('CLOSER COMPARISONS (vs Team Average)');
+      lines.push('-'.repeat(40));
+      cmp.comparisons.forEach(c => {
+        lines.push(`${c.closerName}`);
+        lines.push(`  ${c.comparisonSummary}`);
+        if (c.keyStrength) lines.push(`  Strength: ${c.keyStrength}`);
+        if (c.keyGap) lines.push(`  Gap: ${c.keyGap}`);
+        lines.push('');
+      });
+    }
+
+    // Create and trigger download
+    const content = lines.join('\n');
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const monthYear = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    const filename = `${monthYear} AI Analysis.txt`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    // Delay cleanup so browser can start the download
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 500);
+  }, [allTabs, liveClosers]);
 
   return (
     <Box>
@@ -590,103 +852,219 @@ export default function DataAnalysisPage() {
           <span className="material-symbols-outlined" style={{ fontSize: 14, color: COLORS.neon.purple }}>auto_awesome</span>
           <Typography sx={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.1em', color: COLORS.neon.purple }}>AI-POWERED</Typography>
         </Box>
-        <Typography sx={{ fontSize: '0.7rem', color: COLORS.text.muted, ml: 'auto' }}>Last updated 2h ago | 281 calls analyzed | 90-day window</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, ml: 'auto' }}>
+          {lastUpdated && (
+            <Typography sx={{ fontSize: '0.7rem', color: COLORS.text.muted }}>
+              Generated {lastUpdated} | {liveClosers.length} closers
+            </Typography>
+          )}
+          <ButtonBase
+            onClick={handleDownload}
+            disabled={!allTabs.overview?.data && !allTabs.team?.data}
+            sx={{
+              px: 1.5, py: 0.5, borderRadius: 1.5,
+              border: `1px solid ${COLORS.border.subtle}`,
+              background: COLORS.bg.secondary,
+              display: 'flex', alignItems: 'center', gap: 0.75,
+              transition: 'all 0.2s ease',
+              opacity: (!allTabs.overview?.data && !allTabs.team?.data) ? 0.4 : 1,
+              '&:hover': { borderColor: hexToRgba(COLORS.neon.cyan, 0.4), background: hexToRgba(COLORS.neon.cyan, 0.06) },
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 16, color: COLORS.neon.cyan }}>download</span>
+            <Typography sx={{ fontSize: '0.72rem', fontWeight: 600, color: COLORS.text.secondary }}>Download</Typography>
+          </ButtonBase>
+        </Box>
       </Box>
 
       {/* Tabs */}
-      <TabSwitcher tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} />
+      <TabSwitcher tabs={TABS} activeTab={activeTab} onTabChange={setActiveTab} lockedTabs={lockedTabs} />
+
+      {/* Loading state */}
+      {isLoading && <GeneratingBanner />}
 
       {/* ── Overview Tab ── */}
       {activeTab === 'overview' && (
         <>
-          <SummaryRow />
-
-          {/* Executive Summary */}
-          <Box sx={{ mb: 3, p: 2.5, borderRadius: `${LAYOUT.cardBorderRadius}px`, background: `linear-gradient(135deg, ${hexToRgba(COLORS.neon.purple, 0.08)} 0%, ${hexToRgba(COLORS.neon.cyan, 0.05)} 100%)`, border: `1px solid ${hexToRgba(COLORS.neon.purple, 0.25)}`, boxShadow: `0 0 30px ${hexToRgba(COLORS.neon.purple, 0.1)}` }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 18, color: COLORS.neon.purple }}>psychology</span>
-              <Typography sx={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.12em', color: COLORS.neon.purple, textTransform: 'uppercase' }}>Executive Summary</Typography>
-            </Box>
-            <Typography sx={{ fontSize: '0.9rem', color: COLORS.text.primary, lineHeight: 1.6 }}>
-              Your team closed $307,556 in revenue this quarter with a 22% overall close rate across 281 held calls. The biggest risk is revenue concentration — Barney generates 45% of all revenue.
-              The biggest opportunity is Lily: she has the highest rapport and adherence scores but the lowest close rate, suggesting a coaching gap in closing technique, not fundamentals.
-              Fixing Lily's close attempts alone could add an estimated $24,000/mo. Your follow-up process is a hidden strength — converting at 2.3x the rate of first calls.
-            </Typography>
-          </Box>
-
-          {/* Top 3 Priority Actions */}
-          <Box sx={{ mb: 1 }}><SectionHeader title="Top Priority Actions" color={COLORS.neon.red} /></Box>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mb: 4 }}>
-            {TEAM_INSIGHTS.filter(i => i.priority === 'high').map(i => <TeamInsightCard key={i.id} insight={i} />)}
-          </Box>
-
-          {/* Quick Closer Overview */}
-          <Box sx={{ mb: 1 }}><SectionHeader title="Closer Quick View" color={COLORS.neon.cyan} /></Box>
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: '1fr 1fr 1fr 1fr' }, gap: 2, mb: 3 }}>
-            {CLOSERS.map(c => (
-              <Box
-                key={c.id}
-                sx={{
-                  p: 2, borderRadius: `${LAYOUT.cardBorderRadius}px`, background: COLORS.bg.secondary,
-                  border: `1px solid ${hexToRgba(c.color, 0.2)}`,
-                  transition: 'all 0.25s ease', cursor: 'pointer',
-                  '&:hover': { borderColor: hexToRgba(c.color, 0.5), boxShadow: `0 0 20px ${hexToRgba(c.color, 0.15)}` },
-                }}
-                onClick={() => { setActiveTab('individual'); }}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-                  <Box sx={{ width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: hexToRgba(c.color, 0.15), border: `2px solid ${hexToRgba(c.color, 0.5)}` }}>
-                    <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color: c.color }}>{c.avatar}</Typography>
+          {isLoading && !aiData ? (
+            <>
+              <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Box key={i} sx={{ flex: '1 1 120px', p: 1.5, borderRadius: `${LAYOUT.cardBorderRadius}px`, background: COLORS.bg.secondary, border: `1px solid ${COLORS.border.subtle}`, textAlign: 'center' }}>
+                    <Skeleton variant="text" width="60%" sx={{ bgcolor: COLORS.bg.tertiary, fontSize: '1.4rem', mx: 'auto' }} />
+                    <Skeleton variant="text" width="80%" sx={{ bgcolor: COLORS.bg.tertiary, fontSize: '0.6rem', mx: 'auto' }} />
                   </Box>
-                  <Typography sx={{ fontSize: '0.9rem', fontWeight: 600, color: COLORS.text.primary }}>{c.name}</Typography>
-                </Box>
-                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
-                  {[
-                    { label: 'Close Rate', value: fmtPercent(c.closeRate), good: c.closeRate >= 0.22 },
-                    { label: 'Revenue', value: fmtDollar(c.revenue, false), good: c.revenue >= 60000 },
-                    { label: 'Show Rate', value: fmtPercent(c.showRate), good: c.showRate >= 0.70 },
-                    { label: 'Adherence', value: c.adherence.toFixed(1), good: c.adherence >= 7.5 },
-                  ].map(s => (
-                    <Box key={s.label}>
-                      <Typography sx={{ fontSize: '0.55rem', color: COLORS.text.muted, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{s.label}</Typography>
-                      <Typography sx={{ fontSize: '0.9rem', fontWeight: 600, color: s.good ? COLORS.neon.green : COLORS.neon.red }}>{s.value}</Typography>
-                    </Box>
-                  ))}
-                </Box>
+                ))}
               </Box>
-            ))}
-          </Box>
+              <Skeleton variant="rounded" width="100%" height={80} sx={{ bgcolor: COLORS.bg.tertiary, mb: 3 }} />
+              <InsightSkeleton count={2} />
+            </>
+          ) : aiData ? (
+            <>
+              <SummaryRow summaryStats={aiData.summaryStats} />
+
+              {/* Executive Summary */}
+              {aiData.executiveSummary && (
+                <Box sx={{ mb: 3, p: 2.5, borderRadius: `${LAYOUT.cardBorderRadius}px`, background: `linear-gradient(135deg, ${hexToRgba(COLORS.neon.purple, 0.08)} 0%, ${hexToRgba(COLORS.neon.cyan, 0.05)} 100%)`, border: `1px solid ${hexToRgba(COLORS.neon.purple, 0.25)}`, boxShadow: `0 0 30px ${hexToRgba(COLORS.neon.purple, 0.1)}` }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 18, color: COLORS.neon.purple }}>psychology</span>
+                    <Typography sx={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.12em', color: COLORS.neon.purple, textTransform: 'uppercase' }}>Executive Summary</Typography>
+                  </Box>
+                  <Typography sx={{ fontSize: '0.9rem', color: COLORS.text.primary, lineHeight: 1.6 }}>
+                    {aiData.executiveSummary}
+                  </Typography>
+                </Box>
+              )}
+
+              {/* Top Priority Actions */}
+              {aiData.priorityActions && aiData.priorityActions.length > 0 && (
+                <>
+                  <Box sx={{ mb: 1 }}><SectionHeader title="Top Priority Actions" color={COLORS.neon.red} /></Box>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mb: 4 }}>
+                    {aiData.priorityActions
+                      .filter(i => i.priority === 'high')
+                      .map((i, idx) => <TeamInsightCard key={idx} insight={i} />)}
+                  </Box>
+                </>
+              )}
+
+              {/* Quick Closer Overview — Insight+ only, tooltip for basic */}
+              {aiData.closerQuickView && aiData.closerQuickView.length > 0 && (
+                isBasic ? (
+                  <Tooltip
+                    title="Upgrade to Insight for individual closer breakdowns"
+                    arrow
+                    placement="top"
+                    slotProps={{
+                      tooltip: {
+                        sx: {
+                          bgcolor: COLORS.bg.elevated,
+                          color: COLORS.text.primary,
+                          border: `1px solid ${COLORS.tier?.insight || COLORS.neon.amber}`,
+                          fontSize: '0.8rem',
+                          py: 1, px: 1.5,
+                          boxShadow: `0 0 12px ${hexToRgba(COLORS.neon.amber, 0.2)}`,
+                        },
+                      },
+                      arrow: { sx: { color: COLORS.bg.elevated } },
+                    }}
+                  >
+                    <Box sx={{ position: 'relative', cursor: 'default' }}>
+                      <Box sx={{ filter: 'blur(6px)', opacity: 0.4, pointerEvents: 'none', userSelect: 'none' }}>
+                        <Box sx={{ mb: 1 }}><SectionHeader title="Closer Quick View" color={COLORS.neon.cyan} /></Box>
+                        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: `repeat(${Math.min(aiData.closerQuickView.length, 4)}, 1fr)` }, gap: 2, mb: 3 }}>
+                          {aiData.closerQuickView.slice(0, 4).map((c, i) => {
+                            const color = getCloserColor(i);
+                            return (
+                              <Box key={c.closerId || c.name} sx={{ p: 2, borderRadius: `${LAYOUT.cardBorderRadius}px`, background: COLORS.bg.secondary, border: `1px solid ${hexToRgba(color, 0.2)}`, height: 100 }} />
+                            );
+                          })}
+                        </Box>
+                      </Box>
+                    </Box>
+                  </Tooltip>
+                ) : (
+                  <>
+                    <Box sx={{ mb: 1 }}><SectionHeader title="Closer Quick View" color={COLORS.neon.cyan} /></Box>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: `repeat(${Math.min(aiData.closerQuickView.length, 4)}, 1fr)` }, gap: 2, mb: 3 }}>
+                      {aiData.closerQuickView.map((c, i) => {
+                        const color = getCloserColor(i);
+                        const statusColors = { strong: COLORS.neon.green, average: COLORS.neon.amber, 'needs-coaching': COLORS.neon.red };
+                        return (
+                          <Box
+                            key={c.closerId || c.name}
+                            sx={{
+                              p: 2, borderRadius: `${LAYOUT.cardBorderRadius}px`, background: COLORS.bg.secondary,
+                              border: `1px solid ${hexToRgba(color, 0.2)}`,
+                              transition: 'all 0.25s ease', cursor: 'pointer',
+                              '&:hover': { borderColor: hexToRgba(color, 0.5), boxShadow: `0 0 20px ${hexToRgba(color, 0.15)}` },
+                            }}
+                            onClick={() => { setActiveTab('individual'); }}
+                          >
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+                              <Box sx={{ width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: hexToRgba(color, 0.15), border: `2px solid ${hexToRgba(color, 0.5)}` }}>
+                                <Typography sx={{ fontSize: '0.85rem', fontWeight: 700, color }}>{c.name?.[0] || '?'}</Typography>
+                              </Box>
+                              <Box sx={{ flex: 1 }}>
+                                <Typography sx={{ fontSize: '0.9rem', fontWeight: 600, color: COLORS.text.primary }}>{c.name}</Typography>
+                              </Box>
+                              {c.status && (
+                                <Box sx={{ px: 0.75, py: 0.25, borderRadius: 1, background: hexToRgba(statusColors[c.status] || COLORS.neon.cyan, 0.1), border: `1px solid ${hexToRgba(statusColors[c.status] || COLORS.neon.cyan, 0.3)}` }}>
+                                  <Typography sx={{ fontSize: '0.5rem', fontWeight: 700, color: statusColors[c.status] || COLORS.neon.cyan, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{c.status}</Typography>
+                                </Box>
+                              )}
+                            </Box>
+                            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+                              {[
+                                { label: 'Close Rate', value: c.closeRate != null ? fmtPercent(c.closeRate) : '—', good: c.closeRate >= 0.22 },
+                                { label: 'Revenue', value: c.revenue != null ? fmtDollar(c.revenue, false) : '—', good: c.revenue >= 60000 },
+                                { label: 'Show Rate', value: c.showRate != null ? fmtPercent(c.showRate) : '—', good: c.showRate >= 0.70 },
+                                { label: 'Adherence', value: c.adherence != null ? Number(c.adherence).toFixed(1) : '—', good: c.adherence >= 7.5 },
+                              ].map(s => (
+                                <Box key={s.label}>
+                                  <Typography sx={{ fontSize: '0.55rem', color: COLORS.text.muted, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{s.label}</Typography>
+                                  <Typography sx={{ fontSize: '0.9rem', fontWeight: 600, color: s.good ? COLORS.neon.green : COLORS.neon.red }}>{s.value}</Typography>
+                                </Box>
+                              ))}
+                            </Box>
+                          </Box>
+                        );
+                      })}
+                    </Box>
+                  </>
+                )
+              )}
+            </>
+          ) : null}
         </>
       )}
 
-      {/* ── Team Insights Tab ── */}
+      {/* ── Team Insights Tab (Insight+ only — tabs are locked for basic) ── */}
       {activeTab === 'team' && (
         <>
           <Box sx={{ mb: 1 }}><SectionHeader title="Team Insights" color={COLORS.neon.amber} /></Box>
           <Typography sx={{ fontSize: '0.78rem', color: COLORS.text.muted, mb: 2, ml: 2.5 }}>Cross-team patterns, risks, and opportunities identified from your data</Typography>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {TEAM_INSIGHTS.map(i => <TeamInsightCard key={i.id} insight={i} />)}
-          </Box>
+          {isLoading && !aiData ? (
+            <InsightSkeleton count={5} />
+          ) : aiData?.insights ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {aiData.insights.map((i, idx) => <TeamInsightCard key={idx} insight={i} />)}
+            </Box>
+          ) : null}
         </>
       )}
 
-      {/* ── Individual Tab ── */}
+      {/* ── Individual Tab (Insight+ only — tabs are locked for basic) ── */}
       {activeTab === 'individual' && (
         <>
           <Box sx={{ mb: 1 }}><SectionHeader title="Individual Closer Insights" color={COLORS.neon.cyan} /></Box>
           <Typography sx={{ fontSize: '0.78rem', color: COLORS.text.muted, mb: 2, ml: 2.5 }}>Per-closer performance analysis with strengths, gaps, and coaching recommendations</Typography>
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 2 }}>
-            {INDIVIDUAL_INSIGHTS.map(d => <CloserInsightCard key={d.closer.id} data={d} />)}
-          </Box>
+          {isLoading && !aiData ? (
+            <InsightSkeleton count={4} />
+          ) : aiData?.closers ? (
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr' }, gap: 2 }}>
+              {aiData.closers.map((d, idx) => {
+                // Match AI closer to live closer data by name or id
+                const live = liveClosers.find(c =>
+                  c.name === d.name || c.id === d.closerId
+                );
+                return <CloserInsightCard key={d.closerId || idx} data={d} liveCloser={live} />;
+              })}
+            </Box>
+          ) : null}
         </>
       )}
 
-      {/* ── Compare Tab ── */}
+      {/* ── Compare Tab (Insight+ only — tabs are locked for basic) ── */}
       {activeTab === 'compare' && (
         <>
           <Box sx={{ mb: 1 }}><SectionHeader title="Closer Comparison" color={COLORS.neon.cyan} /></Box>
           <Typography sx={{ fontSize: '0.78rem', color: COLORS.text.muted, mb: 2, ml: 2.5 }}>Select any two closers — or compare one closer against the team average — to see a head-to-head breakdown</Typography>
-          <ComparisonTool />
+          {isLoading && !aiData ? (
+            <InsightSkeleton count={2} />
+          ) : (
+            <ComparisonTool comparisons={aiData?.comparisons} />
+          )}
         </>
       )}
     </Box>

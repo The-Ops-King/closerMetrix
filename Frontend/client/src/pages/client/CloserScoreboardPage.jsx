@@ -40,13 +40,36 @@ import CloserChampion from '../../components/leaderboard/CloserChampion';
 import TopPerformers from '../../components/leaderboard/TopPerformers';
 import CloserComparisonTable from '../../components/tables/CloserComparisonTable';
 
+// Dummy data shown blurred behind TierGate for basic tier
+const DUMMY_SCOREBOARD = {
+  champion: { name: 'Top Closer', powerScore: 82, stats: [
+    { label: 'Close Rate', value: '28%' }, { label: 'Revenue', value: '$142,500' },
+    { label: 'Show Rate', value: '74%' }, { label: 'Deals', value: '19' },
+    { label: 'Avg Deal', value: '$7,500' }, { label: 'Adherence', value: '8.2' },
+  ]},
+  topPerformers: [
+    { name: 'Top Closer', dealsClosed: 19, revenue: 142500 },
+    { name: 'Second Closer', dealsClosed: 14, revenue: 98000 },
+    { name: 'Third Closer', dealsClosed: 11, revenue: 77000 },
+  ],
+  comparisonTable: { closers: [], metrics: [] },
+  leaderboards: null,
+  isEmpty: false,
+};
+
 export default function CloserScoreboardPage() {
   const { tier } = useAuth();
   const hasAccess = meetsMinTier(tier, 'insight');
-  const { data, isLoading, error } = useMetrics('closer-scoreboard', { enabled: hasAccess });
+  const { data: realData, isLoading, error } = useMetrics('closer-scoreboard', { enabled: hasAccess });
+  const data = hasAccess ? realData : DUMMY_SCOREBOARD;
   const { text: insightText, generatedAt: insightGeneratedAt, isLoading: insightLoading, isOnDemandLoading, generateWithFilters, remainingAnalyses } = useInsight('closer-scoreboard', data);
 
-  const charts = data?.charts || {};
+  const charts = hasAccess ? (data?.charts || {}) : {
+    revenueByCloser: { data: [{ x: 'Closer A', y: 142500 }, { x: 'Closer B', y: 98000 }, { x: 'Closer C', y: 77000 }], series: [{ dataKey: 'y', label: 'Revenue', color: 'green' }] },
+    closeRateByCloser: { data: [{ x: 'Closer A', y: 0.28 }, { x: 'Closer B', y: 0.24 }, { x: 'Closer C', y: 0.19 }], series: [{ dataKey: 'y', label: 'Close Rate', color: 'cyan' }] },
+    showRateByCloser: { data: [{ x: 'Closer A', y: 0.74 }, { x: 'Closer B', y: 0.71 }, { x: 'Closer C', y: 0.65 }], series: [{ dataKey: 'y', label: 'Show Rate', color: 'blue' }] },
+    cashByCloser: { data: [{ x: 'Closer A', y: 95000 }, { x: 'Closer B', y: 68000 }, { x: 'Closer C', y: 52000 }], series: [{ dataKey: 'y', label: 'Cash', color: 'teal' }] },
+  };
   const radarData = charts.radarData;
 
   // ── Dual radar comparison selectors (same pattern as AdherencePage) ──

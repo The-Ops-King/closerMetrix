@@ -53,6 +53,8 @@ router.get('/validate', async (req, res) => {
       company_name: clientRecord.company_name,
       plan_tier: clientRecord.plan_tier,
       closers: clientRecord.closers,
+      kpi_targets: clientRecord.kpi_targets || null,
+      ai_provider: clientRecord.ai_provider || 'claude',
     });
   } catch (err) {
     logger.error('Token validation endpoint error', { error: err.message });

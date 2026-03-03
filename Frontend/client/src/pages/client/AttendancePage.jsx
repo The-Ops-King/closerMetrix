@@ -27,6 +27,7 @@ import { useMetrics } from '../../hooks/useMetrics';
 import { useInsight } from '../../hooks/useInsight';
 import InsightCard from '../../components/InsightCard';
 import { useAuth } from '../../context/AuthContext';
+import { useKpiTargets } from '../../hooks/useKpiTargets';
 import { meetsMinTier } from '../../utils/tierConfig';
 import { DUMMY_ATTENDANCE } from '../../utils/dummyData';
 import ChartWrapper from '../../components/charts/ChartWrapper';
@@ -41,7 +42,7 @@ import Scorecard from '../../components/scorecards/Scorecard';
  * A single column group: header label + 3 stacked scorecards (Scheduled, Held, Show Rate).
  * Each column represents one metric category (Unique Prospects, Total Calls, etc.)
  */
-function MetricColumn({ title, columnData, color }) {
+function MetricColumn({ title, columnData, color, showRateKpiTarget }) {
   if (!columnData) return null;
 
   return (
@@ -92,6 +93,7 @@ function MetricColumn({ title, columnData, color }) {
         deltaLabel={columnData.showRate?.deltaLabel}
         desiredDirection={columnData.showRate?.desiredDirection || 'up'}
         glowColor={color}
+        kpiTarget={showRateKpiTarget}
       />
     </Box>
   );
@@ -102,6 +104,7 @@ export default function AttendancePage() {
   const { data, isLoading, error } = useMetrics('attendance');
   const { text: insightText, generatedAt: insightGeneratedAt, isLoading: insightLoading, isOnDemandLoading, generateWithFilters, remainingAnalyses } = useInsight('attendance', data);
   const { tier } = useAuth();
+  const kpi = useKpiTargets();
   const closerLocked = !meetsMinTier(tier, 'insight');
 
   const sections = data?.sections || {};
@@ -180,21 +183,25 @@ export default function AttendancePage() {
                 title="Unique Prospects"
                 columnData={sections.uniqueProspects}
                 color={COLORS.neon.blue}
+                showRateKpiTarget={kpi.show_rate != null ? { value: kpi.show_rate, format: 'percent' } : null}
               />
               <MetricColumn
                 title="Total Calls"
                 columnData={sections.totalCalls}
                 color={COLORS.neon.teal}
+                showRateKpiTarget={kpi.show_rate != null ? { value: kpi.show_rate, format: 'percent' } : null}
               />
               <MetricColumn
                 title="First Calls"
                 columnData={sections.firstCalls}
                 color={COLORS.neon.green}
+                showRateKpiTarget={kpi.show_rate != null ? { value: kpi.show_rate, format: 'percent' } : null}
               />
               <MetricColumn
                 title="Follow Up"
                 columnData={sections.followUpCalls}
                 color={COLORS.neon.purple}
+                showRateKpiTarget={kpi.show_rate != null ? { value: kpi.show_rate, format: 'percent' } : null}
               />
 
               {/* Standalone: Active Follow Up */}
@@ -293,6 +300,9 @@ export default function AttendancePage() {
                 series={charts.firstFollowUpShowRate?.series || []}
                 height={300}
                 yAxisFormat="percent"
+                referenceLines={[
+                  kpi.show_rate != null && { value: kpi.show_rate, label: 'Target', color: 'amber' },
+                ].filter(Boolean)}
               />
             </ChartWrapper>
 
@@ -348,6 +358,9 @@ export default function AttendancePage() {
                 height={300}
                 layout="horizontal"
                 yAxisFormat="percent"
+                referenceLines={[
+                  kpi.show_rate != null && { value: kpi.show_rate, label: 'Target', color: 'amber' },
+                ].filter(Boolean)}
               />
             </ChartWrapper>
 

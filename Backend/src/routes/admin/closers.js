@@ -97,7 +97,7 @@ router.post('/clients/:clientId/closers', async (req, res) => {
       timezone: req.body.timezone || client.timezone || null,
       transcript_provider: transcriptProvider,
       transcript_api_key: req.body.transcript_api_key || null,
-      status: 'active',
+      status: 'Active',
       created_at: now,
       last_modified: now,
     };
@@ -185,7 +185,7 @@ router.delete('/clients/:clientId/closers/:closerId', async (req, res) => {
       return res.status(404).json({ status: 'error', message: 'Closer not found' });
     }
 
-    if (closer.status === 'inactive') {
+    if (closer.status?.toLowerCase() === 'inactive') {
       return res.status(400).json({
         status: 'error',
         message: 'Closer is already deactivated',
@@ -211,7 +211,7 @@ router.delete('/clients/:clientId/closers/:closerId', async (req, res) => {
     }
 
     // Deactivate (NOT delete — historical data is preserved)
-    await closerQueries.update(closerId, clientId, { status: 'inactive' });
+    await closerQueries.update(closerId, clientId, { status: 'Inactive' });
 
     await auditLogger.log({
       clientId,
@@ -219,8 +219,8 @@ router.delete('/clients/:clientId/closers/:closerId', async (req, res) => {
       entityId: closerId,
       action: 'deactivated',
       fieldChanged: 'status',
-      oldValue: 'active',
-      newValue: 'inactive',
+      oldValue: 'Active',
+      newValue: 'Inactive',
       triggerSource: 'admin',
       triggerDetail: 'closer_removal',
     });
@@ -306,11 +306,11 @@ router.patch('/clients/:clientId/closers/:closerId/reactivate', async (req, res)
       return res.status(404).json({ status: 'error', message: 'Closer not found' });
     }
 
-    if (closer.status === 'active') {
+    if (closer.status?.toLowerCase() === 'active') {
       return res.status(400).json({ status: 'error', message: 'Closer is already active' });
     }
 
-    await closerQueries.update(closerId, clientId, { status: 'active' });
+    await closerQueries.update(closerId, clientId, { status: 'Active' });
 
     await auditLogger.log({
       clientId,
@@ -319,7 +319,7 @@ router.patch('/clients/:clientId/closers/:closerId/reactivate', async (req, res)
       action: 'reactivated',
       fieldChanged: 'status',
       oldValue: closer.status,
-      newValue: 'active',
+      newValue: 'Active',
       triggerSource: 'admin',
       triggerDetail: 'closer_reactivation',
     });

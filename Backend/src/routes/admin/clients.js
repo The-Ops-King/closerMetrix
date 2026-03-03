@@ -120,6 +120,7 @@ router.post('/', async (req, res) => {
       ai_prompt_objections: req.body.ai_prompt_objections || null,
       common_objections: req.body.common_objections || null,
       disqualification_criteria: req.body.disqualification_criteria || null,
+      webhook_secret: webhookSecret,
       created_at: now,
       last_modified: now,
     };

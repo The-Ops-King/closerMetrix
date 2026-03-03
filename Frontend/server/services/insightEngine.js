@@ -13,21 +13,7 @@ const crypto = require('crypto');
 const config = require('../config');
 const insightConfig = require('../config/insightEngine');
 const logger = require('../utils/logger');
-
-let anthropicClient = null;
-
-/**
- * Lazy-initialize the Anthropic client.
- * Returns null if no API key is configured.
- */
-function getClient() {
-  if (anthropicClient) return anthropicClient;
-  if (!config.anthropicApiKey) return null;
-
-  const Anthropic = require('@anthropic-ai/sdk');
-  anthropicClient = new Anthropic({ apiKey: config.anthropicApiKey });
-  return anthropicClient;
-}
+const { callAI } = require('./aiClient');
 
 // ── In-memory cache ──────────────────────────────────────────────────
 // Key: "clientId:section:hash" → { text, expiresAt }
@@ -125,9 +111,8 @@ async function generateInsight(clientId, section, metrics, options = {}) {
     return { text: '' };
   }
 
-  const client = getClient();
-  if (!client) {
-    throw new Error('ANTHROPIC_API_KEY not configured');
+  if (!isAvailable()) {
+    throw new Error('No AI API key configured');
   }
 
   // Validate section has a prompt template
@@ -163,19 +148,19 @@ async function generateInsight(clientId, section, metrics, options = {}) {
     ? 'You are a high-ticket sales analytics advisor. You return structured JSON analysis. Follow the schema exactly. Do NOT wrap output in markdown code fences.'
     : insightConfig.systemPrompt;
 
-  let response = await client.messages.create({
+  // Determine AI provider (passed via options from dashboard route)
+  const aiProvider = options.aiProvider || 'claude';
+
+  let response = await callAI({
+    provider: aiProvider,
+    systemPrompt,
+    userMessage: prompt,
     model,
-    max_tokens: maxTokens,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: prompt }],
+    maxTokens,
+    clientId,
   });
 
-  // Extract text from response
-  let text = response.content
-    .filter(block => block.type === 'text')
-    .map(block => block.text)
-    .join('')
-    .trim();
+  let text = response.text;
 
   if (!text) {
     throw new Error('AI returned empty insight text');
@@ -193,21 +178,15 @@ async function generateInsight(clientId, section, metrics, options = {}) {
         clientId, section, error: parseErr.message,
       });
       // Retry: ask the model to fix its JSON
-      const retryResponse = await client.messages.create({
+      const retryResponse = await callAI({
+        provider: aiProvider,
+        systemPrompt: 'You previously returned invalid JSON. Fix it and return ONLY valid JSON — no markdown fences, no explanation.',
+        userMessage: `Original request:\n${prompt}\n\nYour previous response:\n${text}\n\nThat was not valid JSON. Please return ONLY the corrected JSON object.`,
         model,
-        max_tokens: maxTokens,
-        system: 'You previously returned invalid JSON. Fix it and return ONLY valid JSON — no markdown fences, no explanation.',
-        messages: [
-          { role: 'user', content: prompt },
-          { role: 'assistant', content: text },
-          { role: 'user', content: 'That was not valid JSON. Please return ONLY the corrected JSON object.' },
-        ],
+        maxTokens,
+        clientId,
       });
-      const retryText = retryResponse.content
-        .filter(block => block.type === 'text')
-        .map(block => block.text)
-        .join('')
-        .trim();
+      const retryText = retryResponse.text;
       const retryCleaned = retryText.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '').trim();
       json = JSON.parse(retryCleaned); // Let it throw if still invalid
       text = retryCleaned;
@@ -217,7 +196,7 @@ async function generateInsight(clientId, section, metrics, options = {}) {
   // Cache result
   cache.set(cacheKey, { text, json, expiresAt: Date.now() + cacheTtlMs });
 
-  const tokensUsed = response.usage?.output_tokens || 0;
+  const tokensUsed = response.outputTokens || 0;
   logger.info('Insight AI success', { clientId, section, textLength: text.length, tokensUsed, isDataAnalysis });
 
   return { text, json, model, tokensUsed };
@@ -227,7 +206,7 @@ async function generateInsight(clientId, section, metrics, options = {}) {
  * Check whether the Insight Engine is available (API key configured).
  */
 function isAvailable() {
-  return Boolean(config.anthropicApiKey);
+  return Boolean(config.anthropicApiKey || config.openaiApiKey || config.googleAiApiKey);
 }
 
 module.exports = { generateInsight, isAvailable };

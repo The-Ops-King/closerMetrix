@@ -28,6 +28,7 @@ import Typography from '@mui/material/Typography';
 import { COLORS, LAYOUT } from '../../theme/constants';
 import { useAuth } from '../../context/AuthContext';
 import { useMetrics } from '../../hooks/useMetrics';
+import { useKpiTargets } from '../../hooks/useKpiTargets';
 import { useInsight } from '../../hooks/useInsight';
 import InsightCard from '../../components/InsightCard';
 import Scorecard from '../../components/scorecards/Scorecard';
@@ -145,6 +146,7 @@ function getChartSeries(apiCharts, key) {
 export default function OverviewPage() {
   const { tier } = useAuth();
   const { data, isLoading, error } = useMetrics('overview');
+  const kpi = useKpiTargets();
   const { text: insightText, generatedAt: insightGeneratedAt, isLoading: insightLoading, isOnDemandLoading, generateWithFilters, remainingAnalyses } = useInsight('overview', data);
 
 
@@ -211,10 +213,10 @@ export default function OverviewPage() {
         >
           {/* Left: 2x2 Scorecards */}
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
-            <Scorecard {...getMetric(metrics, 'revenue', OV.blue)} />
-            <Scorecard {...getMetric(metrics, 'cashCollected', OV.teal)} />
+            <Scorecard {...getMetric(metrics, 'revenue', OV.blue)} kpiTarget={kpi.revenue_per_month != null ? { value: kpi.revenue_per_month, format: 'currency' } : null} />
+            <Scorecard {...getMetric(metrics, 'cashCollected', OV.teal)} kpiTarget={kpi.cash_collected_per_month != null ? { value: kpi.cash_collected_per_month, format: 'currency' } : null} />
             <Scorecard {...getMetric(metrics, 'cashPerCall', OV.purple)} />
-            <Scorecard {...getMetric(metrics, 'avgDealSize', OV.purple)} />
+            <Scorecard {...getMetric(metrics, 'avgDealSize', OV.purple)} kpiTarget={kpi.avg_deal_size != null ? { value: kpi.avg_deal_size, format: 'currency' } : null} />
           </Box>
 
           {/* Right: Revenue & Cash Collected Chart */}
@@ -302,7 +304,7 @@ export default function OverviewPage() {
             <Scorecard {...getMetric(metrics, 'prospectsBooked', OV.blue)} />
             <Scorecard {...getMetric(metrics, 'prospectsHeld', OV.blue)} />
             <Box sx={{ gridColumn: '1 / -1' }}>
-              <Scorecard {...getMetric(metrics, 'showRate', OV.yellow)} />
+              <Scorecard {...getMetric(metrics, 'showRate', OV.yellow)} kpiTarget={kpi.show_rate != null ? { value: kpi.show_rate, format: 'percent' } : null} />
             </Box>
           </Box>
 
@@ -320,6 +322,9 @@ export default function OverviewPage() {
               height={280}
               yAxisFormat="percent"
               showArea={true}
+              referenceLines={[
+                kpi.show_rate != null && { value: kpi.show_rate, label: 'Target', color: 'amber' },
+              ].filter(Boolean)}
             />
           </ChartWrapper>
         </Box>
@@ -339,7 +344,7 @@ export default function OverviewPage() {
         >
           {/* Left: 2x2 Scorecards */}
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
-            <Scorecard {...getMetric(metrics, 'closeRate', OV.purple)} />
+            <Scorecard {...getMetric(metrics, 'closeRate', OV.purple)} kpiTarget={kpi.close_rate != null ? { value: kpi.close_rate, format: 'percent' } : null} />
             <Scorecard {...getMetric(metrics, 'scheduledCloseRate', OV.purple)} />
             <Scorecard {...getMetric(metrics, 'callsLost', OV.red)} />
             <Scorecard {...getMetric(metrics, 'lostPct', OV.red)} />
@@ -359,6 +364,9 @@ export default function OverviewPage() {
               height={280}
               yAxisFormat="percent"
               showArea={true}
+              referenceLines={[
+                kpi.close_rate != null && { value: kpi.close_rate, label: 'Target', color: 'amber' },
+              ].filter(Boolean)}
             />
           </ChartWrapper>
         </Box>

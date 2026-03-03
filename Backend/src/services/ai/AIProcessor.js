@@ -18,7 +18,7 @@
  * it can be reprocessed later.
  */
 
-const Anthropic = require('@anthropic-ai/sdk');
+const { callAI } = require('./aiClient');
 const promptBuilder = require('./PromptBuilder');
 const responseParser = require('./ResponseParser');
 const costTracker = require('../../utils/CostTracker');
@@ -34,20 +34,6 @@ const { generateId } = require('../../utils/idGenerator');
 class AIProcessor {
   constructor() {
     this._client = null;
-  }
-
-  /**
-   * Lazily initializes the Anthropic client.
-   * Only created when actually needed (avoids errors in test/dev without API key).
-   */
-  _getAnthropicClient() {
-    if (!this._client) {
-      if (!config.ai.apiKey) {
-        throw new Error('ANTHROPIC_API_KEY is not configured');
-      }
-      this._client = new Anthropic({ apiKey: config.ai.apiKey });
-    }
-    return this._client;
   }
 
   /**
@@ -91,8 +77,23 @@ class AIProcessor {
         client, callMetadata, transcript
       );
 
-      // Step 5: Call the Anthropic API
-      const apiResponse = await this._callAnthropic(systemPrompt, userMessage);
+      // Step 5: Call the AI provider (respects client's ai_provider preference)
+      let aiProvider = 'claude';
+      if (client.settings_json) {
+        try {
+          const parsed = typeof client.settings_json === 'string'
+            ? JSON.parse(client.settings_json) : client.settings_json;
+          if (parsed?.ai_provider) aiProvider = parsed.ai_provider;
+        } catch { /* use default */ }
+      }
+
+      const apiResponse = await callAI({
+        provider: aiProvider,
+        systemPrompt,
+        userMessage,
+        maxTokens: config.ai.maxTokens,
+        clientId,
+      });
 
       // Step 6: Parse and validate the response
       const parseResult = responseParser.parse(apiResponse.text);
@@ -199,36 +200,7 @@ class AIProcessor {
     }
   }
 
-  /**
-   * Calls the Anthropic API with the assembled prompt.
-   *
-   * @param {string} systemPrompt — System message
-   * @param {string} userMessage — User message (metadata + transcript)
-   * @returns {Object} { text, inputTokens, outputTokens }
-   */
-  async _callAnthropic(systemPrompt, userMessage) {
-    const client = this._getAnthropicClient();
-
-    const response = await client.messages.create({
-      model: config.ai.model,
-      max_tokens: config.ai.maxTokens,
-      system: systemPrompt,
-      messages: [
-        { role: 'user', content: userMessage },
-      ],
-    });
-
-    const text = response.content
-      .filter(block => block.type === 'text')
-      .map(block => block.text)
-      .join('');
-
-    return {
-      text,
-      inputTokens: response.usage?.input_tokens || 0,
-      outputTokens: response.usage?.output_tokens || 0,
-    };
-  }
+  // _callAnthropic removed — now uses unified callAI from ./aiClient.js
 
   /**
    * Updates the call record with AI analysis results and transitions state.
@@ -340,12 +312,7 @@ class AIProcessor {
     return records.length;
   }
 
-  /**
-   * Allows overriding the Anthropic client (for testing).
-   */
-  _setAnthropicClient(client) {
-    this._client = client;
-  }
+  // _setAnthropicClient removed — tests should mock callAI instead
 }
 
 module.exports = new AIProcessor();

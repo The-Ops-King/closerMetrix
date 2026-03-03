@@ -7,7 +7,8 @@
  * Usage: node src/db/migrations/run.js
  */
 
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../../../../.env') });
 
 const migration001 = require('./001_create_prospects');
 const migration002 = require('./002_create_audit_log');

@@ -52,6 +52,27 @@ const router = express.Router();
 router.use(clientIsolation);
 
 /**
+ * Extract client's AI provider preference from settings_json.
+ * Runs after clientIsolation so req.clientId is available.
+ * Sets req.aiProvider ('claude' | 'chatgpt' | 'gemini').
+ */
+router.use(async (req, res, next) => {
+  req.aiProvider = 'claude'; // default
+  try {
+    const settings = await getSettingsData(req.clientId);
+    if (settings?.settings_json) {
+      const parsed = typeof settings.settings_json === 'string'
+        ? JSON.parse(settings.settings_json)
+        : settings.settings_json;
+      if (parsed?.ai_provider) req.aiProvider = parsed.ai_provider;
+    }
+  } catch {
+    // Non-fatal — use default
+  }
+  next();
+});
+
+/**
  * Build the standard response envelope.
  * Every dashboard endpoint returns this shape.
  */
@@ -326,7 +347,7 @@ router.post('/market-pulse', async (req, res) => {
 
     // Cap at 500
     const capped = texts.slice(0, 500);
-    const themes = await marketPulse.condenseTexts(req.clientId, type, capped, { force: !!force });
+    const themes = await marketPulse.condenseTexts(req.clientId, type, capped, { force: !!force, aiProvider: req.aiProvider });
 
     res.json({
       success: true,
@@ -370,7 +391,7 @@ router.post('/market-pulse/script-comparison', async (req, res) => {
       return res.json({ success: true, data: null, message: 'No script template configured' });
     }
 
-    const result = await marketPulse.compareWithScript(req.clientId, type, themes, scriptTemplate);
+    const result = await marketPulse.compareWithScript(req.clientId, type, themes, scriptTemplate, req.aiProvider);
 
     res.json({ success: true, data: result });
   } catch (err) {
@@ -471,7 +492,7 @@ router.post('/insights', async (req, res) => {
       req.clientId,
       section,
       metrics,
-      { force: !!force, kpiTargets }
+      { force: !!force, kpiTargets, aiProvider: req.aiProvider }
     );
 
     res.json({
@@ -614,7 +635,7 @@ router.post('/data-analysis-insights', async (req, res) => {
           req.clientId,
           'data-analysis-compare',
           closerMetrics,
-          { force: true }
+          { force: true, aiProvider: req.aiProvider }
         );
 
         const parsed = result.json || JSON.parse(result.text);
@@ -661,7 +682,7 @@ router.post('/data-analysis-insights', async (req, res) => {
       req.clientId,
       section,
       enrichedMetrics,
-      { force: true }
+      { force: true, aiProvider: req.aiProvider }
     );
 
     const parsed = result.json || JSON.parse(result.text);

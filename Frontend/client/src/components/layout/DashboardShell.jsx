@@ -11,11 +11,12 @@
  *   children: React.ReactNode — the page content
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Box from '@mui/material/Box';
 import Drawer from '@mui/material/Drawer';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
+import { useLocation } from 'react-router-dom';
 import { COLORS, LAYOUT } from '../../theme/constants';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
@@ -24,6 +25,15 @@ export default function DashboardShell({ tier, companyName, basePath, mode, chil
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
+  const contentRef = useRef(null);
+  const location = useLocation();
+
+  // Scroll content area to top whenever the route changes (tab switch)
+  useEffect(() => {
+    if (contentRef.current) {
+      contentRef.current.scrollTo(0, 0);
+    }
+  }, [location.pathname]);
 
   const handleDrawerToggle = () => setMobileOpen((prev) => !prev);
   const handleNavigate = () => setMobileOpen(false);
@@ -62,6 +72,7 @@ export default function DashboardShell({ tier, companyName, basePath, mode, chil
 
         {/* Scrollable content */}
         <Box
+          ref={contentRef}
           sx={{
             flex: 1,
             overflow: 'auto',

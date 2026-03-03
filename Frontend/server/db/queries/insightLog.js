@@ -121,4 +121,65 @@ async function insertInsight(row) {
   });
 }
 
-module.exports = { getLatestInsight, getPriorInsights, insertInsight };
+/**
+ * Get today's insight for a client + section (for data-analysis daily cache).
+ * Returns the stored JSON text if generated today, null otherwise.
+ *
+ * @param {string} clientId
+ * @param {string} section - e.g. 'data-analysis-overview'
+ * @param {string} date - ISO date string 'YYYY-MM-DD'
+ * @returns {Promise<{ text: string, generatedAt: string } | null>}
+ */
+async function getLatestInsightForDate(clientId, section, date) {
+  const sql = `
+    SELECT insight_text, generated_at
+    FROM ${bq.table('InsightLog')}
+    WHERE client_id = @clientId
+      AND section = @section
+      AND generated_date = @date
+    ORDER BY generated_at DESC
+    LIMIT 1
+  `;
+
+  const rows = await bq.runQuery(sql, { clientId, section, date });
+  if (!rows || rows.length === 0) return null;
+
+  return {
+    text: rows[0].insight_text,
+    generatedAt: rows[0].generated_at?.value || rows[0].generated_at,
+  };
+}
+
+/**
+ * Get all data-analysis-compare insights for a client for a given date.
+ * Each row is one closer's comparison vs team avg.
+ *
+ * @param {string} clientId
+ * @param {string} date - ISO date string 'YYYY-MM-DD'
+ * @returns {Promise<Array<{ section: string, text: string, generatedAt: string }>>}
+ */
+async function getCompareInsightsForDate(clientId, date) {
+  const sql = `
+    SELECT section, insight_text, generated_at
+    FROM ${bq.table('InsightLog')}
+    WHERE client_id = @clientId
+      AND section LIKE 'data-analysis-compare-%'
+      AND generated_date = @date
+    ORDER BY section
+  `;
+
+  const rows = await bq.runQuery(sql, { clientId, date });
+  return (rows || []).map(row => ({
+    section: row.section,
+    text: row.insight_text,
+    generatedAt: row.generated_at?.value || row.generated_at,
+  }));
+}
+
+module.exports = {
+  getLatestInsight,
+  getPriorInsights,
+  insertInsight,
+  getLatestInsightForDate,
+  getCompareInsightsForDate,
+};

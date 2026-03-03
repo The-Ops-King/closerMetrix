@@ -30,6 +30,7 @@ import { useMetrics } from '../../hooks/useMetrics';
 import { useInsight } from '../../hooks/useInsight';
 import InsightCard from '../../components/InsightCard';
 import { useAuth } from '../../context/AuthContext';
+import { useKpiTargets } from '../../hooks/useKpiTargets';
 import { meetsMinTier } from '../../utils/tierConfig';
 import { DUMMY_FINANCIAL } from '../../utils/dummyData';
 import Scorecard from '../../components/scorecards/Scorecard';
@@ -108,6 +109,7 @@ export default function FinancialPage() {
   const { data, isLoading, error } = useMetrics('financial');
   const { text: insightText, generatedAt: insightGeneratedAt, isLoading: insightLoading, isOnDemandLoading, generateWithFilters, remainingAnalyses } = useInsight('financial', data);
   const { tier } = useAuth();
+  const kpi = useKpiTargets();
   const closerLocked = !meetsMinTier(tier, 'insight');
 
   // Extract API data
@@ -172,8 +174,8 @@ export default function FinancialPage() {
         >
           {/* Left: 2 scorecards stacked */}
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-            <Scorecard {...getMetric(metrics, 'revenue', COLORS.neon.green)} />
-            <Scorecard {...getMetric(metrics, 'cashCollected', COLORS.neon.teal)} />
+            <Scorecard {...getMetric(metrics, 'revenue', COLORS.neon.green)} kpiTarget={kpi.revenue_per_month != null ? { value: kpi.revenue_per_month, format: 'currency' } : null} />
+            <Scorecard {...getMetric(metrics, 'cashCollected', COLORS.neon.teal)} kpiTarget={kpi.cash_collected_per_month != null ? { value: kpi.cash_collected_per_month, format: 'currency' } : null} />
           </Box>
 
           {/* Middle: Total Cash & Revenue Over Time */}
@@ -296,7 +298,7 @@ export default function FinancialPage() {
             gap: 1.5,
           }}
         >
-          <Scorecard {...getMetric(metrics, 'avgDealRevenue', COLORS.neon.green)} />
+          <Scorecard {...getMetric(metrics, 'avgDealRevenue', COLORS.neon.green)} kpiTarget={kpi.avg_deal_size != null ? { value: kpi.avg_deal_size, format: 'currency' } : null} />
           <Scorecard {...getMetric(metrics, 'collectedPct', COLORS.neon.purple)} />
           <Scorecard {...getMetric(metrics, 'refundCount', COLORS.neon.red)} />
           <Scorecard {...getMetric(metrics, 'avgCashPerDeal', COLORS.neon.teal)} />

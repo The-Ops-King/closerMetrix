@@ -19,6 +19,9 @@ import ButtonBase from '@mui/material/ButtonBase';
 import CircularProgress from '@mui/material/CircularProgress';
 import { COLORS, LAYOUT } from '../theme/constants';
 import { hexToRgba } from '../utils/colors';
+import { useAuth } from '../context/AuthContext';
+
+const AI_PROVIDER_SHORT = { claude: 'Claude', chatgpt: 'ChatGPT', gemini: 'Gemini' };
 
 /**
  * Format a timestamp into a human-readable relative string.
@@ -79,6 +82,8 @@ export default function InsightCard({ text, isLoading, generatedAt, isOnDemandLo
   // Hide entirely when there's no text and not loading
   if (!text && !isLoading && !isOnDemandLoading) return null;
 
+  const { aiProvider } = useAuth();
+  const providerName = AI_PROVIDER_SHORT[aiProvider] || 'AI';
   const timestampLabel = formatGeneratedAt(generatedAt);
   const isRateLimited = typeof remainingAnalyses === 'number' && remainingAnalyses <= 0;
   const showSkeleton = (isLoading && !text) || isOnDemandLoading;
@@ -111,7 +116,7 @@ export default function InsightCard({ text, isLoading, generatedAt, isOnDemandLo
             lineHeight: 1,
           }}
         >
-          AI Data Analytics
+          AI Data Analytics — {providerName}
         </Typography>
 
         {timestampLabel && !isOnDemandLoading && (

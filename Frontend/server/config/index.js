@@ -4,11 +4,12 @@
  * All config values used anywhere in the server come from this file.
  */
 
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../../../.env') });
 
 const config = {
   // Server
-  port: parseInt(process.env.PORT, 10) || 8080,
+  port: parseInt(process.env.FRONTEND_PORT || process.env.PORT, 10) || 3001,
   nodeEnv: process.env.NODE_ENV || 'development',
   isDev: (process.env.NODE_ENV || 'development') === 'development',
 
@@ -30,8 +31,10 @@ const config = {
   // CORS — in dev, allow Vite dev server
   corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:5173',
 
-  // Anthropic API (Market Pulse AI)
+  // AI Provider API Keys
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
+  openaiApiKey: process.env.OPENAI_API_KEY || '',
+  googleAiApiKey: process.env.GOOGLE_AI_API_KEY || '',
 
   // Logging
   logLevel: process.env.LOG_LEVEL || 'info',

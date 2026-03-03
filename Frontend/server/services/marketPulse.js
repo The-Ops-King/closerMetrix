@@ -12,21 +12,7 @@ const crypto = require('crypto');
 const config = require('../config');
 const pulseConfig = require('../config/marketPulse');
 const logger = require('../utils/logger');
-
-let anthropicClient = null;
-
-/**
- * Lazy-initialize the Anthropic client.
- * Returns null if no API key is configured.
- */
-function getClient() {
-  if (anthropicClient) return anthropicClient;
-  if (!config.anthropicApiKey) return null;
-
-  const Anthropic = require('@anthropic-ai/sdk');
-  anthropicClient = new Anthropic({ apiKey: config.anthropicApiKey });
-  return anthropicClient;
-}
+const { callAI } = require('./aiClient');
 
 // ── In-memory cache ──────────────────────────────────────────────────
 // Key: "clientId:type:hash" → { themes: [...], expiresAt: timestamp }
@@ -83,9 +69,8 @@ function buildPrompt(type, texts) {
 async function condenseTexts(clientId, type, texts, options = {}) {
   if (!texts || texts.length === 0) return [];
 
-  const client = getClient();
-  if (!client) {
-    throw new Error('ANTHROPIC_API_KEY not configured');
+  if (!isAvailable()) {
+    throw new Error('No AI API key configured');
   }
 
   // Cap texts using config limit
@@ -104,21 +89,20 @@ async function condenseTexts(clientId, type, texts, options = {}) {
   }
 
   const prompt = buildPrompt(type, capped);
+  const aiProvider = options.aiProvider || 'claude';
 
-  logger.info('Market Pulse AI request', { clientId, type, textCount: capped.length });
+  logger.info('Market Pulse AI request', { clientId, type, textCount: capped.length, aiProvider });
 
-  const response = await client.messages.create({
+  const response = await callAI({
+    provider: aiProvider,
+    systemPrompt: pulseConfig.systemPrompt,
+    userMessage: prompt,
     model: pulseConfig.model,
-    max_tokens: pulseConfig.maxTokens,
-    system: pulseConfig.systemPrompt,
-    messages: [{ role: 'user', content: prompt }],
+    maxTokens: pulseConfig.maxTokens,
+    clientId,
   });
 
-  // Parse the response — extract JSON from the text content
-  const responseText = response.content
-    .filter(block => block.type === 'text')
-    .map(block => block.text)
-    .join('');
+  const responseText = response.text;
 
   let themes;
   try {
@@ -163,8 +147,7 @@ async function condenseTexts(clientId, type, texts, options = {}) {
 async function compareWithScript(clientId, type, themes, scriptTemplate) {
   if (!themes || themes.length === 0 || !scriptTemplate) return { addressed: [], gaps: [], unused: [] };
 
-  const client = getClient();
-  if (!client) throw new Error('ANTHROPIC_API_KEY not configured');
+  if (!isAvailable()) throw new Error('No AI API key configured');
 
   const themesText = themes.map((t, i) => `${i + 1}. "${t.theme}" (mentioned ${t.count} times)`).join('\n');
   const typeLabel = pulseConfig.typeLabels[type] || type;
@@ -174,19 +157,20 @@ async function compareWithScript(clientId, type, themes, scriptTemplate) {
     .replace('{{themes}}', themesText)
     .replace('{{scriptTemplate}}', scriptTemplate);
 
-  logger.info('Market Pulse script comparison request', { clientId, type, themeCount: themes.length });
+  const aiProvider = arguments[4] || 'claude'; // 5th arg = aiProvider
 
-  const response = await client.messages.create({
+  logger.info('Market Pulse script comparison request', { clientId, type, themeCount: themes.length, aiProvider });
+
+  const response = await callAI({
+    provider: aiProvider,
+    systemPrompt: pulseConfig.scriptComparisonSystemPrompt,
+    userMessage: prompt,
     model: pulseConfig.scriptComparisonModel,
-    max_tokens: pulseConfig.scriptComparisonMaxTokens,
-    system: pulseConfig.scriptComparisonSystemPrompt,
-    messages: [{ role: 'user', content: prompt }],
+    maxTokens: pulseConfig.scriptComparisonMaxTokens,
+    clientId,
   });
 
-  const responseText = response.content
-    .filter(block => block.type === 'text')
-    .map(block => block.text)
-    .join('');
+  const responseText = response.text;
 
   let result;
   try {
@@ -210,7 +194,7 @@ async function compareWithScript(clientId, type, themes, scriptTemplate) {
  * Check whether the Market Pulse service is available.
  */
 function isAvailable() {
-  return Boolean(config.anthropicApiKey);
+  return Boolean(config.anthropicApiKey || config.openaiApiKey || config.googleAiApiKey);
 }
 
 module.exports = { condenseTexts, compareWithScript, isAvailable };

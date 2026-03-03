@@ -25,6 +25,7 @@ import { useMetrics } from '../../hooks/useMetrics';
 import { useInsight } from '../../hooks/useInsight';
 import InsightCard from '../../components/InsightCard';
 import { useAuth } from '../../context/AuthContext';
+import { useKpiTargets } from '../../hooks/useKpiTargets';
 import { meetsMinTier } from '../../utils/tierConfig';
 import { DUMMY_CALL_OUTCOMES } from '../../utils/dummyData';
 import SectionHeader from '../../components/SectionHeader';
@@ -75,6 +76,7 @@ export default function CallOutcomesPage() {
   const { data, isLoading, error } = useMetrics('call-outcomes');
   const { text: insightText, generatedAt: insightGeneratedAt, isLoading: insightLoading, isOnDemandLoading, generateWithFilters, remainingAnalyses } = useInsight('call-outcomes', data);
   const { tier } = useAuth();
+  const kpi = useKpiTargets();
   const closerLocked = !meetsMinTier(tier, 'insight');
 
   const sections = data?.sections || {};
@@ -191,7 +193,8 @@ export default function CallOutcomesPage() {
               <Scorecard label="First Call Closes" value={sections.closedWon?.firstCallCloses?.value} format="number"
                 delta={sections.closedWon?.firstCallCloses?.delta} deltaLabel="vs prev period" glowColor={COLORS.neon.green} />
               <Scorecard label="First Call Close Rate" value={sections.closedWon?.firstCallCloseRate?.value} format="percent"
-                delta={sections.closedWon?.firstCallCloseRate?.delta} deltaLabel="vs prev period" glowColor={COLORS.neon.green} />
+                delta={sections.closedWon?.firstCallCloseRate?.delta} deltaLabel="vs prev period" glowColor={COLORS.neon.green}
+                kpiTarget={kpi.close_rate != null ? { value: kpi.close_rate, format: 'percent' } : null} />
               <Scorecard label="Follow-Up Closes" value={sections.closedWon?.followUpCloses?.value} format="number"
                 delta={sections.closedWon?.followUpCloses?.delta} deltaLabel="vs prev period" glowColor={COLORS.neon.purple} />
               <Scorecard label="Follow-Up Close Rate" value={sections.closedWon?.followUpCloseRate?.value} format="percent"
@@ -206,7 +209,10 @@ export default function CallOutcomesPage() {
               <ChartWrapper title="Close Rate Over Time" accentColor={COLORS.neon.green}
                 loading={isLoading} error={error?.message} isEmpty={!charts.closeRateOverTime?.data?.length} height={300}>
                 <TronLineChart data={charts.closeRateOverTime?.data || []} series={charts.closeRateOverTime?.series || []}
-                  height={300} yAxisFormat="percent" />
+                  height={300} yAxisFormat="percent"
+                  referenceLines={[
+                    kpi.close_rate != null && { value: kpi.close_rate, label: 'Target', color: 'amber' },
+                  ].filter(Boolean)} />
               </ChartWrapper>
             </Box>
             {/* Closes by Closer — full width row, locked for Basic */}

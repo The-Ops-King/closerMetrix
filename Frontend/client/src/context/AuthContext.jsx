@@ -49,6 +49,8 @@ export function AuthProvider({ children }) {
     companyName: null,
     tier: null,
     closers: [],
+    kpiTargets: null,
+    aiProvider: 'claude',
     isAuthenticated: false,
     isLoading: true,
     error: null,
@@ -79,6 +81,8 @@ export function AuthProvider({ children }) {
         companyName: data.company_name,
         tier: data.plan_tier,
         closers: data.closers || [],
+        kpiTargets: data.kpi_targets || null,
+        aiProvider: data.ai_provider || 'claude',
         isAuthenticated: true,
         isLoading: false,
         error: null,
@@ -113,6 +117,7 @@ export function AuthProvider({ children }) {
       companyName: null,
       tier: 'executive', // Admin sees everything
       closers: [],
+      kpiTargets: null,
       isAuthenticated: true,
       isLoading: false,
       error: null,
@@ -167,6 +172,18 @@ export function AuthProvider({ children }) {
   }, []);
 
   /**
+   * Update KPI targets in auth state (called after Settings save).
+   * Allows charts to reflect new targets immediately without page reload.
+   */
+  const setKpiTargets = useCallback((kpiTargets) => {
+    setAuth((prev) => ({ ...prev, kpiTargets }));
+  }, []);
+
+  const setAiProvider = useCallback((aiProvider) => {
+    setAuth((prev) => ({ ...prev, aiProvider }));
+  }, []);
+
+  /**
    * Log out — clears all auth state.
    */
   const logout = useCallback(() => {
@@ -178,6 +195,7 @@ export function AuthProvider({ children }) {
       companyName: null,
       tier: null,
       closers: [],
+      kpiTargets: null,
       isAuthenticated: false,
       isLoading: false,
       error: null,
@@ -209,6 +227,8 @@ export function AuthProvider({ children }) {
     checkAdminSession,
     viewAsClient,
     exitClientView,
+    setKpiTargets,
+    setAiProvider,
     logout,
   };
 

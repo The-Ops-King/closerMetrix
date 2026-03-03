@@ -54,7 +54,14 @@ function uuid() {
 }
 
 /** Default settings_json shape */
+const AI_PROVIDERS = [
+  { key: 'claude', label: 'Claude', subtitle: 'Anthropic', color: COLORS.neon.amber },
+  { key: 'chatgpt', label: 'ChatGPT', subtitle: 'OpenAI', color: COLORS.neon.green },
+  { key: 'gemini', label: 'Gemini', subtitle: 'Google', color: COLORS.neon.cyan },
+];
+
 const DEFAULT_SETTINGS = {
+  ai_provider: 'claude',
   kpi_targets: {
     show_rate: null,
     close_rate: null,
@@ -237,10 +244,99 @@ function TronTextField(props) {
   );
 }
 
+// ── AI Provider Section ──────────────────────────────────────
+function AiProviderSection({ settings, setSettings, saveSettingsJson, setAiProvider }) {
+  const [pendingProvider, setPendingProvider] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const currentProvider = settings.ai_provider || 'claude';
+  const selectedProvider = pendingProvider || currentProvider;
+  const hasUnsavedChange = pendingProvider !== null && pendingProvider !== currentProvider;
+
+  const handleSave = async () => {
+    if (!hasUnsavedChange) return;
+    setSaving(true);
+    try {
+      await saveSettingsJson({ ai_provider: pendingProvider });
+      setAiProvider(pendingProvider);
+      setPendingProvider(null);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+        {AI_PROVIDERS.map((p) => {
+          const selected = selectedProvider === p.key;
+          return (
+            <Box
+              key={p.key}
+              onClick={() => {
+                if (p.key === currentProvider) {
+                  setPendingProvider(null);
+                } else {
+                  setPendingProvider(p.key);
+                }
+                setSaved(false);
+              }}
+              sx={{
+                flex: '1 1 140px',
+                maxWidth: 200,
+                p: 2,
+                borderRadius: 2,
+                cursor: 'pointer',
+                border: `2px solid ${selected ? p.color : COLORS.border.subtle}`,
+                bgcolor: selected ? `${p.color}15` : COLORS.bg.secondary,
+                transition: 'all 0.2s',
+                '&:hover': { borderColor: p.color, boxShadow: `0 0 12px ${p.color}40` },
+              }}
+            >
+              <Typography sx={{ fontWeight: 700, color: selected ? p.color : COLORS.text.primary, fontSize: '1rem' }}>
+                {p.label}
+              </Typography>
+              <Typography sx={{ fontSize: '0.75rem', color: COLORS.text.secondary, mt: 0.5 }}>
+                {p.subtitle}
+              </Typography>
+              {selected && (
+                <CheckCircleIcon sx={{ color: p.color, fontSize: 18, mt: 1 }} />
+              )}
+            </Box>
+          );
+        })}
+      </Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 2 }}>
+        <Button
+          variant="contained"
+          startIcon={<SaveIcon />}
+          disabled={!hasUnsavedChange || saving}
+          onClick={handleSave}
+          sx={{
+            bgcolor: hasUnsavedChange ? COLORS.neon.purple : COLORS.bg.elevated,
+            '&:hover': { bgcolor: hasUnsavedChange ? `${COLORS.neon.purple}cc` : COLORS.bg.elevated },
+            '&.Mui-disabled': { bgcolor: COLORS.bg.elevated, color: COLORS.text.muted },
+          }}
+        >
+          {saving ? 'Saving...' : 'Save AI Provider'}
+        </Button>
+        {saved && (
+          <Typography sx={{ color: COLORS.neon.green, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <CheckCircleIcon sx={{ fontSize: 16 }} /> Saved
+          </Typography>
+        )}
+      </Box>
+    </>
+  );
+}
+
 // ── Main Component ───────────────────────────────────────────
 
 export default function SettingsPage() {
-  const { tier, clientId, token, mode, adminViewClientId } = useAuth();
+  const { tier, clientId, token, mode, adminViewClientId, setKpiTargets, setAiProvider } = useAuth();
 
   // Resolve effective client ID and auth options for API calls
   const effectiveClientId = mode === 'admin' ? adminViewClientId : clientId;
@@ -268,6 +364,7 @@ export default function SettingsPage() {
           setSettings((prev) => ({
             ...DEFAULT_SETTINGS,
             ...parsed,
+            ai_provider: parsed.ai_provider || 'claude',
             kpi_targets: { ...DEFAULT_SETTINGS.kpi_targets, ...parsed.kpi_targets },
             notifications: { ...DEFAULT_SETTINGS.notifications, ...parsed.notifications },
           }));
@@ -289,6 +386,23 @@ export default function SettingsPage() {
     const merged = { ...settings, ...updatedSettings };
     setSettings(merged);
     await apiPut('/dashboard/settings', { settings_json: JSON.stringify(merged) }, authOptions);
+    // Update AuthContext kpiTargets so charts reflect new targets immediately
+    if (updatedSettings.kpi_targets) {
+      setKpiTargets(merged.kpi_targets);
+      // Sync revenue KPI target with projections goals
+      const rev = merged.kpi_targets.revenue_per_month;
+      if (rev != null && rev > 0) {
+        try {
+          await apiPut('/dashboard/goals', {
+            monthly_goal: rev,
+            quarterly_goal: rev * 3,
+            yearly_goal: rev * 12,
+          }, authOptions);
+        } catch {
+          // Goals sync is best-effort — don't fail the KPI save
+        }
+      }
+    }
   };
 
   /** Save client fields (AI prompts, script, etc.) via client-facing endpoint */
@@ -354,7 +468,17 @@ export default function SettingsPage() {
           />
         </SettingsSection>
 
-        {/* 2. Offers & Products — basic */}
+        {/* 2. AI Provider — all tiers */}
+        <SettingsSection title="AI Provider" minTier="basic" tier={tier} color={COLORS.neon.purple}>
+          <AiProviderSection
+            settings={settings}
+            setSettings={setSettings}
+            saveSettingsJson={saveSettingsJson}
+            setAiProvider={setAiProvider}
+          />
+        </SettingsSection>
+
+        {/* 3. Offers & Products — basic */}
         <SettingsSection title="Offers & Products" minTier="basic" tier={tier} color={COLORS.neon.amber}>
           <OffersSection
             offers={settings.offers || []}

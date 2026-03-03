@@ -166,8 +166,14 @@ export default function Scorecard({
   subtitleColor = null,
   reserveSubtitleSpace = false,
   hoverText = null,
+  kpiTarget = null,
 }) {
   injectStyles();
+
+  // Auto-generate hoverText popover from kpiTarget if no explicit hoverText was provided
+  if (kpiTarget && kpiTarget.value != null && !hoverText) {
+    hoverText = `Target: ${formatMetric(kpiTarget.value, kpiTarget.format || format)}`;
+  }
 
   const hasValue = value != null && value !== undefined;
   const [revealed, setRevealed] = useState(hasValue);

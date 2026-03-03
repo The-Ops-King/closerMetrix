@@ -27,6 +27,7 @@
 
 import React, { useMemo } from 'react';
 import { LineChart } from '@mui/x-charts/LineChart';
+import { ChartsReferenceLine } from '@mui/x-charts/ChartsReferenceLine';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
 import { COLORS } from '../../theme/constants';
@@ -40,6 +41,7 @@ import { COLOR_MAP } from '../../utils/colors';
  * @param {number} [props.height=350] - Chart height in pixels
  * @param {'percent'|'currency'|'number'} [props.yAxisFormat='number'] - How to format Y-axis values
  * @param {boolean} [props.showArea=true] - Whether to show gradient fill under lines
+ * @param {Array<{value: number, label: string, color: string}>} [props.referenceLines] - Dashed horizontal target lines
  */
 export default function TronLineChart({
   data = [],
@@ -49,6 +51,7 @@ export default function TronLineChart({
   showArea = true,
   areaOpacity,
   stacked = false,
+  referenceLines = [],
 }) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -96,6 +99,7 @@ export default function TronLineChart({
 
   return (
     <LineChart
+      key={`lc-${referenceLines.filter((r) => r.value != null).map((r) => r.value).join('-')}`}
       {...(height != null ? { height } : {})}
       series={chartSeries}
       xAxis={[
@@ -228,6 +232,17 @@ export default function TronLineChart({
           strokeDasharray: '4 2',
         },
       }}
-    />
+    >
+      {referenceLines.filter((r) => r.value != null).map((r, i) => (
+        <ChartsReferenceLine
+          key={`ref-${i}`}
+          y={r.value}
+          label={r.label || ''}
+          lineStyle={{ stroke: COLOR_MAP[r.color] || r.color || COLORS.neon.amber, strokeDasharray: '8 4', strokeWidth: 1.5 }}
+          labelStyle={{ fill: COLOR_MAP[r.color] || r.color || COLORS.neon.amber, fontSize: 11 }}
+          labelAlign="end"
+        />
+      ))}
+    </LineChart>
   );
 }

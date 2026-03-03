@@ -28,7 +28,7 @@ import InputAdornment from '@mui/material/InputAdornment';
 
 import { COLORS } from '../../theme/constants';
 import { useAuth } from '../../context/AuthContext';
-import { apiPut } from '../../utils/api';
+import { apiGet, apiPut } from '../../utils/api';
 import Scorecard from '../scorecards/Scorecard';
 import SectionHeader from '../SectionHeader';
 
@@ -227,7 +227,7 @@ function GoalInput({ label, value, onChange, onUpdate, saving, saved }) {
 // ── Main GoalsPacing Component ─────────────────────────────────
 
 export default function GoalsPacing({ goals, actuals, calendar, onGoalsSaved }) {
-  const { token, mode, adminViewClientId } = useAuth();
+  const { token, mode, adminViewClientId, setKpiTargets, kpiTargets } = useAuth();
 
   // Goal input state (what the user is typing — doesn't affect pacing until Update)
   const [monthlyInput, setMonthlyInput] = useState('');
@@ -339,6 +339,22 @@ export default function GoalsPacing({ goals, actuals, calendar, onGoalsSaved }) 
         if (field === 'yearly') return { ...prev, yearly };
         return prev;
       });
+
+      // Sync monthly goal → revenue_per_month KPI target (in-memory + persisted)
+      const savedMonthly = field === 'monthly' || field === 'all' ? monthly : activeGoals.monthly;
+      if (savedMonthly > 0 && setKpiTargets) {
+        const updatedTargets = { ...kpiTargets, revenue_per_month: savedMonthly };
+        setKpiTargets(updatedTargets);
+        // Persist to settings_json so it survives page reload
+        try {
+          const res = await apiGet('/dashboard/settings', getAuthOptions());
+          const currentSettings = res?.settings_json ? JSON.parse(res.settings_json) : {};
+          const merged = { ...currentSettings, kpi_targets: { ...currentSettings.kpi_targets, revenue_per_month: savedMonthly } };
+          await apiPut('/dashboard/settings', { settings_json: JSON.stringify(merged) }, getAuthOptions());
+        } catch {
+          // Best-effort — KPI target is still updated in memory
+        }
+      }
 
       setSavedField(field);
       const label = field === 'all' ? 'All goals' : `${field.charAt(0).toUpperCase() + field.slice(1)} goal`;

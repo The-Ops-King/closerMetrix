@@ -31,6 +31,7 @@ import React, { useMemo } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { BarChart } from '@mui/x-charts/BarChart';
+import { ChartsReferenceLine } from '@mui/x-charts/ChartsReferenceLine';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
 import { COLORS } from '../../theme/constants';
@@ -126,6 +127,7 @@ function StackedAxisTooltip({ axisValue, series, dataIndex, stackTotalLabel, yAx
  * @param {'vertical'|'horizontal'} [props.layout='vertical'] - Bar orientation
  * @param {boolean} [props.stacked=false] - Whether to stack bars on top of each other
  * @param {'percent'|'currency'|'number'} [props.yAxisFormat='number'] - How to format the value axis
+ * @param {Array<{value: number, label: string, color: string}>} [props.referenceLines] - Dashed target reference lines on the value axis
  */
 export default function TronBarChart({
   data = [],
@@ -135,6 +137,7 @@ export default function TronBarChart({
   stacked = false,
   yAxisFormat = 'number',
   stackTotalLabel,
+  referenceLines = [],
 }) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -243,6 +246,7 @@ export default function TronBarChart({
 
   return (
     <BarChart
+      key={`bc-${referenceLines.filter((r) => r.value != null).map((r) => r.value).join('-')}`}
       {...(height != null ? { height } : {})}
       series={chartSeries}
       xAxis={xAxisConfig}
@@ -343,6 +347,28 @@ export default function TronBarChart({
           fontSize: '12px !important',
         },
       }}
-    />
+    >
+      {referenceLines.filter((r) => r.value != null).map((r, i) => (
+        isHorizontal ? (
+          <ChartsReferenceLine
+            key={`ref-${i}`}
+            x={r.value}
+            label={r.label || ''}
+            lineStyle={{ stroke: COLOR_MAP[r.color] || r.color || COLORS.neon.amber, strokeDasharray: '8 4', strokeWidth: 1.5 }}
+            labelStyle={{ fill: COLOR_MAP[r.color] || r.color || COLORS.neon.amber, fontSize: 11 }}
+            labelAlign="end"
+          />
+        ) : (
+          <ChartsReferenceLine
+            key={`ref-${i}`}
+            y={r.value}
+            label={r.label || ''}
+            lineStyle={{ stroke: COLOR_MAP[r.color] || r.color || COLORS.neon.amber, strokeDasharray: '8 4', strokeWidth: 1.5 }}
+            labelStyle={{ fill: COLOR_MAP[r.color] || r.color || COLORS.neon.amber, fontSize: 11 }}
+            labelAlign="end"
+          />
+        )
+      ))}
+    </BarChart>
   );
 }

@@ -88,14 +88,24 @@ class BigQueryClient {
     // require explicit type declarations for null params. Since unspecified
     // columns default to NULL anyway, we simply omit them.
     const cleanRow = {};
+    const jsonColumns = [];
     for (const [key, value] of Object.entries(row)) {
       if (value !== null && value !== undefined) {
-        cleanRow[key] = value;
+        // Detect JSON values (arrays and plain objects) — BigQuery JSON columns
+        // require PARSE_JSON() wrapper since the Node.js client sends them as STRING
+        if (typeof value === 'object' && !(value instanceof Date)) {
+          cleanRow[key] = JSON.stringify(value);
+          jsonColumns.push(key);
+        } else {
+          cleanRow[key] = value;
+        }
       }
     }
 
     const columns = Object.keys(cleanRow);
-    const paramNames = columns.map(col => `@${col}`);
+    const paramNames = columns.map(col =>
+      jsonColumns.includes(col) ? `PARSE_JSON(@${col})` : `@${col}`
+    );
 
     const sql = `INSERT INTO ${tablePath(tableName)} (${columns.join(', ')}) VALUES (${paramNames.join(', ')})`;
 
@@ -150,6 +160,10 @@ class BigQueryClient {
     for (const [key, value] of Object.entries(updates)) {
       if (value === null || value === undefined) {
         setClauses.push(`${key} = NULL`);
+      } else if (typeof value === 'object' && !(value instanceof Date)) {
+        // JSON columns: serialize to string and use PARSE_JSON() in SQL
+        setClauses.push(`${key} = PARSE_JSON(@update_${key})`);
+        params[`update_${key}`] = JSON.stringify(value);
       } else {
         setClauses.push(`${key} = @update_${key}`);
         params[`update_${key}`] = value;

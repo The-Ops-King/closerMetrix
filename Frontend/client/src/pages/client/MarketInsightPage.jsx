@@ -556,8 +556,8 @@ export default function MarketInsightPage() {
               {pulseLoading.pains && <PulseSkeleton />}
               {!pulseLoading.pains && pulseError.pains && (
                 <Box sx={{ py: 2, px: 2 }}>
-                  <Typography sx={{ color: COLORS.text.muted, fontSize: '0.8rem' }}>
-                    AI analysis unavailable
+                  <Typography sx={{ color: COLORS.neon.red, fontSize: '0.8rem' }}>
+                    {pulseError.pains}
                   </Typography>
                 </Box>
               )}
@@ -606,8 +606,8 @@ export default function MarketInsightPage() {
               {pulseLoading.goals && <PulseSkeleton />}
               {!pulseLoading.goals && pulseError.goals && (
                 <Box sx={{ py: 2, px: 2 }}>
-                  <Typography sx={{ color: COLORS.text.muted, fontSize: '0.8rem' }}>
-                    AI analysis unavailable
+                  <Typography sx={{ color: COLORS.neon.red, fontSize: '0.8rem' }}>
+                    {pulseError.goals}
                   </Typography>
                 </Box>
               )}
