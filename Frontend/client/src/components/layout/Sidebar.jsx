@@ -59,18 +59,11 @@ export default function Sidebar({ tier, basePath, onNavigate }) {
           borderBottom: `1px solid ${COLORS.border.subtle}`,
         }}
       >
-        <Typography
-          variant="h6"
-          sx={{
-            fontWeight: 700,
-            letterSpacing: '0.1em',
-            color: COLORS.neon.cyan,
-            textTransform: 'uppercase',
-            fontSize: '0.95rem',
-          }}
-        >
-          CloserMetrix
-        </Typography>
+        <img
+          src="/logo-wide.png"
+          alt="CloserMetrix"
+          style={{ height: 28, width: 'auto' }}
+        />
       </Box>
 
       {/* Navigation Items — two sections with labels */}
