@@ -13,6 +13,7 @@ import ZeroAdmin from './components/ZeroAdmin'
 import RevenueCalculator from './components/RevenueCalculator'
 import CTA from './components/CTA'
 import Footer from './components/Footer'
+import FAQ from './components/FAQ'
 import DemoModal from './components/DemoModal'
 import { DemoModalProvider } from './hooks/useDemoModal'
 
@@ -112,7 +113,7 @@ function HomePage({ logoItems }) {
   )
 }
 
-function PricingPage() {
+function HowItWorksPage() {
   return (
     <>
       <section className="video-section">
@@ -148,6 +149,10 @@ function PricingPage() {
       <Pricing />
     </>
   )
+}
+
+function FAQPage() {
+  return <FAQ />
 }
 
 function ScrollToTop() {
@@ -200,7 +205,8 @@ function App() {
               <main>
                 <Routes>
                   <Route path="/" element={<HomePage logoItems={logoItems} />} />
-                  <Route path="/pricing" element={<PricingPage />} />
+                  <Route path="/how-it-works" element={<HowItWorksPage />} />
+                  <Route path="/faq" element={<FAQPage />} />
                 </Routes>
               </main>
               <Footer />

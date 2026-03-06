@@ -21,8 +21,8 @@ const Navbar = () => {
 
   const navItems = [
     { label: 'Features', href: '#features' },
-    { label: 'How It Works', href: '#how-it-works' },
-    { label: 'Pricing', href: '/pricing', isRoute: true },
+    { label: 'How It Works', href: '/how-it-works', isRoute: true },
+    { label: 'FAQ', href: '/faq', isRoute: true },
   ]
 
   const handleNavClick = (item) => {

@@ -3,13 +3,27 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 
 const GooeyNav = ({ items, className = '' }) => {
-  const [activeIndex, setActiveIndex] = useState(0)
+  const navigate = useNavigate()
+  const location = useLocation()
+
+  const getActiveIndex = () => {
+    const idx = items.findIndex((item) =>
+      item.isRoute
+        ? location.pathname === item.href
+        : location.pathname === '/' && location.hash === item.href
+    )
+    return idx >= 0 ? idx : location.pathname === '/' ? 0 : -1
+  }
+
+  const [activeIndex, setActiveIndex] = useState(getActiveIndex)
   const [hoverIndex, setHoverIndex] = useState(null)
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 })
   const navRef = useRef(null)
   const itemRefs = useRef([])
-  const navigate = useNavigate()
-  const location = useLocation()
+
+  useEffect(() => {
+    setActiveIndex(getActiveIndex())
+  }, [location.pathname, location.hash])
 
   useEffect(() => {
     const currentIndex = hoverIndex !== null ? hoverIndex : activeIndex
@@ -62,6 +76,7 @@ const GooeyNav = ({ items, className = '' }) => {
         animate={{
           left: indicatorStyle.left,
           width: indicatorStyle.width,
+          opacity: activeIndex >= 0 || hoverIndex !== null ? 1 : 0,
         }}
         transition={{
           type: 'spring',
@@ -116,7 +131,7 @@ const GooeyNav = ({ items, className = '' }) => {
           style={{
             position: 'relative',
             zIndex: 1,
-            padding: '10px 20px',
+            padding: '10px 16px',
             fontSize: '0.9rem',
             fontWeight: 500,
             color: activeIndex === index ? 'var(--aurora-green)' : 'var(--text-secondary)',
