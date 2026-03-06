@@ -131,8 +131,8 @@ const GooeyNav = ({ items, className = '' }) => {
           style={{
             position: 'relative',
             zIndex: 1,
-            padding: '10px 16px',
-            fontSize: '0.9rem',
+            padding: '10px 14px',
+            fontSize: '0.85rem',
             fontWeight: 500,
             color: activeIndex === index ? 'var(--aurora-green)' : 'var(--text-secondary)',
             textDecoration: 'none',
