@@ -16,7 +16,7 @@ module.exports = {
 
   // ── Data Analysis Model ────────────────────────────────────────────
   dataAnalysisModel: 'claude-sonnet-4-20250514',
-  dataAnalysisMaxTokens: 3000,
+  dataAnalysisMaxTokens: 6000,
 
   // ── Caching ────────────────────────────────────────────────────────
   // How long AI insights stay cached before re-calling Sonnet.
@@ -94,6 +94,9 @@ YOUR JOB:
 
 CRITICAL RULES:
 - ONLY reference numbers that appear in the data provided. Never invent statistics.
+- When citing a closer's close rate, revenue, show rate, or any metric, copy the EXACT number from the PER-CLOSER STATS table. Do NOT estimate, round differently, or derive your own values.
+- If the table says "Close Rate: 21.0%" for a closer, you MUST say 21.0% — not 16.9%, not 20%, not any other number.
+- The "Close Rate Change" column already tells you if a closer is IMPROVING or DECLINING. Use that pre-computed direction — do NOT calculate trends yourself.
 - Do NOT cite "industry standards", "industry benchmarks", or "best practices". You don't have that data. Only compare within THIS team's own numbers.
 - Do NOT say "above/below industry average" or "compared to industry". You are analyzing THIS business, not the industry.
 - Do NOT hallucinate or fabricate numbers. If a metric isn't in the data, don't mention it.
@@ -104,7 +107,13 @@ FORMATTING:
 - No markdown, bullet points, or headers — just flowing sentences.
 - Do NOT start with "Based on the data", "Looking at", "The data shows", or similar filler. Lead with the insight.
 - Always cite the actual numbers from the data. Say "68% show rate" not "the show rate".
-- Name specific closers with their specific numbers when relevant.`,
+- Name specific closers with their specific numbers when relevant.
+
+NUMBER ACCURACY — CRITICAL:
+- Every number you cite MUST be copied exactly from the data provided. Do not round, estimate, or derive numbers.
+- If the data says a closer has "21.0%" close rate, you must say 21.0% — not 19.6%, not 20%, not any other number.
+- If the data says objection handling is "5.1/10", say 5.1 — not 5.0, not 9.5. Double-check every number before writing it.
+- NEVER confuse one closer's numbers with another closer's numbers. Re-read the data for the specific closer you're writing about.`,
 
   // ── Per-Section Prompt Templates ───────────────────────────────────
   // Each section has a user prompt template describing what metrics mean
@@ -173,7 +182,7 @@ This page ranks and compares all closers across metrics. Who's the top performer
 
     // ── Data Analysis Page Prompts (Sonnet — structured JSON output) ──
 
-    'data-analysis-overview': `You are analyzing a high-ticket sales team's performance data for {{dateRange}}.
+    'data-analysis-overview': `You are analyzing a high-ticket sales team's COMPLETE sales process for {{dateRange}}.
 
 Here is the team data:
 
@@ -187,19 +196,43 @@ INDUSTRY BENCHMARKS (high-ticket $3K-$25K offers):
 - Avg calls to close: 1.5-2.5 efficient, 3+ slow
 - Objection resolution: 50-65% average, 75%+ strong
 
-If the data includes CLIENT KPI TARGETS, compare the team's actual performance against these targets first — this is more meaningful than generic benchmarks. Say "your target is X but team is at Y" and whether they're on track.
-
-If a CLIENT SCRIPT TEMPLATE is provided, correlate adherence scores with outcomes. Are the closers who follow the script actually closing better? If not, the script may need updating.
+ANALYSIS INSTRUCTIONS:
+1. TREND DETECTION: If PREVIOUS PERIOD or LAST 90 DAYS data is provided, compare CURRENT PERIOD metrics to the PREVIOUS (older) period. PREVIOUS PERIOD is the OLDER data — CURRENT PERIOD (the main TEAM METRICS) is the NEWER data. If a metric went from 13% (previous) to 21% (current), that is INCREASING/IMPROVING, not declining. Double-check your math: current > previous = improving, current < previous = declining. Flag any metric that moved more than 5 percentage points or 10%.
+2. MARKET INTELLIGENCE: If painsThemes/goalsThemes are provided, analyze what prospects actually care about. Look for dominant pain points, emerging themes. ONLY include scriptGaps if the data contains a section called "painsScriptAlignment" or "goalsScriptAlignment" or "CLIENT SCRIPT TEMPLATE". If NONE of those exist in the data, set scriptGaps to [] and do NOT mention scripts, script alignment, or script gaps anywhere in your output — not in executiveSummary, not in priorityActions, not in closerCoaching, nowhere.
+3. CROSS-DOMAIN CONNECTIONS: Connect the dots across domains. Only reference scripts if script data is actually present. If prospects mention a pain, that's a coaching opportunity regardless.
+4. If CLIENT KPI TARGETS are provided, compare actual performance against them first.
+5. SCRIPT RULE: Search the metrics data for "SCRIPT TEMPLATE" or "scriptAlignment". If neither string appears, this client has NO script. Do not reference scripts at all.
 
 Return ONLY valid JSON matching this exact schema (no markdown, no backticks, no explanation outside the JSON):
 {
-  "executiveSummary": "3-5 sentence executive summary with specific numbers and closer names. Compare to benchmarks. Lead with the most important finding.",
+  "executiveSummary": "5-8 sentence executive summary covering: current performance snapshot, key trend direction, most important market intelligence finding, and the single highest-leverage change. Name closers and cite specific numbers.",
   "summaryStats": {
     "totalRevenue": <number>,
     "teamCloseRate": "<string like '22%'>",
     "callsAnalyzed": <number>,
     "insightsGenerated": <number — count of priorityActions>,
     "highPriorityCount": <number — count of high priority actions>
+  },
+  "trendAnalysis": [
+    {
+      "metric": "<metric name like 'Close Rate' or 'Revenue'>",
+      "current": "<formatted current value>",
+      "previous": "<formatted previous period value>",
+      "direction": "up|down|stable",
+      "changePercent": <number>,
+      "insight": "<1-2 sentence explanation of what this trend means for the business>"
+    }
+  ],
+  "marketIntelligence": {
+    "topPains": [
+      { "theme": "<pain theme>", "count": <number>, "percentage": <number> }
+    ],
+    "topGoals": [
+      { "theme": "<goal theme>", "count": <number>, "percentage": <number> }
+    ],
+    "scriptGaps": [
+      { "finding": "<what the gap is>", "recommendation": "<how to fix it>" }
+    ]
   },
   "priorityActions": [
     {
@@ -212,20 +245,29 @@ Return ONLY valid JSON matching this exact schema (no markdown, no backticks, no
       "action": "<1-2 sentence recommended action>"
     }
   ],
+  "closerCoaching": [
+    {
+      "closerId": "<closer_id>",
+      "name": "<closer name>",
+      "status": "strong|improving|declining|needs-coaching — USE the Close Rate Change column from PER-CLOSER STATS to determine improving vs declining",
+      "keyFinding": "<one sentence — cite the EXACT close rate from the PER-CLOSER STATS table, the EXACT prev close rate, and the EXACT change direction>",
+      "recommendation": "<one sentence coaching action>"
+    }
+  ],
   "closerQuickView": [
     {
       "closerId": "<closer_id>",
       "name": "<closer name>",
-      "closeRate": <decimal like 0.22>,
-      "revenue": <number>,
-      "showRate": <decimal>,
-      "adherence": <number 0-10>,
+      "closeRate": "<MUST match the Close Rate from PER-CLOSER STATS table exactly, as decimal like 0.22>",
+      "revenue": "<MUST match Revenue from PER-CLOSER STATS table>",
+      "showRate": "<MUST match Show Rate from PER-CLOSER STATS table, as decimal>",
+      "adherence": "<MUST match Script Adherence from PER-CLOSER STATS table>",
       "status": "strong|average|needs-coaching"
     }
   ]
 }
 
-Generate 4-6 priorityActions. Include ALL closers in closerQuickView. Be specific — name closers and cite exact numbers. Focus on actionable insights, not just observations.`,
+Generate 6-8 priorityActions spanning performance, trends, market intelligence, and coaching. Include trendAnalysis only if historical data is provided (otherwise empty array). Include marketIntelligence only if theme data is provided (otherwise null). CRITICAL: scriptGaps MUST be [] if no "SCRIPT TEMPLATE" or "scriptAlignment" appears in the metrics — NEVER fabricate script findings. For closerCoaching trend direction: if current metric > previous metric, that is "improving" not "declining". Include closerCoaching for ALL closers. Include ALL closers in closerQuickView. Be specific — name closers and cite exact numbers.`,
 
     'data-analysis-team': `You are analyzing a high-ticket sales team's performance data for {{dateRange}}.
 
@@ -329,6 +371,8 @@ Return ONLY valid JSON matching this exact schema (no markdown, no backticks):
 
 If CLIENT KPI TARGETS are provided, compare the closer to both the team average AND the client's own targets. Are they helping or hurting the team's progress toward its goals?
 
-Be specific with numbers. Compare to both team average AND industry benchmarks. Look at the full profile — don't just list what's above and below average. Find what's interesting: where do this closer's numbers not tell a coherent story compared to the team? What does their combination of metrics suggest about how they actually sell?`,
+Be specific with numbers. Compare to both team average AND industry benchmarks. Look at the full profile — don't just list what's above and below average. Find what's interesting: where do this closer's numbers not tell a coherent story compared to the team? What does their combination of metrics suggest about how they actually sell?
+
+CRITICAL: Copy all numbers (close rate, show rate, revenue, etc.) EXACTLY as they appear in the data. Do NOT round, estimate, or derive your own values. If the data says 21.0% close rate, say 21.0% — not 16.9%, not 20%.`,
   },
 };

@@ -29,8 +29,59 @@ const ALL_TABS = ['overview', 'team', 'individual', 'compare'];
 const BASIC_TABS = ['overview']; // Basic tier only gets overview — don't waste AI calls
 
 /**
+ * Compute a compact period summary from rawData for a given date range.
+ * Used to give AI historical context (previous period, last 90 days).
+ * No extra BQ queries — rawData has ALL calls, we just filter by date.
+ */
+function computePeriodSummary(rawData, dateStart, dateEnd) {
+  if (!rawData?.calls?.length) return null;
+
+  const f = {
+    dateStart, dateEnd,
+    closerId: null,
+    granularity: 'weekly',
+    objectionType: null,
+    riskCategory: null,
+  };
+
+  const overview = computePageData('overview', rawData, f);
+  const scoreboard = computePageData('closer-scoreboard', rawData, f);
+
+  if (!overview) return null;
+
+  // Extract key metrics for compact summary
+  const get = (section, key) => {
+    const s = overview?.sections?.[section];
+    return s?.[key]?.value ?? null;
+  };
+
+  const summary = {
+    dateRange: `${dateStart} to ${dateEnd}`,
+    closeRate: get('atAGlance', 'closeRate') ?? get('atAGlance', 'showCloseRate'),
+    showRate: get('atAGlance', 'showRate'),
+    revenue: get('atAGlance', 'revenue') ?? get('atAGlance', 'revenueGenerated'),
+    cash: get('atAGlance', 'cash') ?? get('atAGlance', 'cashCollected'),
+    callsHeld: get('atAGlance', 'held') ?? get('atAGlance', 'appointmentsHeld'),
+    dealsClosed: get('atAGlance', 'closed') ?? get('atAGlance', 'closedDeals'),
+  };
+
+  // Per-closer compact summaries
+  if (scoreboard?.closerStats?.length > 0) {
+    summary.closers = scoreboard.closerStats.map(c => ({
+      name: c.name,
+      closeRate: c.closeRate,
+      revenue: c.revenue,
+      showRate: c.showRate,
+    }));
+  }
+
+  return summary;
+}
+
+/**
  * Compute all metrics needed for data analysis AI prompts.
  * Pulls from multiple computePageData sections to give AI full context.
+ * Also computes previous period and last 90 days for trend detection.
  */
 function gatherMetrics(rawData, filters, kpiTargets, scriptTemplate) {
   if (!rawData || !rawData.calls || rawData.calls.length === 0) return null;
@@ -101,6 +152,51 @@ function gatherMetrics(rawData, filters, kpiTargets, scriptTemplate) {
     ? `${filters.dateStart} to ${filters.dateEnd}`
     : 'all available data';
 
+  // ── Historical periods for trend detection ──
+  let previousPeriod = null;
+  let last90Days = null;
+
+  if (filters.dateStart && filters.dateEnd) {
+    const start = new Date(filters.dateStart);
+    const end = new Date(filters.dateEnd);
+    const periodMs = end.getTime() - start.getTime();
+    const periodDays = Math.round(periodMs / (1000 * 60 * 60 * 24));
+
+    // Previous same-length period
+    const prevEnd = new Date(start.getTime() - (1000 * 60 * 60 * 24)); // day before current start
+    const prevStart = new Date(prevEnd.getTime() - periodMs);
+    previousPeriod = computePeriodSummary(
+      rawData,
+      prevStart.toISOString().split('T')[0],
+      prevEnd.toISOString().split('T')[0]
+    );
+
+    // Last 90 days (only if current period is shorter)
+    if (periodDays < 85) {
+      const now = new Date();
+      const ninetyAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+      last90Days = computePeriodSummary(
+        rawData,
+        ninetyAgo.toISOString().split('T')[0],
+        now.toISOString().split('T')[0]
+      );
+    }
+  }
+
+  // ── Extract raw pains/goals texts for backend clustering ──
+  const rawPains = [];
+  const rawGoals = [];
+  for (const call of rawData.calls) {
+    if (call.pains && typeof call.pains === 'string' && call.pains.trim()) {
+      rawPains.push(call.pains.trim());
+    }
+    if (call.goals && typeof call.goals === 'string' && call.goals.trim()) {
+      rawGoals.push(call.goals.trim());
+    }
+    // Cap at 500 each to keep payload reasonable
+    if (rawPains.length >= 500 && rawGoals.length >= 500) break;
+  }
+
   return {
     dateRange,
     teamMetrics,
@@ -108,6 +204,10 @@ function gatherMetrics(rawData, filters, kpiTargets, scriptTemplate) {
     closerData,
     kpiTargets: kpiTargets || null,
     scriptTemplate: scriptTemplate || null,
+    previousPeriod,
+    last90Days,
+    rawPains: rawPains.slice(0, 500),
+    rawGoals: rawGoals.slice(0, 500),
   };
 }
 
@@ -128,7 +228,7 @@ function formatMetricsForAI(gathered) {
     if (value == null) continue;
     let display = value;
     if (typeof value === 'number') {
-      if (value > 0 && value < 1 && key.includes('Rate') || key.includes('rate') || key.includes('pct') || key.includes('Pct')) {
+      if ((value > 0 && value < 1) && (key.includes('Rate') || key.includes('rate') || key.includes('pct') || key.includes('Pct'))) {
         display = `${(value * 100).toFixed(1)}%`;
       } else if (typeof value === 'number' && value > 1000) {
         display = `$${value.toLocaleString()}`;
@@ -141,14 +241,39 @@ function formatMetricsForAI(gathered) {
 
   // Per-closer stats table — includes all cross-metric fields so AI can
   // spot mismatches (e.g. high adherence + low close rate → script problem)
+  // Previous period per-closer data is merged inline so AI doesn't have to
+  // match names across distant sections (which causes hallucinated numbers).
   if (gathered.closerStats && gathered.closerStats.length > 0) {
+    // Build lookup for previous period per-closer close rates
+    const prevCloserMap = {};
+    if (gathered.previousPeriod?.closers) {
+      for (const pc of gathered.previousPeriod.closers) {
+        prevCloserMap[pc.name] = pc;
+      }
+    }
+    const hasPrev = Object.keys(prevCloserMap).length > 0;
+
     lines.push('');
-    lines.push('=== PER-CLOSER STATS ===');
-    lines.push('Name | Close Rate | Revenue | Cash | Show Rate | Deals Closed | Avg Deal Size | Obj Resolution | Obj Handling | Call Quality | Script Adherence | Discovery Score | Pitch Score | Close Attempt Score | Avg Duration (min) | Days to Close | Calls to Close | Held Count');
+    lines.push('=== PER-CLOSER STATS (CURRENT PERIOD) ===');
+    lines.push('IMPORTANT: These are the EXACT numbers. When writing about any closer, copy these numbers directly. Do NOT calculate or estimate close rates — use the values in this table.');
+    const header = 'Name | Close Rate | Revenue | Cash | Show Rate | Deals Closed | Avg Deal Size | Obj Resolution | Obj Handling | Call Quality | Script Adherence | Discovery Score | Pitch Score | Close Attempt Score | Avg Duration (min) | Days to Close | Calls to Close | Held Count'
+      + (hasPrev ? ' | Prev Close Rate | Close Rate Change' : '');
+    lines.push(header);
     for (const c of gathered.closerStats) {
-      lines.push(
-        `${c.name} | ${(c.closeRate * 100).toFixed(1)}% | $${c.revenue?.toLocaleString() || 0} | $${c.cash?.toLocaleString() || 0} | ${(c.showRate * 100).toFixed(1)}% | ${c.dealsClosed} | $${c.avgDealSize?.toLocaleString() || 0} | ${(c.objResRate * 100).toFixed(1)}% | ${c.objHandling}/10 | ${c.callQuality}/10 | ${c.scriptAdherence}/10 | ${c.discoveryScore}/10 | ${c.pitchScore}/10 | ${c.closeAttemptScore}/10 | ${c.avgDuration} | ${c.daysToClose} | ${c.callsToClose} | ${c.heldCount}`
-      );
+      let row = `${c.name} | ${(c.closeRate * 100).toFixed(1)}% | $${c.revenue?.toLocaleString() || 0} | $${c.cash?.toLocaleString() || 0} | ${(c.showRate * 100).toFixed(1)}% | ${c.dealsClosed} | $${c.avgDealSize?.toLocaleString() || 0} | ${(c.objResRate * 100).toFixed(1)}% | ${c.objHandling}/10 | ${c.callQuality}/10 | ${c.scriptAdherence}/10 | ${c.discoveryScore}/10 | ${c.pitchScore}/10 | ${c.closeAttemptScore}/10 | ${c.avgDuration} | ${c.daysToClose} | ${c.callsToClose} | ${c.heldCount}`;
+      if (hasPrev) {
+        const prev = prevCloserMap[c.name];
+        if (prev) {
+          const prevCR = (prev.closeRate * 100).toFixed(1);
+          const currCR = (c.closeRate * 100).toFixed(1);
+          const delta = (c.closeRate * 100 - prev.closeRate * 100).toFixed(1);
+          const direction = delta > 0 ? `+${delta}pp (IMPROVING)` : delta < 0 ? `${delta}pp (DECLINING)` : '0pp (STABLE)';
+          row += ` | ${prevCR}% | ${direction}`;
+        } else {
+          row += ' | N/A | N/A';
+        }
+      }
+      lines.push(row);
     }
   }
 
@@ -169,6 +294,35 @@ function formatMetricsForAI(gathered) {
     lines.push('');
     lines.push('=== CLIENT SCRIPT TEMPLATE ===');
     lines.push(gathered.scriptTemplate);
+  }
+
+  // Previous period metrics for trend detection
+  if (gathered.previousPeriod) {
+    const pp = gathered.previousPeriod;
+    lines.push('');
+    lines.push(`=== PREVIOUS PERIOD METRICS (${pp.dateRange}) ===`);
+    if (pp.closeRate != null) lines.push(`Close Rate: ${(pp.closeRate * 100).toFixed(1)}%`);
+    if (pp.showRate != null) lines.push(`Show Rate: ${(pp.showRate * 100).toFixed(1)}%`);
+    if (pp.revenue != null) lines.push(`Revenue: $${Number(pp.revenue).toLocaleString()}`);
+    if (pp.cash != null) lines.push(`Cash: $${Number(pp.cash).toLocaleString()}`);
+    if (pp.callsHeld != null) lines.push(`Calls Held: ${pp.callsHeld}`);
+    if (pp.dealsClosed != null) lines.push(`Deals Closed: ${pp.dealsClosed}`);
+    if (pp.closers?.length > 0) {
+      lines.push('Per-Closer: ' + pp.closers.map(c => `${c.name}: ${(c.closeRate * 100).toFixed(1)}% close, $${c.revenue?.toLocaleString() || 0}`).join(' | '));
+    }
+  }
+
+  // Last 90 days metrics for longer-term trends
+  if (gathered.last90Days) {
+    const l90 = gathered.last90Days;
+    lines.push('');
+    lines.push(`=== LAST 90 DAYS (${l90.dateRange}) ===`);
+    if (l90.closeRate != null) lines.push(`Close Rate: ${(l90.closeRate * 100).toFixed(1)}%`);
+    if (l90.showRate != null) lines.push(`Show Rate: ${(l90.showRate * 100).toFixed(1)}%`);
+    if (l90.revenue != null) lines.push(`Revenue: $${Number(l90.revenue).toLocaleString()}`);
+    if (l90.cash != null) lines.push(`Cash: $${Number(l90.cash).toLocaleString()}`);
+    if (l90.callsHeld != null) lines.push(`Calls Held: ${l90.callsHeld}`);
+    if (l90.dealsClosed != null) lines.push(`Deals Closed: ${l90.dealsClosed}`);
   }
 
   return lines.join('\n');
@@ -341,11 +495,16 @@ export function useDataAnalysisAllTabs() {
   // Gather all metrics from raw data
   const gathered = useMemo(() => gatherMetrics(rawData, filters, kpiTargets, scriptTemplate), [rawData, filters, kpiTargets, scriptTemplate]);
 
-  const fetchAll = useCallback(async () => {
+  // Track tabs that need POST generation (GET returned null)
+  const needsPostRef = useRef(new Set());
+
+  // Phase 1: GET-only fetch — fires immediately without waiting for gathered data.
+  // Only checks BQ cache. Tabs that miss go into needsPostRef for Phase 2.
+  const fetchCached = useCallback(async () => {
     if (fetchedRef.current) return;
     fetchedRef.current = true;
 
-    // Check if all accessible tabs are cached
+    // Check if all accessible tabs are in module cache
     const allCached = tabsToFetch.every(t => tabCache.has(t));
     if (allCached) {
       const cached = {};
@@ -358,64 +517,105 @@ export function useDataAnalysisAllTabs() {
 
     setIsLoading(true);
 
-    // Fire only the tabs this tier can access — don't waste AI calls
+    // Fire GETs for all tabs in parallel — no metrics needed
     const results = await Promise.allSettled(
       tabsToFetch.map(async (tab) => {
-        // Check module cache first
         const cached = tabCache.get(tab);
-        if (cached) return { tab, ...cached };
+        if (cached) return { tab, ...cached, fromCache: true };
 
-        const result = await fetchTabInsight(tab, gathered, authOptions);
-        // Cache result
-        if (result.data) {
-          tabCache.set(tab, { data: result.data, generatedAt: result.generatedAt });
+        // GET only — check BQ for today's cached insight
+        const getRes = await apiGet(
+          '/dashboard/data-analysis-insights',
+          { tab, _t: Date.now() },
+          authOptions
+        );
+
+        if (getRes?.success && getRes?.data) {
+          const { generatedAt, ...rest } = getRes.data;
+          tabCache.set(tab, { data: rest, generatedAt: generatedAt || null });
+          return { tab, data: rest, generatedAt: generatedAt || null, fromCache: true };
         }
-        return { tab, ...result };
+
+        // Cache miss — needs POST generation
+        return { tab, data: null, generatedAt: null, fromCache: false };
       })
     );
 
-    // Process results
     const newTabs = {};
+    const missingTabs = new Set();
     for (const result of results) {
       if (result.status === 'fulfilled') {
-        const { tab, data, generatedAt } = result.value;
-        newTabs[tab] = { data, generatedAt, error: null };
-      } else {
-        // Find which tab failed (from the rejection)
-        console.error('[useDataAnalysisAllTabs] Tab failed:', result.reason);
+        const { tab, data, generatedAt, fromCache } = result.value;
+        if (data) {
+          newTabs[tab] = { data, generatedAt, error: null };
+        } else {
+          missingTabs.add(tab);
+        }
       }
     }
 
-    // Merge with defaults for any missing tabs
     setTabs(prev => ({
       overview: newTabs.overview || prev.overview,
       team: newTabs.team || prev.team,
       individual: newTabs.individual || prev.individual,
       compare: newTabs.compare || prev.compare,
     }));
-    setIsLoading(false);
-  }, [gathered, authOptions, tabsToFetch]);
 
-  // Trigger fetch when gathered data becomes available
+    if (missingTabs.size === 0) {
+      setIsLoading(false);
+    }
+    needsPostRef.current = missingTabs;
+  }, [authOptions, tabsToFetch]);
+
+  // Phase 2: POST generation — only fires for tabs that missed in Phase 1.
+  // Waits for gathered data since POST needs metrics.
   useEffect(() => {
-    if (fetchedRef.current) return;
+    if (needsPostRef.current.size === 0) return;
+    if (!gathered) return;
 
-    // Check all accessible tabs cached
-    const allCached = tabsToFetch.every(t => tabCache.has(t));
-    if (allCached) {
-      const cached = {};
-      for (const t of tabsToFetch) {
-        cached[t] = { ...tabCache.get(t), error: null };
+    const missingTabs = [...needsPostRef.current];
+    needsPostRef.current = new Set(); // Clear to prevent re-fire
+
+    async function generateMissing() {
+      setIsLoading(true);
+
+      const results = await Promise.allSettled(
+        missingTabs.map(async (tab) => {
+          const result = await fetchTabInsight(tab, gathered, authOptions);
+          if (result.data) {
+            tabCache.set(tab, { data: result.data, generatedAt: result.generatedAt });
+          }
+          return { tab, ...result };
+        })
+      );
+
+      const newTabs = {};
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          const { tab, data, generatedAt } = result.value;
+          newTabs[tab] = { data, generatedAt, error: null };
+        } else {
+          console.error('[useDataAnalysisAllTabs] Tab generation failed:', result.reason);
+        }
       }
-      setTabs(prev => ({ ...prev, ...cached }));
-      return;
+
+      setTabs(prev => ({
+        overview: newTabs.overview || prev.overview,
+        team: newTabs.team || prev.team,
+        individual: newTabs.individual || prev.individual,
+        compare: newTabs.compare || prev.compare,
+      }));
+      setIsLoading(false);
     }
 
-    // Need gathered data to POST if cache miss
-    if (!gathered && !allCached) return;
+    generateMissing();
+  }, [gathered, authOptions]);
 
-    fetchAll();
-  }, [gathered, fetchAll, tabsToFetch]);
+  // Trigger Phase 1 immediately on mount
+  useEffect(() => {
+    if (fetchedRef.current) return;
+    fetchCached();
+  }, [fetchCached]);
 
   // Compute loading state per tab
   const anyLoading = isLoading;

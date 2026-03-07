@@ -176,10 +176,61 @@ async function getCompareInsightsForDate(clientId, date) {
   }));
 }
 
+/**
+ * Get the freshest insight generated today for a client + section.
+ * Matches any generation_type (daily or on-demand).
+ *
+ * @param {string} clientId
+ * @param {string} section
+ * @returns {Promise<{ text: string, generatedAt: string } | null>}
+ */
+async function getInsightForToday(clientId, section) {
+  const sql = `
+    SELECT insight_text, generated_at
+    FROM ${bq.table('InsightLog')}
+    WHERE client_id = @clientId
+      AND section = @section
+      AND generated_date = CURRENT_DATE()
+    ORDER BY generated_at DESC
+    LIMIT 1
+  `;
+
+  const rows = await bq.runQuery(sql, { clientId, section });
+  if (!rows || rows.length === 0) return null;
+
+  return {
+    text: rows[0].insight_text,
+    generatedAt: rows[0].generated_at?.value || rows[0].generated_at,
+  };
+}
+
+/**
+ * Count on-demand insight generations for a client in the last hour.
+ * Used for server-side rate limiting (max 10/hr).
+ *
+ * @param {string} clientId
+ * @returns {Promise<number>}
+ */
+async function countRecentOnDemand(clientId) {
+  const sql = `
+    SELECT COUNT(*) AS cnt
+    FROM ${bq.table('InsightLog')}
+    WHERE client_id = @clientId
+      AND generation_type = 'on-demand'
+      AND generated_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 HOUR)
+  `;
+
+  const rows = await bq.runQuery(sql, { clientId });
+  if (!rows || rows.length === 0) return 0;
+  return rows[0].cnt || 0;
+}
+
 module.exports = {
   getLatestInsight,
   getPriorInsights,
   insertInsight,
   getLatestInsightForDate,
   getCompareInsightsForDate,
+  getInsightForToday,
+  countRecentOnDemand,
 };

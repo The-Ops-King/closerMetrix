@@ -916,14 +916,160 @@ export default function DataAnalysisPage() {
                 </Box>
               )}
 
-              {/* Top Priority Actions */}
+              {/* Trend Analysis — directional metric cards */}
+              {aiData.trendAnalysis?.length > 0 && (
+                <>
+                  <Box sx={{ mb: 1 }}><SectionHeader title="Trend Analysis" color={COLORS.neon.cyan} /></Box>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2, mb: 4 }}>
+                    {aiData.trendAnalysis.map((t, idx) => {
+                      const dirCfg = {
+                        up: { icon: 'trending_up', color: COLORS.neon.green },
+                        down: { icon: 'trending_down', color: COLORS.neon.red },
+                        stable: { icon: 'trending_flat', color: COLORS.neon.amber },
+                      };
+                      const { icon, color } = dirCfg[t.direction] || dirCfg.stable;
+                      return (
+                        <Box key={idx} sx={{ p: 2, borderRadius: `${LAYOUT.cardBorderRadius}px`, background: COLORS.bg.secondary, border: `1px solid ${hexToRgba(color, 0.2)}`, transition: 'border-color 0.2s', '&:hover': { borderColor: hexToRgba(color, 0.4) } }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                            <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: COLORS.text.muted, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{t.metric}</Typography>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                              <span className="material-symbols-outlined" style={{ fontSize: 18, color }}>{icon}</span>
+                              {t.changePercent != null && (
+                                <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color }}>
+                                  {t.changePercent > 0 ? '+' : ''}{typeof t.changePercent === 'number' ? t.changePercent.toFixed(1) : t.changePercent}%
+                                </Typography>
+                              )}
+                            </Box>
+                          </Box>
+                          <Box sx={{ display: 'flex', gap: 2, mb: 1 }}>
+                            <Box>
+                              <Typography sx={{ fontSize: '0.6rem', color: COLORS.text.muted }}>Current</Typography>
+                              <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: COLORS.text.primary }}>{t.current}</Typography>
+                            </Box>
+                            <Box>
+                              <Typography sx={{ fontSize: '0.6rem', color: COLORS.text.muted }}>Previous</Typography>
+                              <Typography sx={{ fontSize: '1rem', fontWeight: 600, color: COLORS.text.secondary }}>{t.previous}</Typography>
+                            </Box>
+                          </Box>
+                          {t.insight && (
+                            <Typography sx={{ fontSize: '0.78rem', color: COLORS.text.secondary, lineHeight: 1.5 }}>{t.insight}</Typography>
+                          )}
+                        </Box>
+                      );
+                    })}
+                  </Box>
+                </>
+              )}
+
+              {/* Market Intelligence — pains/goals themes + script gaps */}
+              {aiData.marketIntelligence && (
+                <>
+                  <Box sx={{ mb: 1 }}><SectionHeader title="Market Intelligence" color={COLORS.neon.purple} /></Box>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2, mb: 3 }}>
+                    {/* Pains themes */}
+                    {aiData.marketIntelligence.topPains?.length > 0 && (
+                      <Box sx={{ p: 2, borderRadius: `${LAYOUT.cardBorderRadius}px`, background: COLORS.bg.secondary, border: `1px solid ${hexToRgba(COLORS.neon.red, 0.15)}` }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1.5 }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 16, color: COLORS.neon.red }}>heart_broken</span>
+                          <Typography sx={{ fontSize: '0.65rem', fontWeight: 700, color: COLORS.neon.red, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Top Prospect Pains</Typography>
+                        </Box>
+                        {aiData.marketIntelligence.topPains.map((p, idx) => (
+                          <Box key={idx} sx={{ mb: 1 }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.25 }}>
+                              <Typography sx={{ fontSize: '0.78rem', color: COLORS.text.primary }}>{p.theme}</Typography>
+                              <Typography sx={{ fontSize: '0.7rem', color: COLORS.text.muted }}>{p.count ? `${p.count} mentions` : `${p.percentage}%`}</Typography>
+                            </Box>
+                            <Box sx={{ height: 4, borderRadius: 2, background: hexToRgba(COLORS.neon.red, 0.1) }}>
+                              <Box sx={{ height: '100%', borderRadius: 2, background: COLORS.neon.red, width: `${Math.min(p.percentage || (p.count ? p.count * 10 : 50), 100)}%`, transition: 'width 0.6s ease' }} />
+                            </Box>
+                          </Box>
+                        ))}
+                      </Box>
+                    )}
+                    {/* Goals themes */}
+                    {aiData.marketIntelligence.topGoals?.length > 0 && (
+                      <Box sx={{ p: 2, borderRadius: `${LAYOUT.cardBorderRadius}px`, background: COLORS.bg.secondary, border: `1px solid ${hexToRgba(COLORS.neon.green, 0.15)}` }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1.5 }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 16, color: COLORS.neon.green }}>flag</span>
+                          <Typography sx={{ fontSize: '0.65rem', fontWeight: 700, color: COLORS.neon.green, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Top Prospect Goals</Typography>
+                        </Box>
+                        {aiData.marketIntelligence.topGoals.map((g, idx) => (
+                          <Box key={idx} sx={{ mb: 1 }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.25 }}>
+                              <Typography sx={{ fontSize: '0.78rem', color: COLORS.text.primary }}>{g.theme}</Typography>
+                              <Typography sx={{ fontSize: '0.7rem', color: COLORS.text.muted }}>{g.count ? `${g.count} mentions` : `${g.percentage}%`}</Typography>
+                            </Box>
+                            <Box sx={{ height: 4, borderRadius: 2, background: hexToRgba(COLORS.neon.green, 0.1) }}>
+                              <Box sx={{ height: '100%', borderRadius: 2, background: COLORS.neon.green, width: `${Math.min(g.percentage || (g.count ? g.count * 10 : 50), 100)}%`, transition: 'width 0.6s ease' }} />
+                            </Box>
+                          </Box>
+                        ))}
+                      </Box>
+                    )}
+                  </Box>
+                  {/* Script alignment gaps */}
+                  {aiData.marketIntelligence.scriptGaps?.length > 0 && (
+                    <Box sx={{ p: 2, borderRadius: `${LAYOUT.cardBorderRadius}px`, background: hexToRgba(COLORS.neon.amber, 0.04), border: `1px solid ${hexToRgba(COLORS.neon.amber, 0.2)}`, mb: 4 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1.5 }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 16, color: COLORS.neon.amber }}>warning</span>
+                        <Typography sx={{ fontSize: '0.65rem', fontWeight: 700, color: COLORS.neon.amber, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Script Alignment Gaps</Typography>
+                      </Box>
+                      {aiData.marketIntelligence.scriptGaps.map((gap, idx) => (
+                        <Box key={idx} sx={{ mb: idx < aiData.marketIntelligence.scriptGaps.length - 1 ? 1.5 : 0 }}>
+                          <Typography sx={{ fontSize: '0.82rem', color: COLORS.text.primary, fontWeight: 600, mb: 0.25 }}>{gap.finding}</Typography>
+                          <Typography sx={{ fontSize: '0.75rem', color: COLORS.neon.cyan, fontStyle: 'italic' }}>{gap.recommendation}</Typography>
+                        </Box>
+                      ))}
+                    </Box>
+                  )}
+                </>
+              )}
+
+              {/* Priority Actions — show ALL priorities */}
               {aiData.priorityActions && aiData.priorityActions.length > 0 && (
                 <>
-                  <Box sx={{ mb: 1 }}><SectionHeader title="Top Priority Actions" color={COLORS.neon.red} /></Box>
+                  <Box sx={{ mb: 1 }}><SectionHeader title="Priority Actions" color={COLORS.neon.red} /></Box>
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mb: 4 }}>
                     {aiData.priorityActions
-                      .filter(i => i.priority === 'high')
                       .map((i, idx) => <TeamInsightCard key={idx} insight={i} />)}
+                  </Box>
+                </>
+              )}
+
+              {/* Closer Coaching — Insight+ only */}
+              {!isBasic && aiData.closerCoaching?.length > 0 && (
+                <>
+                  <Box sx={{ mb: 1 }}><SectionHeader title="Closer Coaching" color={COLORS.neon.amber} /></Box>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2, mb: 4 }}>
+                    {aiData.closerCoaching.map((c, idx) => {
+                      const statusCfg = {
+                        strong: { color: COLORS.neon.green, icon: 'check_circle' },
+                        improving: { color: COLORS.neon.cyan, icon: 'trending_up' },
+                        declining: { color: COLORS.neon.red, icon: 'trending_down' },
+                        'needs-coaching': { color: COLORS.neon.amber, icon: 'school' },
+                      };
+                      const { color, icon } = statusCfg[c.status] || statusCfg['needs-coaching'];
+                      return (
+                        <Box key={c.closerId || idx} sx={{ p: 2, borderRadius: `${LAYOUT.cardBorderRadius}px`, background: COLORS.bg.secondary, border: `1px solid ${hexToRgba(color, 0.2)}`, transition: 'border-color 0.2s', '&:hover': { borderColor: hexToRgba(color, 0.4) } }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                            <span className="material-symbols-outlined" style={{ fontSize: 18, color }}>{icon}</span>
+                            <Typography sx={{ fontSize: '0.9rem', fontWeight: 600, color: COLORS.text.primary, flex: 1 }}>{c.name}</Typography>
+                            <Box sx={{ px: 0.75, py: 0.25, borderRadius: 1, background: hexToRgba(color, 0.1), border: `1px solid ${hexToRgba(color, 0.3)}` }}>
+                              <Typography sx={{ fontSize: '0.5rem', fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{c.status}</Typography>
+                            </Box>
+                          </Box>
+                          {c.keyFinding && (
+                            <Typography sx={{ fontSize: '0.78rem', color: COLORS.text.secondary, mb: 0.75, lineHeight: 1.5 }}>{c.keyFinding}</Typography>
+                          )}
+                          {c.recommendation && (
+                            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5 }}>
+                              <span className="material-symbols-outlined" style={{ fontSize: 14, color: COLORS.neon.cyan, marginTop: 2 }}>arrow_forward</span>
+                              <Typography sx={{ fontSize: '0.75rem', color: COLORS.neon.cyan, fontStyle: 'italic', lineHeight: 1.4 }}>{c.recommendation}</Typography>
+                            </Box>
+                          )}
+                        </Box>
+                      );
+                    })}
                   </Box>
                 </>
               )}

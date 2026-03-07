@@ -319,7 +319,7 @@ function m(label, value, format, glowColor) {
 export function computePageData(section, rawData, filters) {
   if (!rawData || !rawData.calls) return null;
 
-  const { dateStart, dateEnd, closerId, granularity: rawGranularity, objectionType } = filters;
+  const { dateStart, dateEnd, closerId, granularity: rawGranularity, objectionType, riskCategory } = filters;
 
   // Auto-select granularity based on date range span if set to 'auto' or default
   const granularity = autoGranularity(rawGranularity, dateStart, dateEnd);
@@ -357,7 +357,7 @@ export function computePageData(section, rawData, filters) {
       return result;
     }
     case 'projections': return computeProjections(calls, closeCycles, rawData, filters);
-    case 'violations': return computeViolations(calls, granularity, prev);
+    case 'violations': return computeViolations(calls, granularity, prev, riskCategory);
     case 'adherence': return computeAdherence(calls, granularity, prev);
     case 'market-insight': return computeMarketInsight(rawData);
     case 'closer-scoreboard': return computeCloserScoreboard(calls, objections, closeCycles, granularity, prev);
@@ -1953,12 +1953,17 @@ function computeProjections(calls, closeCycles, rawData, filters) {
 // VIOLATIONS PAGE
 // ─────────────────────────────────────────────────────────────
 
-function computeViolations(calls, granularity, prev) {
+function computeViolations(calls, granularity, prev, riskCategoryFilter) {
   const held = calls.filter(isShow);
+
+  // Parse riskCategory filter into an array for matching
+  const rcFilterList = riskCategoryFilter
+    ? (typeof riskCategoryFilter === 'string' ? riskCategoryFilter.split(',').map(s => s.trim().toLowerCase()) : riskCategoryFilter.map(s => s.toLowerCase()))
+    : [];
 
   // Parse key_moments for risk flags
   // key_moments is a JSON string or plain text from AI
-  const riskFlags = [];
+  const allRiskFlags = [];
   // Risk categories from shared config (single source of truth)
   const riskCategories = RISK_CATEGORIES;
 
@@ -1971,7 +1976,7 @@ function computeViolations(calls, granularity, prev) {
       for (const flag of cfFlags) {
         const category = flag.category;
         if (category && riskCategories.some(rc => category.toLowerCase().includes(rc.toLowerCase()))) {
-          riskFlags.push({
+          allRiskFlags.push({
             date: c.appointmentDate,
             closer: c.closerName,
             closerId: c.closerId,
@@ -2001,7 +2006,7 @@ function computeViolations(calls, granularity, prev) {
     for (const moment of moments) {
       const category = moment.risk_category || moment.category;
       if (category && riskCategories.some(rc => category.toLowerCase().includes(rc.toLowerCase()))) {
-        riskFlags.push({
+        allRiskFlags.push({
           date: c.appointmentDate,
           closer: c.closerName,
           closerId: c.closerId,
@@ -2016,6 +2021,11 @@ function computeViolations(calls, granularity, prev) {
       }
     }
   }
+
+  // Apply risk category filter — filters ALL page data (scorecards, charts, table)
+  const riskFlags = rcFilterList.length > 0
+    ? allRiskFlags.filter(f => rcFilterList.some(rc => f.riskCategory.toLowerCase().includes(rc)))
+    : allRiskFlags;
 
   const uniqueCallsWithRisk = new Set(riskFlags.map(f => f.date + f.closerId)).size;
   const catCounts = {};

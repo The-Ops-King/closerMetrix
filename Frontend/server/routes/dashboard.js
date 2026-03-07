@@ -43,10 +43,14 @@ const { getRawData } = require('../db/queries/rawData');
 const { getSettingsData } = require('../db/queries/settings');
 const marketPulse = require('../services/marketPulse');
 const insightEngine = require('../services/insightEngine');
-const { getLatestInsight, getLatestInsightForDate, getCompareInsightsForDate, insertInsight } = require('../db/queries/insightLog');
+const { getLatestInsight, getLatestInsightForDate, getCompareInsightsForDate, insertInsight, getInsightForToday, countRecentOnDemand } = require('../db/queries/insightLog');
 const { v4: uuidv4 } = require('uuid');
 
 const router = express.Router();
+
+// Bump this version when AI prompts or data formatting change to invalidate cached insights.
+// Old cached insights keyed with a different version will be bypassed automatically.
+const DATA_ANALYSIS_PROMPT_VERSION = 'v2';
 
 // All dashboard routes require client authentication
 router.use(clientIsolation);
@@ -413,21 +417,52 @@ router.get('/insights', async (req, res) => {
       });
     }
 
-    const insight = await getLatestInsight(req.clientId, section);
+    // Version the section key so prompt/format changes invalidate old cached insights
+    const versionedSection = `${section}-${DATA_ANALYSIS_PROMPT_VERSION}`;
 
-    if (!insight) {
+    // Check for a fresh insight generated today first
+    const todayInsight = await getInsightForToday(req.clientId, versionedSection);
+
+    // Get remaining on-demand refreshes for rate limit info
+    let remainingRefreshes = 10;
+    try {
+      const recentCount = await countRecentOnDemand(req.clientId);
+      remainingRefreshes = Math.max(0, 10 - recentCount);
+    } catch (e) {
+      // Rate limit check failed — default to allowing refreshes
+    }
+
+    if (todayInsight) {
       return res.json({
         success: true,
-        data: { text: null, generatedAt: null },
+        data: {
+          text: todayInsight.text,
+          generatedAt: todayInsight.generatedAt,
+          fresh: true,
+          remainingRefreshes,
+        },
       });
     }
 
+    // No insight today — fall back to most recent ever (stale)
+    const staleInsight = await getLatestInsight(req.clientId, versionedSection);
+
+    if (staleInsight) {
+      return res.json({
+        success: true,
+        data: {
+          text: staleInsight.text,
+          generatedAt: staleInsight.generatedAt,
+          fresh: false,
+          remainingRefreshes,
+        },
+      });
+    }
+
+    // Nothing exists at all
     res.json({
       success: true,
-      data: {
-        text: insight.text,
-        generatedAt: insight.generatedAt,
-      },
+      data: { text: null, generatedAt: null, fresh: false, remainingRefreshes },
     });
   } catch (err) {
     // Degrade gracefully — return empty rather than 500.
@@ -440,7 +475,7 @@ router.get('/insights', async (req, res) => {
     });
     res.json({
       success: true,
-      data: { text: null, generatedAt: null },
+      data: { text: null, generatedAt: null, fresh: false, remainingRefreshes: 10 },
     });
   }
 });
@@ -474,6 +509,30 @@ router.post('/insights', async (req, res) => {
       });
     }
 
+    // Version the section key for cache storage (prompt template key stays unversioned for insightEngine)
+    const versionedSection = `${section}-${DATA_ANALYSIS_PROMPT_VERSION}`;
+
+    // Server-side rate limit for manual refreshes (force: true)
+    const isManual = !!force;
+    let remainingRefreshes = 10;
+
+    if (isManual) {
+      try {
+        const recentCount = await countRecentOnDemand(req.clientId);
+        remainingRefreshes = Math.max(0, 10 - recentCount);
+        if (remainingRefreshes <= 0) {
+          return res.status(429).json({
+            success: false,
+            error: 'Rate limit reached — max 10 manual refreshes per hour',
+            remainingRefreshes: 0,
+          });
+        }
+      } catch (e) {
+        // Rate limit check failed — allow the request
+        logger.warn('Rate limit check failed, allowing request', { error: e.message });
+      }
+    }
+
     // Fetch KPI targets for context
     let kpiTargets = null;
     try {
@@ -492,12 +551,37 @@ router.post('/insights', async (req, res) => {
       req.clientId,
       section,
       metrics,
-      { force: !!force, kpiTargets, aiProvider: req.aiProvider }
+      { force: isManual, kpiTargets, aiProvider: req.aiProvider }
     );
+
+    // Persist the generated insight to InsightLog so GET finds it today
+    const generationType = isManual ? 'on-demand' : 'daily';
+    try {
+      await insertInsight({
+        insightId: uuidv4(),
+        clientId: req.clientId,
+        section: versionedSection,
+        insightText: result.text,
+        metricsSnapshot: JSON.stringify(metrics),
+        generationType,
+      });
+    } catch (e) {
+      // Persistence failed — log but still return the insight to the user
+      logger.warn('Failed to persist insight to InsightLog', {
+        error: e.message,
+        clientId: req.clientId,
+        section,
+      });
+    }
+
+    // Update remaining count after successful on-demand generation
+    if (isManual) {
+      remainingRefreshes = Math.max(0, remainingRefreshes - 1);
+    }
 
     res.json({
       success: true,
-      data: result,
+      data: { ...result, remainingRefreshes },
     });
   } catch (err) {
     logger.error('Insight endpoint error', {
@@ -526,26 +610,28 @@ router.get('/data-analysis-insights', async (req, res) => {
 
     const today = new Date().toISOString().split('T')[0];
 
-    // Compare tab: fetch all compare rows for today
+    // Compare tab: fetch all compare rows for today (versioned)
     if (tab === 'compare') {
       const rows = await getCompareInsightsForDate(req.clientId, today);
-      if (rows.length === 0) {
+      // Only use rows that match current prompt version
+      const versionedRows = rows.filter(r => r.section?.includes(DATA_ANALYSIS_PROMPT_VERSION));
+      if (versionedRows.length === 0) {
         return res.json({ success: true, data: null });
       }
       // Parse each row's text as JSON
-      const comparisons = rows.map(r => {
+      const comparisons = versionedRows.map(r => {
         try { return JSON.parse(r.text); }
         catch { return null; }
       }).filter(Boolean);
 
       return res.json({
         success: true,
-        data: { comparisons, generatedAt: rows[0].generatedAt },
+        data: { comparisons, generatedAt: versionedRows[0].generatedAt },
       });
     }
 
-    // Single tab: overview, team, individual
-    const section = `data-analysis-${tab}`;
+    // Single tab: overview, team, individual (versioned section key)
+    const section = `data-analysis-${tab}-${DATA_ANALYSIS_PROMPT_VERSION}`;
     const insight = await getLatestInsightForDate(req.clientId, section, today);
 
     if (!insight) {
@@ -601,7 +687,7 @@ router.post('/data-analysis-insights', async (req, res) => {
 
       // If all closers already have comparisons, return cached data
       const allCovered = closerList.length > 0 && closerList.every(c => {
-        const key = `data-analysis-compare-${c.closerId || c.name}`;
+        const key = `data-analysis-compare-${c.closerId || c.name}-${DATA_ANALYSIS_PROMPT_VERSION}`;
         return existingBySection[key];
       });
 
@@ -617,7 +703,7 @@ router.post('/data-analysis-insights', async (req, res) => {
       const comparisons = [];
 
       for (const closer of closerList) {
-        const sectionKey = `data-analysis-compare-${closer.closerId || closer.name}`;
+        const sectionKey = `data-analysis-compare-${closer.closerId || closer.name}-${DATA_ANALYSIS_PROMPT_VERSION}`;
 
         // Reuse existing if available
         if (existingBySection[sectionKey]) {
@@ -660,8 +746,8 @@ router.post('/data-analysis-insights', async (req, res) => {
       });
     }
 
-    // ── Single tab: overview, team, individual ──
-    const section = `data-analysis-${tab}`;
+    // ── Single tab: overview, team, individual (versioned) ──
+    const section = `data-analysis-${tab}-${DATA_ANALYSIS_PROMPT_VERSION}`;
 
     // Double-check BQ (race condition guard)
     const existing = await getLatestInsightForDate(req.clientId, section, today);
@@ -677,6 +763,63 @@ router.post('/data-analysis-insights', async (req, res) => {
 
     // Build metrics with dateRange
     const enrichedMetrics = { ...metrics, dateRange: dateRange || 'the selected period' };
+
+    // ── Overview tab: enrich with market intelligence (pains/goals clustering + script alignment) ──
+    // Server-side data gathering — don't trust client-sent pains/goals
+    if (tab === 'overview') {
+      // Fetch raw pains/goals directly from BigQuery (server-side, not client-sent)
+      let rawPains = [];
+      let rawGoals = [];
+      try {
+        const pgRows = await bq.runQuery(
+          `SELECT pains, goals FROM ${bq.table('Calls')}
+           WHERE client_id = @clientId AND (pains IS NOT NULL OR goals IS NOT NULL)
+           LIMIT 500`,
+          { clientId: req.clientId }
+        );
+        for (const row of pgRows) {
+          if (row.pains && row.pains.trim()) rawPains.push(row.pains.trim());
+          if (row.goals && row.goals.trim()) rawGoals.push(row.goals.trim());
+        }
+      } catch (err) {
+        logger.warn('Failed to fetch pains/goals from BQ', { error: err.message, clientId: req.clientId });
+      }
+
+      // Cluster pains and goals in parallel via marketPulse (non-fatal)
+      const [painsThemes, goalsThemes] = await Promise.all([
+        (rawPains.length > 0 && marketPulse.isAvailable())
+          ? marketPulse.condenseTexts(req.clientId, 'pains', rawPains.slice(0, 500), { aiProvider: req.aiProvider }).catch(err => {
+              logger.warn('Market pulse pains clustering failed', { error: err.message, clientId: req.clientId });
+              return null;
+            })
+          : Promise.resolve(null),
+        (rawGoals.length > 0 && marketPulse.isAvailable())
+          ? marketPulse.condenseTexts(req.clientId, 'goals', rawGoals.slice(0, 500), { aiProvider: req.aiProvider }).catch(err => {
+              logger.warn('Market pulse goals clustering failed', { error: err.message, clientId: req.clientId });
+              return null;
+            })
+          : Promise.resolve(null),
+      ]);
+
+      if (painsThemes) enrichedMetrics.painsThemes = painsThemes;
+      if (goalsThemes) enrichedMetrics.goalsThemes = goalsThemes;
+
+      // Script alignment — compare themes against script template if available (non-fatal)
+      try {
+        const settings = await getSettingsData(req.clientId);
+        const scriptTemplate = settings?.script_template;
+        if (scriptTemplate && marketPulse.isAvailable()) {
+          const [painsAlignment, goalsAlignment] = await Promise.all([
+            painsThemes ? marketPulse.compareWithScript(req.clientId, 'pains', painsThemes, scriptTemplate, req.aiProvider).catch(() => null) : null,
+            goalsThemes ? marketPulse.compareWithScript(req.clientId, 'goals', goalsThemes, scriptTemplate, req.aiProvider).catch(() => null) : null,
+          ]);
+          if (painsAlignment) enrichedMetrics.painsScriptAlignment = painsAlignment;
+          if (goalsAlignment) enrichedMetrics.goalsScriptAlignment = goalsAlignment;
+        }
+      } catch (err) {
+        logger.warn('Script alignment enrichment failed', { error: err.message, clientId: req.clientId });
+      }
+    }
 
     const result = await insightEngine.generateInsight(
       req.clientId,

@@ -28,30 +28,8 @@ import { apiGet, apiPost } from '../utils/api';
 const dailyCache = new Map();
 const onDemandCache = new Map();
 
-// ── Rate limiting: 10 on-demand analyses per hour (across all sections) ──
-const RATE_LIMIT = 10;
-const RATE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
-
-function getRateLimitState() {
-  try {
-    const raw = localStorage.getItem('insight_rate_limit');
-    if (!raw) return { timestamps: [] };
-    const state = JSON.parse(raw);
-    const cutoff = Date.now() - RATE_WINDOW_MS;
-    state.timestamps = (state.timestamps || []).filter(t => t > cutoff);
-    return state;
-  } catch { return { timestamps: [] }; }
-}
-
-function recordUsage() {
-  const state = getRateLimitState();
-  state.timestamps.push(Date.now());
-  localStorage.setItem('insight_rate_limit', JSON.stringify(state));
-}
-
-function getRemainingAnalyses() {
-  return RATE_LIMIT - getRateLimitState().timestamps.length;
-}
+// Rate limiting is now server-side (10 on-demand per hour per client).
+// remainingRefreshes is returned by both GET and POST /insights.
 
 // ── Value formatters — turn raw values into display strings ──────────
 
@@ -177,7 +155,7 @@ export function useInsight(section, pageData, displayMetrics) {
   const [isLoading, setIsLoading] = useState(false);
   const [isOnDemandLoading, setIsOnDemandLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [remainingAnalyses, setRemainingAnalyses] = useState(() => getRemainingAnalyses());
+  const [remainingAnalyses, setRemainingAnalyses] = useState(10);
 
   // Track whether we've fetched the daily insight for this section
   const fetchedSectionRef = useRef('');
@@ -268,25 +246,31 @@ export function useInsight(section, pageData, displayMetrics) {
         );
 
         if (!cancelled && res?.success && res?.data?.text) {
-          const { text: insightText, generatedAt: at } = res.data;
-
-          // Check if the daily insight is stale (older than 24 hours).
-          // If so, show it temporarily but mark as needing refresh.
-          const isStale = at && (Date.now() - new Date(at).getTime()) > 24 * 60 * 60 * 1000;
+          const { text: insightText, generatedAt: at, fresh, remainingRefreshes } = res.data;
 
           setText(insightText);
           setGeneratedAt(at);
           fetchedSectionRef.current = section;
           dailyCache.set(section, { text: insightText, generatedAt: at });
 
-          if (isStale) {
-            // Trigger auto-refresh — show old text while generating fresh one
+          // Update rate limit from server
+          if (typeof remainingRefreshes === 'number') {
+            setRemainingAnalyses(remainingRefreshes);
+          }
+
+          if (!fresh) {
+            // Stale insight (not generated today) — trigger auto-refresh
             dailyEmptyRef.current = true;
           }
         } else if (!cancelled && res?.success && !res?.data?.text) {
-          // No daily insight available yet — mark empty so auto-fallback triggers
+          // No insight available at all — mark empty so auto-fallback triggers
           fetchedSectionRef.current = section;
           dailyEmptyRef.current = true;
+
+          // Update rate limit from server
+          if (typeof res?.data?.remainingRefreshes === 'number') {
+            setRemainingAnalyses(res.data.remainingRefreshes);
+          }
         }
       } catch (err) {
         if (!cancelled) {
@@ -342,6 +326,11 @@ export function useInsight(section, pageData, displayMetrics) {
           setText(insightText);
           setGeneratedAt(null); // Fresh auto-generated — no stored timestamp
           onDemandCache.set(cacheKey, insightText);
+
+          // Update rate limit from server
+          if (typeof res.data.remainingRefreshes === 'number') {
+            setRemainingAnalyses(res.data.remainingRefreshes);
+          }
         }
       } catch (err) {
         if (!cancelled) setError(err);
@@ -359,15 +348,12 @@ export function useInsight(section, pageData, displayMetrics) {
   // The whole point of clicking the button is to get a NEW analysis.
   const generateWithFilters = useCallback(async () => {
     if (!metrics || !section) return;
-    if (getRemainingAnalyses() <= 0) return;
+    if (remainingAnalyses <= 0) return;
 
     setIsOnDemandLoading(true);
     setError(null);
 
     try {
-      recordUsage();
-      setRemainingAnalyses(getRemainingAnalyses());
-
       const res = await apiPost(
         '/dashboard/insights',
         { section, metrics, force: true },
@@ -382,13 +368,27 @@ export function useInsight(section, pageData, displayMetrics) {
         const fp = fingerprint(metrics);
         const cacheKey = `${section}:${fp}`;
         onDemandCache.set(cacheKey, insightText);
+
+        // Update rate limit from server
+        if (typeof res.data.remainingRefreshes === 'number') {
+          setRemainingAnalyses(res.data.remainingRefreshes);
+        }
+      }
+
+      // Handle 429 rate limit response
+      if (!res?.success && res?.remainingRefreshes === 0) {
+        setRemainingAnalyses(0);
       }
     } catch (err) {
+      // Check if it's a 429 rate limit error
+      if (err?.response?.status === 429) {
+        setRemainingAnalyses(0);
+      }
       setError(err);
     } finally {
       setIsOnDemandLoading(false);
     }
-  }, [section, metrics, authOptions]);
+  }, [section, metrics, authOptions, remainingAnalyses]);
 
   return { text, generatedAt, isLoading, isOnDemandLoading, error, generateWithFilters, remainingAnalyses };
 }

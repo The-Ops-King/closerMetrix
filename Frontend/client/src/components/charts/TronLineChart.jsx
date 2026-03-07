@@ -94,12 +94,21 @@ export default function TronLineChart({
     }));
   }, [data, series, showArea, stacked, yAxisFormat]);
 
+  // Build a stable key that forces remount when series structure changes
+  // (e.g., top 3 objection types shift when filters change)
+  const chartKey = useMemo(() => {
+    const seriesKeys = series.map((s) => s.key).join(',');
+    const refKeys = referenceLines.filter((r) => r.value != null).map((r) => r.value).join('-');
+    const dataLen = data.length;
+    return `lc-${seriesKeys}-${dataLen}-${refKeys}`;
+  }, [series, referenceLines, data.length]);
+
   // Don't render anything if there's no data — the parent ChartWrapper handles empty state
   if (!data.length || !series.length) return null;
 
   return (
     <LineChart
-      key={`lc-${referenceLines.filter((r) => r.value != null).map((r) => r.value).join('-')}`}
+      key={chartKey}
       {...(height != null ? { height } : {})}
       series={chartSeries}
       xAxis={[
