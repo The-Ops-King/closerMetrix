@@ -73,11 +73,8 @@ const DEFAULT_SETTINGS = {
   offers: [],
   notifications: {
     weekly_enabled: true,
-    weekly_day: 'monday',
-    weekly_time: '09:00',
     monthly_enabled: false,
     monthly_day: 1,              // day of month (1-28)
-    monthly_time: '09:00',
     include_sections: ['overview', 'financial', 'attendance'],
     alerts: [],
     onboarding_watches: [],
@@ -1180,13 +1177,13 @@ function NotificationsSection({ notifications, closers, onSave }) {
       </Typography>
 
       <Box sx={reportCardStyle(local.weekly_enabled)} mb={2}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: local.weekly_enabled ? 2 : 0 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box>
             <Typography sx={{ color: COLORS.text.primary, fontSize: '0.95rem', fontWeight: 600 }}>
               Weekly Report
             </Typography>
             <Typography sx={{ color: COLORS.text.muted, fontSize: '0.75rem' }}>
-              This week vs last week comparison
+              Sent every Monday at 9:00 AM EST — this week vs last week
             </Typography>
           </Box>
           <Switch
@@ -1195,30 +1192,6 @@ function NotificationsSection({ notifications, closers, onSave }) {
             sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: COLORS.neon.purple }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: COLORS.neon.purple } }}
           />
         </Box>
-        {local.weekly_enabled && (
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
-            <FormControl size="small" fullWidth>
-              <InputLabel sx={{ color: COLORS.text.muted, fontSize: '0.8rem' }}>Send On</InputLabel>
-              <Select
-                value={local.weekly_day || 'monday'}
-                onChange={(e) => setLocal((p) => ({ ...p, weekly_day: e.target.value }))}
-                label="Send On"
-                sx={selectStyle}
-              >
-                {DAYS_OF_WEEK.map((d) => (
-                  <MenuItem key={d} value={d}>{d.charAt(0).toUpperCase() + d.slice(1)}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <TronTextField
-              label="Time"
-              type="time"
-              value={local.weekly_time || '09:00'}
-              onChange={(e) => setLocal((p) => ({ ...p, weekly_time: e.target.value }))}
-              fullWidth
-            />
-          </Box>
-        )}
       </Box>
 
       {/* Monthly Report */}
@@ -1239,8 +1212,8 @@ function NotificationsSection({ notifications, closers, onSave }) {
           />
         </Box>
         {local.monthly_enabled && (
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
-            <FormControl size="small" fullWidth>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr' }, gap: 2 }}>
+            <FormControl size="small" sx={{ maxWidth: 200 }}>
               <InputLabel sx={{ color: COLORS.text.muted, fontSize: '0.8rem' }}>Day of Month</InputLabel>
               <Select
                 value={local.monthly_day || 1}
@@ -1253,13 +1226,6 @@ function NotificationsSection({ notifications, closers, onSave }) {
                 ))}
               </Select>
             </FormControl>
-            <TronTextField
-              label="Time"
-              type="time"
-              value={local.monthly_time || '09:00'}
-              onChange={(e) => setLocal((p) => ({ ...p, monthly_time: e.target.value }))}
-              fullWidth
-            />
           </Box>
         )}
       </Box>
