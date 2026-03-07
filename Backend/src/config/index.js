@@ -82,6 +82,17 @@ const config = {
     serviceUrl: process.env.CLOUD_TASKS_SERVICE_URL || 'http://localhost:8080',
   },
 
+  /** Email notifications (weekly/monthly reports) */
+  email: {
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: parseInt(process.env.SMTP_PORT, 10) || 587,
+    secure: process.env.SMTP_SECURE === 'true',
+    user: process.env.SMTP_USER || '',
+    pass: process.env.SMTP_PASS || '',
+    from: process.env.EMAIL_FROM || 'CloserMetrix <reports@closermetrix.com>',
+    testRecipient: process.env.EMAIL_TEST_RECIPIENT || 'jt@jtylerray.com',
+  },
+
   /** Alerting channels */
   alerts: {
     slackWebhook: process.env.ALERT_SLACK_WEBHOOK || '',
