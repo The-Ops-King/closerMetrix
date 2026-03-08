@@ -110,11 +110,8 @@ const CLIENT_FIELDS = [
   { key: 'plan_tier', label: 'Plan Tier', type: 'tier', group: 'Basic' },
   { key: 'status', label: 'Status', group: 'Basic' },
   // Offer
-  { key: 'offer_name', label: 'Offer Name', required: true, group: 'Offer' },
-  { key: 'offer_price', label: 'Offer Price', type: 'number', required: true, group: 'Offer' },
   { key: 'offer_description', label: 'Offer Description', multiline: true, group: 'Offer' },
   // Config
-  { key: 'filter_word', label: 'Filter Words', required: true, group: 'Config' },
   { key: 'calendar_source', label: 'Calendar Source', group: 'Config' },
   { key: 'transcript_provider', label: 'Transcript Provider', group: 'Config' },
   // AI Prompts
@@ -435,8 +432,8 @@ function ClientsTab({ selectedClientId, executeRequest, onClientCreated }) {
 
   // Create form
   const [createForm, setCreateForm] = useState({
-    company_name: '', primary_contact_email: '', offer_name: '', offer_price: '',
-    filter_word: '', plan_tier: 'basic', timezone: 'America/New_York',
+    company_name: '', primary_contact_email: '',
+    plan_tier: 'basic', timezone: 'America/New_York',
     name: '', primary_contact_phone: '', offer_description: '',
     calendar_source: '', transcript_provider: '',
   });
@@ -514,13 +511,10 @@ function ClientsTab({ selectedClientId, executeRequest, onClientCreated }) {
   const handleCreate = async () => {
     setCreating(true);
     try {
-      await executeRequest('POST', '/backend/clients', {
-        ...createForm,
-        offer_price: createForm.offer_price ? Number(createForm.offer_price) : undefined,
-      });
+      await executeRequest('POST', '/backend/clients', createForm);
       setCreateForm({
-        company_name: '', primary_contact_email: '', offer_name: '', offer_price: '',
-        filter_word: '', plan_tier: 'basic', timezone: 'America/New_York',
+        company_name: '', primary_contact_email: '',
+        plan_tier: 'basic', timezone: 'America/New_York',
         name: '', primary_contact_phone: '', offer_description: '',
         calendar_source: '', transcript_provider: '',
       });
@@ -561,9 +555,6 @@ function ClientsTab({ selectedClientId, executeRequest, onClientCreated }) {
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 2 }}>
           <TextField size="small" label="Company Name *" value={createForm.company_name} onChange={updateCreateField('company_name')} sx={{ minWidth: 200, ...inputSx }} />
           <TextField size="small" label="Contact Email *" value={createForm.primary_contact_email} onChange={updateCreateField('primary_contact_email')} sx={{ minWidth: 220, ...inputSx }} />
-          <TextField size="small" label="Offer Name *" value={createForm.offer_name} onChange={updateCreateField('offer_name')} sx={{ minWidth: 180, ...inputSx }} />
-          <TextField size="small" label="Offer Price *" type="number" value={createForm.offer_price} onChange={updateCreateField('offer_price')} sx={{ minWidth: 120, ...inputSx }} />
-          <TextField size="small" label="Filter Word *" value={createForm.filter_word} onChange={updateCreateField('filter_word')} sx={{ minWidth: 140, ...inputSx }} />
           <FormControl size="small" sx={{ minWidth: 130 }}>
             <InputLabel sx={{ color: COLORS.text.secondary }}>Tier *</InputLabel>
             <Select value={createForm.plan_tier} onChange={updateCreateField('plan_tier')} label="Tier *">
@@ -585,7 +576,7 @@ function ClientsTab({ selectedClientId, executeRequest, onClientCreated }) {
           variant="contained"
           startIcon={creating ? <CircularProgress size={16} /> : <SendIcon />}
           onClick={handleCreate}
-          disabled={creating || !createForm.company_name || !createForm.primary_contact_email || !createForm.offer_name || !createForm.filter_word}
+          disabled={creating || !createForm.company_name || !createForm.primary_contact_email}
           sx={{ fontWeight: 600, textTransform: 'none', px: 3 }}
         >
           Create Client

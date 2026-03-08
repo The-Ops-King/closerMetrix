@@ -147,14 +147,16 @@ async function validateToken(tokenId) {
       logger.error('Failed to update last_accessed_at', { error: err.message });
     });
 
-    // Parse kpi_targets and ai_provider from settings_json
+    // Parse kpi_targets, ai_provider, and call_sources from settings_json
     let kpiTargets = null;
     let aiProvider = 'claude';
+    let callSources = [];
     if (token.settings_json) {
       try {
         const parsed = JSON.parse(token.settings_json);
         kpiTargets = parsed.kpi_targets || null;
         aiProvider = parsed.ai_provider || 'claude';
+        callSources = parsed.call_sources || [];
       } catch {
         // Ignore parse errors
       }
@@ -167,6 +169,7 @@ async function validateToken(tokenId) {
       closers: closerRows.map((r) => ({ closer_id: r.closer_id, name: r.name, status: r.status })),
       kpi_targets: kpiTargets,
       ai_provider: aiProvider,
+      call_sources: callSources,
     };
   } catch (err) {
     logger.error('Token validation failed', { error: err.message, token: tokenId.slice(0, 8) });
@@ -357,7 +360,7 @@ async function getClientById(clientId) {
 
   try {
     const rows = await bq.runAdminQuery(
-      `SELECT client_id, company_name, plan_tier
+      `SELECT client_id, company_name, plan_tier, settings_json
        FROM ${bq.table('Clients')}
        WHERE client_id = @clientId`,
       { clientId }
@@ -379,11 +382,21 @@ async function getClientById(clientId) {
       { clientId }
     );
 
+    // Parse call_sources from settings_json
+    let callSources = [];
+    if (client.settings_json) {
+      try {
+        const parsed = JSON.parse(client.settings_json);
+        callSources = parsed.call_sources || [];
+      } catch { /* ignore parse errors */ }
+    }
+
     return {
       client_id: client.client_id,
       company_name: client.company_name,
       plan_tier: client.plan_tier,
       closers: closerRows.map((r) => ({ closer_id: r.closer_id, name: r.name, status: r.status })),
+      call_sources: callSources,
     };
   } catch (err) {
     logger.error('getClientById failed', { error: err.message, clientId });

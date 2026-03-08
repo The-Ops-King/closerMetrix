@@ -346,6 +346,7 @@ class CallStateManager {
       attendance: null,
       call_outcome: null,
       source: 'Google Calendar',
+      call_source: event.matchedSource || null,
       transcript_status: 'Pending',
       transcript_provider: closer.transcript_provider || null,
       transcript_link: null,

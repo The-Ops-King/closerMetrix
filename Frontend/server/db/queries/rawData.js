@@ -111,7 +111,8 @@ async function queryBigQuery(clientId) {
       calls_lost_reason,
       calls_product_purchased,
       calls_prospect_email,
-      calls_prospect_name
+      calls_prospect_name,
+      calls_call_source
     FROM ${callsView}
     WHERE clients_client_id = @clientId
     ORDER BY calls_appointment_date DESC`;
@@ -231,6 +232,7 @@ async function queryBigQuery(clientId) {
       productPurchased: row.calls_product_purchased || '',
       prospectEmail: row.calls_prospect_email || '',
       prospectName: row.calls_prospect_name || '',
+      callSource: row.calls_call_source || '',
     };
   });
 

@@ -25,6 +25,7 @@ import DateRangeFilter from '../filters/DateRangeFilter';
 import CloserFilter from '../filters/CloserFilter';
 import ObjectionTypeFilter from '../filters/ObjectionTypeFilter';
 import RiskCategoryFilter from '../filters/RiskCategoryFilter';
+import CallSourceFilter from '../filters/CallSourceFilter';
 
 /**
  * Convert an array of row objects to a CSV string.
@@ -154,6 +155,7 @@ export default function TopBar({ companyName, tier, onMenuClick }) {
         {/* Market Insight uses auto last-30-days; Settings has no data filters */}
         {!isMarketInsightPage && !isSettingsPage && !isDataAnalysisPage && (
           <>
+            <CallSourceFilter />
             {meetsMinTier(tier, 'insight') ? (
               <CloserFilter />
             ) : (

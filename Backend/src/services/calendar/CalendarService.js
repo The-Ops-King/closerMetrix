@@ -198,13 +198,31 @@ class CalendarService {
     // We still need these events to flow through to CallStateManager so
     // existing call records get properly canceled.
     const isCancelled = event.eventType === 'cancelled' || event.status === 'cancelled';
-    if (!isCancelled && !this.isClientSalesCall(event.title, client.filter_word)) {
+    // Parse call_sources from settings_json if available
+    let callSources = null;
+    if (client.settings_json) {
+      try {
+        const parsed = typeof client.settings_json === 'string'
+          ? JSON.parse(client.settings_json) : client.settings_json;
+        if (parsed.call_sources && parsed.call_sources.length > 0) {
+          callSources = parsed.call_sources;
+        }
+      } catch { /* ignore parse errors, fall through to legacy filter_word */ }
+    }
+    const filterMatch = isCancelled ? true : this.isClientSalesCall(event.title, client.filter_word, callSources);
+    if (!filterMatch) {
       logger.debug('Event filtered out (not a sales call)', {
         title: event.title,
         clientId: client.client_id,
         filterWord: client.filter_word,
+        callSourcesCount: callSources?.length || 0,
       });
       return { action: 'skipped', callRecord: null };
+    }
+    // Attach matched source info to event for downstream use
+    if (filterMatch && typeof filterMatch === 'object') {
+      event.matchedSource = filterMatch.source;
+      event.matchedTrigger = filterMatch.trigger;
     }
 
     // Step 3: Identify the closer
@@ -230,8 +248,11 @@ class CalendarService {
     event.declinedAttendees = googleAdapter.getDeclinedAttendees(rawEvent);
 
     // Step 5: Hand off to CallStateManager
-    // Pass filter_word so title-based name extraction can strip filter words
-    return callStateManager.handleCalendarEvent(event, client.client_id, closer, client.filter_word);
+    // Build filter word string for name extraction — use call_sources triggers if available
+    const filterWordForExtraction = callSources && callSources.length > 0
+      ? callSources.map(s => s.trigger).filter(Boolean).join(',')
+      : client.filter_word;
+    return callStateManager.handleCalendarEvent(event, client.client_id, closer, filterWordForExtraction);
   }
 
   /**
@@ -312,20 +333,41 @@ class CalendarService {
   /**
    * Determines if a calendar event is a sales call for this client.
    *
-   * Each client has a `filter_word` field — comma-separated words.
-   * If the event title contains ANY of these words (case-insensitive), it's a match.
+   * Checks call_sources from settings_json first (paired trigger/name format),
+   * then falls back to legacy filter_word (comma-separated string).
    *
    * @param {string} eventTitle — The calendar event title
-   * @param {string} filterWords — Comma-separated filter words from client config
-   * @returns {boolean}
+   * @param {string} filterWords — Comma-separated filter words from client config (legacy)
+   * @param {Array} callSources — Array of { trigger, name } from settings_json.call_sources
+   * @returns {boolean|Object} false if no match, or { matched: true, source: 'Source Name', trigger: 'trigger word' }
    */
-  isClientSalesCall(eventTitle, filterWords) {
-    if (!filterWords || !eventTitle) return false;
+  isClientSalesCall(eventTitle, filterWords, callSources) {
+    if (!eventTitle) return false;
+
+    // New system: check call_sources first (paired trigger/name from settings)
+    if (callSources && callSources.length > 0) {
+      const title = eventTitle.toLowerCase();
+      // "*" trigger means match ALL calendar events
+      const wildcard = callSources.find(s => s.trigger.trim() === '*');
+      if (wildcard) return { matched: true, source: wildcard.name || 'All Calls', trigger: '*' };
+      for (const src of callSources) {
+        const trigger = src.trigger.trim().toLowerCase();
+        if (trigger && title.includes(trigger)) {
+          return { matched: true, source: src.name || src.trigger, trigger: src.trigger };
+        }
+      }
+      // If call_sources are configured but none matched, don't fall through to legacy
+      return false;
+    }
+
+    // Legacy fallback: comma-separated filter_word string
+    if (!filterWords) return false;
     const words = filterWords.split(',').map(w => w.trim().toLowerCase());
-    // "*" means match ALL calendar events (closer's calendar is dedicated to sales)
-    if (words.includes('*')) return true;
+    if (words.includes('*')) return { matched: true, source: 'All Calls', trigger: '*' };
     const title = eventTitle.toLowerCase();
-    return words.some(word => word && title.includes(word));
+    const matchedWord = words.find(word => word && title.includes(word));
+    if (matchedWord) return { matched: true, source: matchedWord, trigger: matchedWord };
+    return false;
   }
 
   /**

@@ -56,6 +56,7 @@ export function useMetrics(section, options = {}) {
       granularity: queryParams.granularity || 'weekly',
       objectionType: queryParams.objectionType || null,
       riskCategory: queryParams.riskCategory || null,
+      callSource: queryParams.callSource || null,
     };
 
     return computePageData(section, rawData, filters);
@@ -69,6 +70,7 @@ export function useMetrics(section, options = {}) {
     queryParams.granularity,
     queryParams.objectionType,
     queryParams.riskCategory,
+    queryParams.callSource,
   ]);
 
   // Update the cached data whenever we get a fresh computation

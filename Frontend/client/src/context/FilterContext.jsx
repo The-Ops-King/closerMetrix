@@ -35,6 +35,7 @@ export function FilterProvider({ children }) {
   const [objectionType, setObjectionType] = useState(null);
   const [granularity, setGranularity] = useState('auto');
   const [riskCategory, setRiskCategory] = useState(null);
+  const [callSource, setCallSource] = useState([]);
   const [availableObjectionTypes, setAvailableObjectionTypes] = useState([]);
 
   /**
@@ -47,6 +48,7 @@ export function FilterProvider({ children }) {
     setObjectionType(null);
     setGranularity('auto');
     setRiskCategory(null);
+    setCallSource([]);
   }, []);
 
   /**
@@ -64,8 +66,9 @@ export function FilterProvider({ children }) {
     }
     if (granularity) params.granularity = granularity;
     if (riskCategory && riskCategory.length > 0) params.riskCategory = riskCategory.join(',');
+    if (callSource.length > 0) params.callSource = callSource.join(',');
     return params;
-  }, [dateRange, closerIds, objectionType, granularity, riskCategory]);
+  }, [dateRange, closerIds, objectionType, granularity, riskCategory, callSource]);
 
   const value = {
     dateRange,
@@ -80,6 +83,8 @@ export function FilterProvider({ children }) {
     setGranularity,
     riskCategory,
     setRiskCategory,
+    callSource,
+    setCallSource,
     resetFilters,
     queryParams,
     availableObjectionTypes,
