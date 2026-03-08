@@ -95,18 +95,26 @@ function parseCloserIds(closerId) {
   return closerId.split(',').map(id => id.trim());
 }
 
-/** Filter calls by date range and optional closer(s) */
-function filterCalls(calls, dateStart, dateEnd, closerId) {
+/** Parse callSource (comma-separated string or null) into an array for filtering */
+function parseCallSources(callSource) {
+  if (!callSource) return null;
+  return callSource.split(',').map(s => s.trim());
+}
+
+/** Filter calls by date range, optional closer(s), and optional call source(s) */
+function filterCalls(calls, dateStart, dateEnd, closerId, callSource) {
   const ids = parseCloserIds(closerId);
+  const sources = parseCallSources(callSource);
   return calls.filter(c => {
     if (c.appointmentDate < dateStart || c.appointmentDate > dateEnd) return false;
     if (ids && !ids.includes(c.closerId)) return false;
+    if (sources && !sources.includes(c.callSource)) return false;
     return true;
   });
 }
 
-/** Filter objections by date range, optional closer(s), and optional objection type(s) */
-function filterObjections(objections, dateStart, dateEnd, closerId, objectionType) {
+/** Filter objections by date range, optional closer(s), optional objection type(s), and optional call source(s) */
+function filterObjections(objections, dateStart, dateEnd, closerId, objectionType, callSource, callSourceCallIds) {
   const ids = parseCloserIds(closerId);
   // Parse objectionType — may be comma-separated string or array
   const typeFilter = objectionType
@@ -116,16 +124,19 @@ function filterObjections(objections, dateStart, dateEnd, closerId, objectionTyp
     if (o.appointmentDate < dateStart || o.appointmentDate > dateEnd) return false;
     if (ids && !ids.includes(o.closerId)) return false;
     if (typeFilter && typeFilter.length > 0 && !typeFilter.includes(o.objectionType)) return false;
+    if (callSourceCallIds && !callSourceCallIds.has(o.callId)) return false;
     return true;
   });
 }
 
-/** Filter close cycles by date range and optional closer(s) */
-function filterCloseCycles(cycles, dateStart, dateEnd, closerId) {
+/** Filter close cycles by date range, optional closer(s), and optional call source call IDs */
+function filterCloseCycles(cycles, dateStart, dateEnd, closerId, callSourceCallIds) {
   const ids = parseCloserIds(closerId);
   return cycles.filter(c => {
     if (c.closeDate < dateStart || c.closeDate > dateEnd) return false;
     if (ids && !ids.includes(c.closerId)) return false;
+    // Close cycles don't have callSource directly — filter via prospect email match from filtered calls
+    // For now, close cycles pass through when callSource filter is active (they don't have call_source field)
     return true;
   });
 }
@@ -319,20 +330,24 @@ function m(label, value, format, glowColor) {
 export function computePageData(section, rawData, filters) {
   if (!rawData || !rawData.calls) return null;
 
-  const { dateStart, dateEnd, closerId, granularity: rawGranularity, objectionType, riskCategory } = filters;
+  const { dateStart, dateEnd, closerId, granularity: rawGranularity, objectionType, riskCategory, callSource } = filters;
 
   // Auto-select granularity based on date range span if set to 'auto' or default
   const granularity = autoGranularity(rawGranularity, dateStart, dateEnd);
 
-  const calls = filterCalls(rawData.calls, dateStart, dateEnd, closerId);
-  const objections = filterObjections(rawData.objections || [], dateStart, dateEnd, closerId, objectionType);
-  const closeCycles = filterCloseCycles(rawData.closeCycles || [], dateStart, dateEnd, closerId);
+  const calls = filterCalls(rawData.calls, dateStart, dateEnd, closerId, callSource);
+  // Build a set of call IDs from source-filtered calls so objections can be filtered by source too
+  const sources = parseCallSources(callSource);
+  const callSourceCallIds = sources ? new Set(calls.map(c => c.callId)) : null;
+  const objections = filterObjections(rawData.objections || [], dateStart, dateEnd, closerId, objectionType, callSource, callSourceCallIds);
+  const closeCycles = filterCloseCycles(rawData.closeCycles || [], dateStart, dateEnd, closerId, callSourceCallIds);
 
   // Compute previous period for delta comparisons
   const { prevStart, prevEnd, deltaLabel } = computePreviousPeriod(dateStart, dateEnd);
-  const prevCalls = filterCalls(rawData.calls, prevStart, prevEnd, closerId);
-  const prevObjections = filterObjections(rawData.objections || [], prevStart, prevEnd, closerId, objectionType);
-  const prevCloseCycles = filterCloseCycles(rawData.closeCycles || [], prevStart, prevEnd, closerId);
+  const prevCalls = filterCalls(rawData.calls, prevStart, prevEnd, closerId, callSource);
+  const prevCallSourceCallIds = sources ? new Set(prevCalls.map(c => c.callId)) : null;
+  const prevObjections = filterObjections(rawData.objections || [], prevStart, prevEnd, closerId, objectionType, callSource, prevCallSourceCallIds);
+  const prevCloseCycles = filterCloseCycles(rawData.closeCycles || [], prevStart, prevEnd, closerId, prevCallSourceCallIds);
   const prev = { calls: prevCalls, objections: prevObjections, closeCycles: prevCloseCycles, deltaLabel };
 
   switch (section) {
@@ -343,7 +358,7 @@ export function computePageData(section, rawData, filters) {
     case 'sales-cycle': return computeSalesCycle(calls, closeCycles, prev);
     case 'objections': {
       // Compute available types from ALL objections (date+closer filtered, but NOT type-filtered)
-      const allObjForTypes = filterObjections(rawData.objections || [], dateStart, dateEnd, closerId, null);
+      const allObjForTypes = filterObjections(rawData.objections || [], dateStart, dateEnd, closerId, null, callSource, callSourceCallIds);
       const typeCounts = {};
       allObjForTypes.forEach(o => {
         const t = o.objectionType || 'Other';

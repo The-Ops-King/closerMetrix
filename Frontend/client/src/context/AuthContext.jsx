@@ -49,6 +49,7 @@ export function AuthProvider({ children }) {
     companyName: null,
     tier: null,
     closers: [],
+    callSources: [],
     kpiTargets: null,
     aiProvider: 'claude',
     isAuthenticated: false,
@@ -81,6 +82,7 @@ export function AuthProvider({ children }) {
         companyName: data.company_name,
         tier: data.plan_tier,
         closers: data.closers || [],
+        callSources: data.call_sources || [],
         kpiTargets: data.kpi_targets || null,
         aiProvider: data.ai_provider || 'claude',
         isAuthenticated: true,
@@ -154,6 +156,7 @@ export function AuthProvider({ children }) {
       adminViewCompanyName: clientInfo.company_name,
       adminViewTier: clientInfo.plan_tier,
       adminViewClosers: clientInfo.closers || [],
+      callSources: clientInfo.call_sources || [],
     }));
   }, []);
 
@@ -168,6 +171,7 @@ export function AuthProvider({ children }) {
       adminViewCompanyName: null,
       adminViewTier: null,
       adminViewClosers: [],
+      callSources: [],
     }));
   }, []);
 
@@ -181,6 +185,11 @@ export function AuthProvider({ children }) {
 
   const setAiProvider = useCallback((aiProvider) => {
     setAuth((prev) => ({ ...prev, aiProvider }));
+  }, []);
+
+  /** Update call_sources in auth state after Settings save */
+  const setCallSources = useCallback((callSources) => {
+    setAuth((prev) => ({ ...prev, callSources }));
   }, []);
 
   /**
@@ -229,6 +238,7 @@ export function AuthProvider({ children }) {
     exitClientView,
     setKpiTargets,
     setAiProvider,
+    setCallSources,
     logout,
   };
 

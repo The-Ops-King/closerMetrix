@@ -83,6 +83,7 @@ export default function ClientDetail() {
         company_name: clientData.company_name,
         plan_tier: clientData.plan_tier,
         closers: clientData.closers || [],
+        call_sources: clientData.call_sources || [],
       });
 
       setError(null);

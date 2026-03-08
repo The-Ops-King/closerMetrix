@@ -138,11 +138,21 @@ router.get('/clients/:clientId', async (req, res) => {
       { clientId }
     );
 
+    // Parse call_sources from settings_json for the CallSourceFilter
+    let callSources = [];
+    if (rows[0].settings_json) {
+      try {
+        const parsed = JSON.parse(rows[0].settings_json);
+        callSources = parsed.call_sources || [];
+      } catch { /* ignore */ }
+    }
+
     res.json({
       success: true,
       data: {
         ...rows[0],
         closers: closerRows.map((r) => ({ closer_id: r.closer_id, name: r.name, status: r.status })),
+        call_sources: callSources,
       },
     });
   } catch (err) {
