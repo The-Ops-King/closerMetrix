@@ -16,7 +16,7 @@ const config = require('./config');
 const logger = require('./utils/logger');
 const timeoutService = require('./services/TimeoutService');
 const cron = require('node-cron');
-const { sendWeeklyReports, sendMonthlyReports } = require('./services/email/EmailScheduler');
+const { sendWeeklyReports, sendMonthlyReports, sendDailyOnboardingReports } = require('./services/email/EmailScheduler');
 
 const PORT = config.server.port;
 
@@ -56,7 +56,18 @@ app.listen(PORT, () => {
     }
   }, { timezone: 'UTC' });
 
-  logger.info('Email cron jobs scheduled: Weekly (Mon 9am EST), Monthly (1st 9am EST)');
+  // Daily onboarding: Every hour on the hour — checks each closer's timezone for 6pm
+  cron.schedule('0 * * * *', async () => {
+    logger.info('Cron: Checking daily onboarding reports');
+    try {
+      const result = await sendDailyOnboardingReports();
+      logger.info('Cron: Daily onboarding check complete', result);
+    } catch (error) {
+      logger.error('Cron: Daily onboarding check failed', { error: error.message });
+    }
+  }, { timezone: 'UTC' });
+
+  logger.info('Email cron jobs scheduled: Weekly (Mon 9am EST), Monthly (1st 9am EST), Onboarding (hourly)');
 });
 
 // Handle uncaught exceptions gracefully

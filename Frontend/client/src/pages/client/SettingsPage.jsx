@@ -77,7 +77,7 @@ const DEFAULT_SETTINGS = {
     monthly_day: 1,              // day of month (1-28)
     include_sections: ['overview', 'financial', 'attendance'],
     alerts: [],
-    onboarding_watches: [],
+    close_watches: [],
   },
   commission: null,
 };
@@ -1104,14 +1104,15 @@ function NotificationsSection({ notifications, closers, onSave }) {
   const handleAddWatch = () => {
     setLocal((prev) => ({
       ...prev,
-      onboarding_watches: [
-        ...(prev.onboarding_watches || []),
+      close_watches: [
+        ...(prev.close_watches || []),
         {
           id: uuid(),
           closer_id: closers[0]?.closer_id || '',
           closer_name: closers[0]?.name || '',
           duration_type: 'days',
           duration_value: 30,
+          close_watch_start_date: new Date().toISOString().slice(0, 10),
           until_kpi_met: false,
           enabled: true,
         },
@@ -1122,7 +1123,7 @@ function NotificationsSection({ notifications, closers, onSave }) {
   const handleUpdateWatch = (id, field, value) => {
     setLocal((prev) => ({
       ...prev,
-      onboarding_watches: (prev.onboarding_watches || []).map((w) => {
+      close_watches: (prev.close_watches || []).map((w) => {
         if (w.id !== id) return w;
         const updated = { ...w, [field]: value };
         // Sync closer_name when closer_id changes
@@ -1138,7 +1139,7 @@ function NotificationsSection({ notifications, closers, onSave }) {
   const handleRemoveWatch = (id) => {
     setLocal((prev) => ({
       ...prev,
-      onboarding_watches: (prev.onboarding_watches || []).filter((w) => w.id !== id),
+      close_watches: (prev.close_watches || []).filter((w) => w.id !== id),
     }));
   };
 
@@ -1337,11 +1338,11 @@ function NotificationsSection({ notifications, closers, onSave }) {
         Add Alert
       </Button>
 
-      {/* Onboarding watches */}
+      {/* Close watches */}
       <Typography sx={{ color: COLORS.text.secondary, fontSize: '0.8rem', fontWeight: 600, mb: 1, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-        New Closer Onboarding Watches
+        Close Watches
       </Typography>
-      {(local.onboarding_watches || []).map((watch) => (
+      {(local.close_watches || []).map((watch) => (
         <Box
           key={watch.id}
           sx={{
@@ -1404,7 +1405,7 @@ function NotificationsSection({ notifications, closers, onSave }) {
         size="small"
         sx={{ color: COLORS.neon.purple, fontSize: '0.8rem', textTransform: 'none', mb: 2 }}
       >
-        Add Onboarding Watch
+        Add Close Watch
       </Button>
 
       <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>

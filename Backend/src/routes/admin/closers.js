@@ -21,6 +21,7 @@ const fathomAPI = require('../../services/transcript/FathomAPI');
 const auditLogger = require('../../utils/AuditLogger');
 const { generateId } = require('../../utils/idGenerator');
 const logger = require('../../utils/logger');
+const bq = require('../../db/BigQueryClient');
 
 // All closer admin routes require admin auth
 router.use(webhookAuth.admin);
@@ -139,6 +140,43 @@ router.post('/clients/:clientId/closers', async (req, res) => {
         fathom_webhook_id: fathomWebhook?.id || null,
       },
     });
+
+    // Auto-enroll closer in close watch (30-day daily email tracking)
+    try {
+      const clientRow = await clientQueries.findById(clientId);
+      const existingSettings = clientRow.settings_json
+        ? (typeof clientRow.settings_json === 'string' ? JSON.parse(clientRow.settings_json) : clientRow.settings_json)
+        : {};
+
+      if (!existingSettings.notifications) existingSettings.notifications = {};
+      const watches = existingSettings.notifications.close_watches || [];
+      watches.push({
+        id: generateId(),
+        closer_id: closerId,
+        closer_name: req.body.name,
+        duration_type: 'days',
+        duration_value: 30,
+        until_kpi_met: false,
+        enabled: true,
+        close_watch_start_date: new Date().toISOString().slice(0, 10),
+        created_at: now,
+      });
+      existingSettings.notifications.close_watches = watches;
+
+      await bq.query(
+        `UPDATE ${bq.table('Clients')}
+         SET settings_json = @settingsJson, last_modified = CURRENT_TIMESTAMP()
+         WHERE client_id = @clientId`,
+        { clientId, settingsJson: JSON.stringify(existingSettings) }
+      );
+
+      logger.info('Close watch auto-enrolled', { closerId, clientId, closerName: req.body.name });
+    } catch (enrollError) {
+      // Non-fatal — closer is still created, just log the failure
+      logger.error('Failed to auto-enroll close watch', {
+        closerId, clientId, error: enrollError.message,
+      });
+    }
 
     logger.info('Closer added', {
       closerId,

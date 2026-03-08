@@ -278,4 +278,58 @@ const monthlyTestData = {
   },
 };
 
-module.exports = { weeklyTestData, monthlyTestData };
+/**
+ * Daily onboarding test data — single closer, single day.
+ * Tracks a new closer's performance during their first 30 days.
+ */
+const dailyOnboardingTestData = {
+  report_type: 'daily_onboarding',
+  report_date: 'Friday, March 7, 2026',
+  company_name: 'How I Met Your Mother Dating',
+  closer: { closer_id: 'lilly_erickson', name: 'Lilly Erickson', timezone: 'PST' },
+  days_remaining: 7,
+  close_watch_start_date: '2026-02-19',
+  watch_type: 'onboarding',  // 'onboarding' or 'pip'
+
+  // Real data — Lilly's calls on 2026-03-07
+  calls_booked: 9,
+  calls_showed: 5,
+  calls_closed: 0,
+  cash_collected: 0,
+  revenue_generated: 0,
+  show_rate: 0.5556,
+  close_rate: 0.00,
+
+  // Script adherence — real avg from today's calls
+  script_adherence: {
+    score: 7.04,
+    team_avg: 7.04,
+  },
+
+  // Team averages over the last 30 days (real BQ data)
+  targets: {
+    source: 'team_avg',
+    period_label: 'Last 30 Days',
+    show_rate: 0.6884,
+    close_rate: 0.3354,
+    avg_deal_size: 6413,
+    avg_cash_per_deal: 3527,
+    cash_collected: 0,
+    revenue_generated: 0,
+  },
+
+  // No violations found for Lilly in recent data
+  violations: [],
+
+  // Real objections from Lilly's last 30 days
+  objections: [
+    { objection_type: 'Spouse/Partner', count: 2, resolved_count: 1, resolution_rate: 0.50 },
+    { objection_type: 'Already Tried', count: 2, resolved_count: 0, resolution_rate: 0.00 },
+    { objection_type: 'Financial',     count: 2, resolved_count: 1, resolution_rate: 0.50 },
+    { objection_type: 'Think About It', count: 1, resolved_count: 1, resolution_rate: 1.00 },
+    { objection_type: 'Timing',        count: 1, resolved_count: 0, resolution_rate: 0.00 },
+    { objection_type: 'Not Ready',     count: 1, resolved_count: 1, resolution_rate: 1.00 },
+  ],
+};
+
+module.exports = { weeklyTestData, monthlyTestData, dailyOnboardingTestData };

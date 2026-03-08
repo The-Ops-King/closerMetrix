@@ -14,11 +14,12 @@ const express = require('express');
 const router = express.Router();
 const webhookAuth = require('../../middleware/webhookAuth');
 const config = require('../../config');
-const { renderWeeklyReport, renderMonthlyReport, ALL_SECTIONS } = require('../../services/email/EmailTemplateEngine');
+const { renderWeeklyReport, renderMonthlyReport, renderDailyOnboardingReport, ALL_SECTIONS } = require('../../services/email/EmailTemplateEngine');
 const emailService = require('../../services/email/EmailService');
-const { weeklyTestData, monthlyTestData } = require('../../services/email/testData');
+const { weeklyTestData, monthlyTestData, dailyOnboardingTestData } = require('../../services/email/testData');
 const { sendWeeklyReports, sendMonthlyReports, sendReportForClient } = require('../../services/email/EmailScheduler');
-const { fetchEmailData } = require('../../services/email/EmailDataFetcher');
+const { sendOnboardingReportForCloser } = require('../../services/email/EmailScheduler');
+const { fetchEmailData, fetchDailyOnboardingData } = require('../../services/email/EmailDataFetcher');
 const { generateInsights } = require('../../services/email/EmailInsightGenerator');
 const logger = require('../../utils/logger');
 
@@ -57,8 +58,10 @@ router.get('/preview/:type', previewAuth, (req, res) => {
     html = renderWeeklyReport(weeklyTestData, sections, { livePreview: true, baseUrl });
   } else if (type === 'monthly') {
     html = renderMonthlyReport(monthlyTestData, sections, { livePreview: true, baseUrl });
+  } else if (type === 'daily-onboarding') {
+    html = renderDailyOnboardingReport(dailyOnboardingTestData, { livePreview: true, baseUrl });
   } else {
-    return res.status(400).json({ status: 'error', message: `Invalid type: ${type}. Use "weekly" or "monthly".` });
+    return res.status(400).json({ status: 'error', message: `Invalid type: ${type}. Use "weekly", "monthly", or "daily-onboarding".` });
   }
 
   res.setHeader('Content-Type', 'text/html');
@@ -85,8 +88,26 @@ router.get('/preview-live/:type', previewAuth, async (req, res) => {
   if (!client_id) {
     return res.status(400).json({ status: 'error', message: 'client_id query param is required' });
   }
+  if (type === 'daily-onboarding') {
+    // Delegate to the daily onboarding handler
+    const { closer_id, date } = req.query;
+    if (!closer_id) {
+      return res.status(400).json({ status: 'error', message: 'closer_id query param is required for daily-onboarding' });
+    }
+    try {
+      const data = await fetchDailyOnboardingData(client_id, closer_id, date || null);
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const html = renderDailyOnboardingReport(data, { livePreview: true, baseUrl });
+      res.setHeader('Content-Type', 'text/html');
+      return res.send(html);
+    } catch (error) {
+      logger.error('Daily onboarding live preview failed', { client_id, closer_id: req.query.closer_id, error: error.message });
+      return res.status(500).json({ status: 'error', message: error.message, stack: error.stack });
+    }
+  }
+
   if (type !== 'weekly' && type !== 'monthly') {
-    return res.status(400).json({ status: 'error', message: `Invalid type: ${type}. Use "weekly" or "monthly".` });
+    return res.status(400).json({ status: 'error', message: `Invalid type: ${type}. Use "weekly", "monthly", or "daily-onboarding".` });
   }
 
   try {
@@ -218,6 +239,60 @@ router.post('/trigger/:type', webhookAuth.admin, async (req, res) => {
     res.json({ status: 'ok', type, ...result });
   } catch (error) {
     logger.error('Email trigger failed', { type, client_id, error: error.message });
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+// ── Daily Onboarding Routes ──────────────────────────────────
+
+/**
+ * GET /admin/email/preview-live/daily-onboarding?client_id=xxx&closer_id=xxx
+ *
+ * Renders daily onboarding email with real BigQuery data.
+ * Query params:
+ *   ?client_id=xxx (required)
+ *   ?closer_id=xxx (required)
+ *   ?date=2026-03-07 (optional, defaults to today)
+ */
+router.get('/preview-live/daily-onboarding', previewAuth, async (req, res) => {
+  const { client_id, closer_id, date } = req.query;
+
+  if (!client_id || !closer_id) {
+    return res.status(400).json({ status: 'error', message: 'client_id and closer_id query params are required' });
+  }
+
+  try {
+    const data = await fetchDailyOnboardingData(client_id, closer_id, date || null);
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const html = renderDailyOnboardingReport(data, { livePreview: true, baseUrl });
+
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  } catch (error) {
+    logger.error('Daily onboarding live preview failed', { client_id, closer_id, error: error.message });
+    res.status(500).json({ status: 'error', message: error.message, stack: error.stack });
+  }
+});
+
+/**
+ * POST /admin/email/trigger/daily-onboarding?client_id=xxx&closer_id=xxx&to=email
+ *
+ * Manually triggers a daily onboarding email send.
+ * Uses real BigQuery data. Optional ?to= overrides recipient.
+ */
+router.post('/trigger/daily-onboarding', webhookAuth.admin, async (req, res) => {
+  const { client_id, closer_id, to } = req.query;
+
+  if (!client_id || !closer_id) {
+    return res.status(400).json({ status: 'error', message: 'client_id and closer_id query params are required' });
+  }
+
+  try {
+    logger.info('Email trigger: daily onboarding', { client_id, closer_id, to });
+    const result = await sendOnboardingReportForCloser(client_id, closer_id, to || null);
+    return res.json({ status: result.success ? 'ok' : 'error', ...result });
+  } catch (error) {
+    logger.error('Daily onboarding trigger failed', { client_id, closer_id, error: error.message });
     res.status(500).json({ status: 'error', message: error.message });
   }
 });
