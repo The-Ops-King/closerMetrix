@@ -1033,7 +1033,7 @@ async function fetchDailyOnboardingData(clientId, closerId, dateStr = null) {
 
   const data = {
     report_type: 'daily_onboarding',
-    report_date: today,
+    report_date: new Date(today + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
     company_name: client.company_name,
     watch_type: watchType,
     closer: {
