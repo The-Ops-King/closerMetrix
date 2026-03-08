@@ -40,6 +40,14 @@ import RestoreIcon from '@mui/icons-material/Restore';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import GroupIcon from '@mui/icons-material/Group';
+import SmartToyIcon from '@mui/icons-material/SmartToy';
+import StorefrontIcon from '@mui/icons-material/Storefront';
+import TrackChangesIcon from '@mui/icons-material/TrackChanges';
+import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
+import PsychologyIcon from '@mui/icons-material/Psychology';
+import DescriptionIcon from '@mui/icons-material/Description';
+import PaidIcon from '@mui/icons-material/Paid';
 import { COLORS, LAYOUT } from '../../theme/constants';
 import { useAuth } from '../../context/AuthContext';
 import { meetsMinTier } from '../../utils/tierConfig';
@@ -78,6 +86,12 @@ const DEFAULT_SETTINGS = {
     include_sections: ['overview', 'financial', 'attendance'],
     alerts: [],
     close_watches: [],
+    ftc_alert_recipients: '',
+    ftc_alerts_enabled: true,
+    weekly_recipients: '',
+    monthly_recipients: '',
+    daily_enabled: true,
+    daily_recipients: '',
   },
   commission: null,
 };
@@ -144,6 +158,11 @@ function SettingsSection({ title, icon, minTier, tier, children, color = COLORS.
             flexShrink: 0,
           }}
         />
+        {icon && (
+          <Box sx={{ display: 'flex', alignItems: 'center', color: locked ? COLORS.text.muted : color, flexShrink: 0 }}>
+            {icon}
+          </Box>
+        )}
         <Typography
           sx={{
             color: locked ? COLORS.text.muted : COLORS.text.primary,
@@ -461,7 +480,7 @@ export default function SettingsPage() {
       {/* Sections */}
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
         {/* 1. Team (Closers) — basic */}
-        <SettingsSection title="Team (Closers)" minTier="basic" tier={tier} color={COLORS.neon.cyan}>
+        <SettingsSection title="Team (Closers)" icon={<GroupIcon fontSize="small" />} minTier="basic" tier={tier} color={COLORS.neon.cyan}>
           <TeamSection
             closers={closers}
             clientId={effectiveClientId}
@@ -472,7 +491,7 @@ export default function SettingsPage() {
         </SettingsSection>
 
         {/* 2. AI Provider — all tiers */}
-        <SettingsSection title="AI Provider" minTier="basic" tier={tier} color={COLORS.neon.purple}>
+        <SettingsSection title="AI Provider" icon={<SmartToyIcon fontSize="small" />} minTier="basic" tier={tier} color={COLORS.neon.purple}>
           <AiProviderSection
             settings={settings}
             setSettings={setSettings}
@@ -482,7 +501,7 @@ export default function SettingsPage() {
         </SettingsSection>
 
         {/* 3. Offers & Products — basic */}
-        <SettingsSection title="Offers & Products" minTier="basic" tier={tier} color={COLORS.neon.amber}>
+        <SettingsSection title="Offers & Products" icon={<StorefrontIcon fontSize="small" />} minTier="basic" tier={tier} color={COLORS.neon.amber}>
           <OffersSection
             offers={settings.offers || []}
             onSave={(offers) => saveSettingsJson({ offers })}
@@ -490,7 +509,7 @@ export default function SettingsPage() {
         </SettingsSection>
 
         {/* 3. KPI Targets — insight */}
-        <SettingsSection title="KPI Targets" minTier="insight" tier={tier} color={COLORS.neon.green}>
+        <SettingsSection title="KPI Targets" icon={<TrackChangesIcon fontSize="small" />} minTier="insight" tier={tier} color={COLORS.neon.green}>
           <KpiSection
             targets={settings.kpi_targets}
             onSave={(kpi_targets) => saveSettingsJson({ kpi_targets })}
@@ -498,7 +517,7 @@ export default function SettingsPage() {
         </SettingsSection>
 
         {/* 4. Notifications & Alerts — insight */}
-        <SettingsSection title="Notifications & Alerts" minTier="insight" tier={tier} color={COLORS.neon.purple}>
+        <SettingsSection title="Notifications & Alerts" icon={<NotificationsActiveIcon fontSize="small" />} minTier="insight" tier={tier} color={COLORS.neon.purple}>
           <NotificationsSection
             notifications={settings.notifications}
             closers={closers.filter((c) => (c.status || '').toLowerCase() === 'active')}
@@ -507,17 +526,17 @@ export default function SettingsPage() {
         </SettingsSection>
 
         {/* 5. AI Prompts — executive */}
-        <SettingsSection title="AI Prompts" minTier="executive" tier={tier} color={COLORS.neon.magenta}>
+        <SettingsSection title="AI Prompts" icon={<PsychologyIcon fontSize="small" />} minTier="executive" tier={tier} color={COLORS.neon.magenta}>
           <AiPromptsSection client={client} onSave={saveClientFields} />
         </SettingsSection>
 
         {/* 6. Script — executive */}
-        <SettingsSection title="Script Template" minTier="executive" tier={tier} color={COLORS.neon.red}>
+        <SettingsSection title="Script Template" icon={<DescriptionIcon fontSize="small" />} minTier="executive" tier={tier} color={COLORS.neon.red}>
           <ScriptSection client={client} onSave={saveClientFields} />
         </SettingsSection>
 
         {/* 7. Commission Builder — insight (coming soon) */}
-        <SettingsSection title="Commission Builder" minTier="insight" tier={tier} color={COLORS.neon.teal}>
+        <SettingsSection title="Commission Builder" icon={<PaidIcon fontSize="small" />} minTier="insight" tier={tier} color={COLORS.neon.teal}>
           <Box sx={{ py: 4, textAlign: 'center' }}>
             <Typography sx={{ color: COLORS.text.muted, fontSize: '0.9rem' }}>
               Coming soon — commission structure builder and tracker
@@ -1179,7 +1198,7 @@ function NotificationsSection({ notifications, closers, onSave }) {
       </Typography>
 
       <Box sx={reportCardStyle(local.weekly_enabled)} mb={2}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: (local.weekly_enabled ?? true) ? 1.5 : 0 }}>
           <Box>
             <Typography sx={{ color: COLORS.text.primary, fontSize: '0.95rem', fontWeight: 600 }}>
               Weekly Report
@@ -1194,6 +1213,14 @@ function NotificationsSection({ notifications, closers, onSave }) {
             sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: COLORS.neon.purple }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: COLORS.neon.purple } }}
           />
         </Box>
+        {(local.weekly_enabled ?? true) && (
+          <TronTextField
+            fullWidth
+            placeholder="Recipients (comma-separated) — blank = primary contact"
+            value={local.weekly_recipients || ''}
+            onChange={(e) => setLocal((p) => ({ ...p, weekly_recipients: e.target.value }))}
+          />
+        )}
       </Box>
 
       {/* Monthly Report */}
@@ -1204,7 +1231,7 @@ function NotificationsSection({ notifications, closers, onSave }) {
               Monthly Report
             </Typography>
             <Typography sx={{ color: COLORS.text.muted, fontSize: '0.75rem' }}>
-              This month vs last month comparison
+              Sends on the 1st of the month at 9:00 AM EST — this month vs last month
             </Typography>
           </Box>
           <Switch
@@ -1214,21 +1241,12 @@ function NotificationsSection({ notifications, closers, onSave }) {
           />
         </Box>
         {local.monthly_enabled && (
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr' }, gap: 2 }}>
-            <FormControl size="small" sx={{ maxWidth: 200 }}>
-              <InputLabel sx={{ color: COLORS.text.muted, fontSize: '0.8rem' }}>Day of Month</InputLabel>
-              <Select
-                value={local.monthly_day || 1}
-                onChange={(e) => setLocal((p) => ({ ...p, monthly_day: e.target.value }))}
-                label="Day of Month"
-                sx={selectStyle}
-              >
-                {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
-                  <MenuItem key={d} value={d}>{d === 1 ? '1st' : d === 2 ? '2nd' : d === 3 ? '3rd' : `${d}th`}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Box>
+          <TronTextField
+            fullWidth
+            placeholder="Recipients (comma-separated) — blank = primary contact"
+            value={local.monthly_recipients || ''}
+            onChange={(e) => setLocal((p) => ({ ...p, monthly_recipients: e.target.value }))}
+          />
         )}
       </Box>
 
@@ -1339,10 +1357,36 @@ function NotificationsSection({ notifications, closers, onSave }) {
         Add Alert
       </Button>
 
-      {/* Close watches */}
+      {/* Closer Watches */}
       <Typography sx={{ color: COLORS.text.secondary, fontSize: '0.8rem', fontWeight: 600, mb: 1, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
         Closer Watches
       </Typography>
+
+      <Box sx={reportCardStyle(local.daily_enabled)} mb={2}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: (local.daily_enabled ?? true) ? 1.5 : 0 }}>
+          <Box>
+            <Typography sx={{ color: COLORS.text.primary, fontSize: '0.9rem', fontWeight: 600 }}>
+              Daily Closer Watch Email
+            </Typography>
+            <Typography sx={{ color: COLORS.text.muted, fontSize: '0.75rem' }}>
+              Daily performance email for closers on active watch (onboarding / PIP)
+            </Typography>
+          </Box>
+          <Switch
+            checked={local.daily_enabled ?? true}
+            onChange={(e) => setLocal((p) => ({ ...p, daily_enabled: e.target.checked }))}
+            sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: COLORS.neon.purple }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: COLORS.neon.purple } }}
+          />
+        </Box>
+        {(local.daily_enabled ?? true) && (
+          <TronTextField
+            fullWidth
+            placeholder="Recipients (comma-separated) — blank = primary contact"
+            value={local.daily_recipients || ''}
+            onChange={(e) => setLocal((p) => ({ ...p, daily_recipients: e.target.value }))}
+          />
+        )}
+      </Box>
       {(local.close_watches || []).map((watch) => (
         <Box
           key={watch.id}
@@ -1415,10 +1459,41 @@ function NotificationsSection({ notifications, closers, onSave }) {
         onClick={handleAddWatch}
         startIcon={<AddIcon />}
         size="small"
-        sx={{ color: COLORS.neon.purple, fontSize: '0.8rem', textTransform: 'none', mb: 2 }}
+        sx={{ color: COLORS.neon.purple, fontSize: '0.8rem', textTransform: 'none', mb: 3 }}
       >
         Add Closer Watch
       </Button>
+
+      {/* FTC Violation Alerts */}
+      <Typography sx={{ color: COLORS.text.secondary, fontSize: '0.8rem', fontWeight: 600, mb: 1, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        FTC Violation Alerts
+      </Typography>
+      <Box sx={{ p: 2, borderRadius: 2, backgroundColor: `${COLORS.neon.red}08`, border: `1px solid ${COLORS.neon.red}30`, mb: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+          <Box>
+            <Typography sx={{ color: COLORS.text.primary, fontSize: '0.9rem', fontWeight: 600 }}>
+              Immediate FTC Alerts
+            </Typography>
+            <Typography sx={{ color: COLORS.text.muted, fontSize: '0.75rem' }}>
+              Send an email the moment AI detects a high-severity compliance violation
+            </Typography>
+          </Box>
+          <Switch
+            checked={local.ftc_alerts_enabled ?? true}
+            onChange={(e) => setLocal((p) => ({ ...p, ftc_alerts_enabled: e.target.checked }))}
+            sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: COLORS.neon.red }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: COLORS.neon.red } }}
+          />
+        </Box>
+        {(local.ftc_alerts_enabled ?? true) && (
+          <TronTextField
+            fullWidth
+            placeholder="e.g. tyler@company.com, compliance@company.com"
+            value={local.ftc_alert_recipients || ''}
+            onChange={(e) => setLocal((p) => ({ ...p, ftc_alert_recipients: e.target.value }))}
+            sx={{ '& .MuiOutlinedInput-root': { '&.Mui-focused fieldset': { borderColor: COLORS.neon.red } } }}
+          />
+        )}
+      </Box>
 
       <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
         <SaveButton onClick={handleSave} saving={saving} saved={saved} />

@@ -355,4 +355,27 @@ const dailyOnboardingTestData = {
   },
 };
 
-module.exports = { weeklyTestData, monthlyTestData, dailyOnboardingTestData };
+/**
+ * FTC Alert test data — single high-severity violation for immediate alert email.
+ */
+const ftcAlertTestData = {
+  company_name: 'Acme Coaching',
+  closer_name: 'Jake Martinez',
+  closer_id: 'jake_martinez',
+  call_id: 'call-abc-123-def',
+  call_date: '2026-03-07',
+  call_time: '2:45 PM EST',
+  prospect_name: 'John Smith',
+  prospect_email: 'john@example.com',
+  call_type: 'First Call',
+  call_url: 'https://fathom.video/calls/abc123',
+  violation: {
+    category: 'Income Guarantee',
+    exact_phrase: "You'll definitely make your money back in 30 days, guaranteed.",
+    severity: 'high',
+    timestamp: '00:23:45',
+    explanation: 'This statement constitutes an income guarantee which violates FTC guidelines on earnings claims. Closers must not promise specific financial outcomes or timelines for return on investment.',
+  },
+};
+
+module.exports = { weeklyTestData, monthlyTestData, dailyOnboardingTestData, ftcAlertTestData };

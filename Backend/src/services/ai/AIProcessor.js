@@ -30,6 +30,8 @@ const auditLogger = require('../../utils/AuditLogger');
 const logger = require('../../utils/logger');
 const config = require('../../config');
 const { generateId } = require('../../utils/idGenerator');
+const { renderFTCAlertEmail } = require('../email/EmailTemplateEngine');
+const emailService = require('../email/EmailService');
 
 class AIProcessor {
   constructor() {
@@ -106,6 +108,15 @@ class AIProcessor {
 
       // Step 7: Update the call record with AI results
       await this._updateCallWithAIResults(call, data, clientId);
+
+      // Step 7.5: Trigger FTC alert for high-severity compliance flags
+      if (data.compliance_flags && data.compliance_flags.length > 0) {
+        try {
+          await this._triggerFTCAlert(call.call_id, clientId, call, client, data.compliance_flags);
+        } catch (alertErr) {
+          logger.error('FTC alert email failed (non-blocking)', { callId, clientId, error: alertErr.message });
+        }
+      }
 
       // Step 8: Extract and store objections
       const objectionCount = await this._storeObjections(
@@ -310,6 +321,77 @@ class AIProcessor {
     });
 
     return records.length;
+  }
+
+  /**
+   * Sends immediate FTC alert emails for high-severity compliance flags.
+   * Reads ftc_alert_recipients from the client's settings_json.notifications.
+   * Non-blocking — errors are caught by the caller.
+   */
+  async _triggerFTCAlert(callId, clientId, call, client, complianceFlags) {
+    const highFlags = complianceFlags.filter(f => f.severity === 'high');
+    if (highFlags.length === 0) return;
+
+    // Parse recipients from client settings
+    let recipients = '';
+    let enabled = true;
+    if (client.settings_json) {
+      try {
+        const settings = typeof client.settings_json === 'string'
+          ? JSON.parse(client.settings_json) : client.settings_json;
+        recipients = settings?.notifications?.ftc_alert_recipients || '';
+        if (settings?.notifications?.ftc_alerts_enabled === false) enabled = false;
+      } catch { /* no recipients configured */ }
+    }
+
+    if (!enabled) {
+      logger.debug('FTC alerts disabled for client', { clientId });
+      return;
+    }
+
+    if (!recipients.trim()) {
+      logger.debug('FTC alert: no recipients configured', { clientId });
+      return;
+    }
+
+    const emailList = recipients.split(',').map(e => e.trim()).filter(Boolean);
+    if (emailList.length === 0) return;
+
+    for (const flag of highFlags) {
+      const alertData = {
+        company_name: client.company_name || clientId,
+        closer_name: call.closer || 'Unknown',
+        closer_id: call.closer_id,
+        call_id: callId,
+        call_date: call.appointment_date ? call.appointment_date.slice(0, 10) : new Date().toISOString().slice(0, 10),
+        call_time: '',
+        prospect_name: call.prospect_name || '—',
+        prospect_email: call.prospect_email || '',
+        call_type: call.call_type || '',
+        call_url: call.call_url || call.recording_url || '',
+        violation: {
+          category: flag.category || flag.risk_category || 'Unknown',
+          exact_phrase: flag.exact_phrase || flag.phrase || '',
+          severity: flag.severity,
+          timestamp: flag.timestamp || flag.timestamp_approximate || '',
+          explanation: flag.explanation || flag.why_flagged || '',
+        },
+      };
+
+      const html = renderFTCAlertEmail(alertData);
+      const subject = `FTC ALERT: ${alertData.closer_name} — ${alertData.violation.category} Violation Detected`;
+
+      for (const to of emailList) {
+        await emailService.sendEmail(to, subject, html);
+      }
+
+      logger.info('FTC alert sent', {
+        callId,
+        clientId,
+        category: alertData.violation.category,
+        recipients: emailList,
+      });
+    }
   }
 
   // _setAnthropicClient removed — tests should mock callAI instead

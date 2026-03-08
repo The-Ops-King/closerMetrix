@@ -989,10 +989,119 @@ function _comparisonRow(label, closerFmt, targetFmt, closerVal, targetVal, inver
   `;
 }
 
+/**
+ * Renders an immediate FTC violation alert email.
+ * Compact, urgent design with red accent — not a report, an alert.
+ *
+ * @param {Object} data — { company_name, closer_name, call_date, call_time, prospect_name,
+ *                           call_url, call_type, violation: { category, exact_phrase, severity, explanation } }
+ * @param {Object} [opts] — { livePreview, baseUrl }
+ */
+function renderFTCAlertEmail(data, opts = {}) {
+  _setBaseUrl(opts.baseUrl);
+  const logoSrc = _logoUrl;
+  const v = data.violation || {};
+
+  const refreshScript = opts.livePreview ? `<script>setTimeout(function(){location.reload();},2000);</script>` : '';
+
+  const severityColors = { high: C.red, medium: C.amber, low: C.textMuted };
+  const sevColor = severityColors[v.severity] || C.red;
+
+  const detailRow = (label, value) => `
+    <tr>
+      <td style="padding:8px 0;color:${C.textSecondary};font-size:14px;border-bottom:1px solid ${C.cardBorder};width:140px;">${label}</td>
+      <td style="padding:8px 0;color:${C.text};font-size:14px;font-weight:500;border-bottom:1px solid ${C.cardBorder};">${value}</td>
+    </tr>`;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FTC ALERT — ${data.closer_name}</title>
+  ${refreshScript}
+</head>
+<body style="margin:0;padding:0;background:${C.bg};font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:${C.text};-webkit-font-smoothing:antialiased;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:${C.bg};">
+    <tr>
+      <td align="center" style="padding:20px;">
+        <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+
+          <!-- Header -->
+          <tr>
+            <td style="padding:24px 0;text-align:center;">
+              <img src="${logoSrc}" alt="CloserMetrix" width="600" style="width:100%;max-width:600px;height:auto;margin-bottom:8px;" />
+            </td>
+          </tr>
+
+          <!-- Alert Banner -->
+          <tr>
+            <td style="padding:0 0 16px 0;">
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="background:${C.red};border-radius:8px;padding:16px 20px;text-align:center;">
+                    <div style="font-size:20px;font-weight:700;color:#fff;letter-spacing:1px;">FTC COMPLIANCE ALERT</div>
+                    <div style="font-size:13px;color:rgba(255,255,255,0.8);margin-top:4px;">${data.company_name} &middot; ${data.call_date}</div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Call Details Card -->
+          ${card('Call Details', `
+            <table width="100%" cellpadding="0" cellspacing="0">
+              ${detailRow('Closer', data.closer_name)}
+              ${detailRow('Prospect', data.prospect_name || '—')}
+              ${detailRow('Call Type', data.call_type || '—')}
+              ${detailRow('Date / Time', `${data.call_date} ${data.call_time ? '&middot; ' + data.call_time : ''}`)}
+              ${data.call_url ? detailRow('Recording', `<a href="${data.call_url}" style="color:${C.cyan};text-decoration:none;">View Call &rarr;</a>`) : ''}
+            </table>
+          `, C.red)}
+
+          <!-- Violation Details Card -->
+          ${card('Violation Details', `
+            <table width="100%" cellpadding="0" cellspacing="0">
+              ${detailRow('Category', `<span style="color:${C.red};font-weight:600;">${v.category || '—'}</span>`)}
+              ${detailRow('Severity', `<span style="display:inline-block;padding:2px 10px;border-radius:4px;background:${sevColor}20;color:${sevColor};font-size:12px;font-weight:600;text-transform:uppercase;">${v.severity || '—'}</span>`)}
+              ${v.timestamp ? detailRow('Timestamp', `<span style="font-family:monospace;color:${C.cyan};">${v.timestamp}</span>`) : ''}
+            </table>
+            <div style="margin-top:16px;padding:14px 16px;background:${C.elevated};border-left:3px solid ${C.red};border-radius:0 6px 6px 0;">
+              <div style="font-size:11px;font-weight:600;color:${C.red};text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Exact Phrase</div>
+              <div style="font-size:15px;color:${C.text};line-height:1.5;font-style:italic;">&ldquo;${v.exact_phrase || ''}&rdquo;</div>
+            </div>
+            <div style="margin-top:12px;padding:14px 16px;background:rgba(255,217,61,0.04);border-left:3px solid ${C.amber};border-radius:0 6px 6px 0;">
+              <div style="font-size:11px;font-weight:600;color:${C.amber};text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Why This Is Flagged</div>
+              <div style="font-size:14px;color:${C.textSecondary};line-height:1.6;">${v.explanation || ''}</div>
+            </div>
+          `, C.red)}
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:24px 0;text-align:center;">
+              <div style="height:1px;background:linear-gradient(90deg, transparent, ${C.cardBorder}, transparent);margin-bottom:16px;"></div>
+              <p style="margin:0;font-size:12px;color:${C.textMuted};">
+                CloserMetrix &middot; Immediate FTC Violation Alert
+              </p>
+              <p style="margin:4px 0 0 0;font-size:11px;color:${C.textMuted};">
+                This alert was triggered automatically when AI processing detected a high-severity compliance flag.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
 module.exports = {
   renderWeeklyReport,
   renderMonthlyReport,
   renderDailyOnboardingReport,
+  renderFTCAlertEmail,
   ALL_SECTIONS,
   renderOverviewSection,
   renderFinancialSection,
