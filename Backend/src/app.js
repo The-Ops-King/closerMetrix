@@ -39,6 +39,10 @@ app.use(express.urlencoded({ extended: true }));
 // ── Request logging ─────────────────────────────────────
 app.use(requestLogger);
 
+// ── Static files (logo, etc.) ─────────────────────────
+const path = require('path');
+app.use('/public', express.static(path.join(__dirname, 'public')));
+
 // ── Root endpoint ───────────────────────────────────────
 app.get('/', (req, res) => {
   res.json({

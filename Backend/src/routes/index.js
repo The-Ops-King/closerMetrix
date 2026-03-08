@@ -12,12 +12,17 @@ const paymentWebhook = require('./webhooks/payment');
 const adminClients = require('./admin/clients');
 const adminClosers = require('./admin/closers');
 const adminHealth = require('./admin/health');
+const adminEmail = require('./admin/email');
 
 function registerRoutes(app) {
   // Webhook endpoints — called by external systems
   app.use('/webhooks/calendar', calendarWebhook);
   app.use('/webhooks/transcript', transcriptWebhook);
   app.use('/webhooks/payment', paymentWebhook);
+
+  // Email preview & test routes — registered before other admin routes
+  // so the closers router's blanket auth doesn't intercept these
+  app.use('/admin/email', adminEmail);
 
   // Admin endpoints — health check first (no auth, Cloud Run needs it)
   app.use('/admin', adminHealth);

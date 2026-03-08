@@ -29,6 +29,7 @@ import InputLabel from '@mui/material/InputLabel';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Chip from '@mui/material/Chip';
+import Switch from '@mui/material/Switch';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import AddIcon from '@mui/icons-material/Add';
@@ -71,9 +72,9 @@ const DEFAULT_SETTINGS = {
   },
   offers: [],
   notifications: {
-    email_frequency: 'weekly',
-    email_day: 'monday',
-    email_time: '09:00',
+    weekly_enabled: true,
+    monthly_enabled: false,
+    monthly_day: 1,              // day of month (1-28)
     include_sections: ['overview', 'financial', 'attendance'],
     alerts: [],
     onboarding_watches: [],
@@ -88,6 +89,8 @@ const AVAILABLE_SECTIONS = [
   { key: 'callOutcomes', label: 'Call Outcomes' },
   { key: 'salesCycle', label: 'Sales Cycle' },
   { key: 'objections', label: 'Objections' },
+  { key: 'marketInsight', label: 'Market Insight' },
+  { key: 'violations', label: 'Violations' },
 ];
 
 const ALERT_METRICS = [
@@ -1151,59 +1154,80 @@ function NotificationsSection({ notifications, closers, onSave }) {
     });
   };
 
+  const selectStyle = {
+    backgroundColor: COLORS.bg.primary,
+    color: COLORS.text.primary,
+    fontSize: '0.85rem',
+    '& .MuiOutlinedInput-notchedOutline': { borderColor: COLORS.border.subtle },
+  };
+
+  const reportCardStyle = (enabled) => ({
+    p: 2,
+    borderRadius: 2,
+    backgroundColor: enabled ? `${COLORS.neon.purple}08` : COLORS.bg.tertiary,
+    border: `1px solid ${enabled ? `${COLORS.neon.purple}40` : COLORS.border.subtle}`,
+    transition: 'all 0.2s ease',
+  });
+
   return (
     <Box>
-      {/* Email frequency */}
+      {/* Weekly Report */}
       <Typography sx={{ color: COLORS.text.secondary, fontSize: '0.8rem', fontWeight: 600, mb: 1.5, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
         Email Reports
       </Typography>
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr 1fr' }, gap: 2, mb: 3 }}>
-        <FormControl size="small" fullWidth>
-          <InputLabel sx={{ color: COLORS.text.muted, fontSize: '0.8rem' }}>Frequency</InputLabel>
-          <Select
-            value={local.email_frequency || 'weekly'}
-            onChange={(e) => setLocal((p) => ({ ...p, email_frequency: e.target.value }))}
-            label="Frequency"
-            sx={{
-              backgroundColor: COLORS.bg.tertiary,
-              color: COLORS.text.primary,
-              fontSize: '0.85rem',
-              '& .MuiOutlinedInput-notchedOutline': { borderColor: COLORS.border.subtle },
-            }}
-          >
-            <MenuItem value="daily">Daily</MenuItem>
-            <MenuItem value="weekly">Weekly</MenuItem>
-            <MenuItem value="biweekly">Bi-Weekly</MenuItem>
-            <MenuItem value="monthly">Monthly</MenuItem>
-          </Select>
-        </FormControl>
 
-        <FormControl size="small" fullWidth>
-          <InputLabel sx={{ color: COLORS.text.muted, fontSize: '0.8rem' }}>Day</InputLabel>
-          <Select
-            value={local.email_day || 'monday'}
-            onChange={(e) => setLocal((p) => ({ ...p, email_day: e.target.value }))}
-            label="Day"
-            sx={{
-              backgroundColor: COLORS.bg.tertiary,
-              color: COLORS.text.primary,
-              fontSize: '0.85rem',
-              '& .MuiOutlinedInput-notchedOutline': { borderColor: COLORS.border.subtle },
-            }}
-          >
-            {DAYS_OF_WEEK.map((d) => (
-              <MenuItem key={d} value={d}>{d.charAt(0).toUpperCase() + d.slice(1)}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+      <Box sx={reportCardStyle(local.weekly_enabled)} mb={2}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box>
+            <Typography sx={{ color: COLORS.text.primary, fontSize: '0.95rem', fontWeight: 600 }}>
+              Weekly Report
+            </Typography>
+            <Typography sx={{ color: COLORS.text.muted, fontSize: '0.75rem' }}>
+              Sent every Monday at 9:00 AM EST — this week vs last week
+            </Typography>
+          </Box>
+          <Switch
+            checked={local.weekly_enabled ?? true}
+            onChange={(e) => setLocal((p) => ({ ...p, weekly_enabled: e.target.checked }))}
+            sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: COLORS.neon.purple }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: COLORS.neon.purple } }}
+          />
+        </Box>
+      </Box>
 
-        <TronTextField
-          label="Time"
-          type="time"
-          value={local.email_time || '09:00'}
-          onChange={(e) => setLocal((p) => ({ ...p, email_time: e.target.value }))}
-          fullWidth
-        />
+      {/* Monthly Report */}
+      <Box sx={reportCardStyle(local.monthly_enabled)} mb={3}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: local.monthly_enabled ? 2 : 0 }}>
+          <Box>
+            <Typography sx={{ color: COLORS.text.primary, fontSize: '0.95rem', fontWeight: 600 }}>
+              Monthly Report
+            </Typography>
+            <Typography sx={{ color: COLORS.text.muted, fontSize: '0.75rem' }}>
+              This month vs last month comparison
+            </Typography>
+          </Box>
+          <Switch
+            checked={local.monthly_enabled ?? false}
+            onChange={(e) => setLocal((p) => ({ ...p, monthly_enabled: e.target.checked }))}
+            sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: COLORS.neon.purple }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: COLORS.neon.purple } }}
+          />
+        </Box>
+        {local.monthly_enabled && (
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr' }, gap: 2 }}>
+            <FormControl size="small" sx={{ maxWidth: 200 }}>
+              <InputLabel sx={{ color: COLORS.text.muted, fontSize: '0.8rem' }}>Day of Month</InputLabel>
+              <Select
+                value={local.monthly_day || 1}
+                onChange={(e) => setLocal((p) => ({ ...p, monthly_day: e.target.value }))}
+                label="Day of Month"
+                sx={selectStyle}
+              >
+                {Array.from({ length: 28 }, (_, i) => i + 1).map((d) => (
+                  <MenuItem key={d} value={d}>{d === 1 ? '1st' : d === 2 ? '2nd' : d === 3 ? '3rd' : `${d}th`}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
+        )}
       </Box>
 
       {/* Included sections */}
