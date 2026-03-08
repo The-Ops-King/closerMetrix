@@ -330,6 +330,24 @@ const dailyOnboardingTestData = {
     { objection_type: 'Timing',        count: 1, resolved_count: 0, resolution_rate: 0.00 },
     { objection_type: 'Not Ready',     count: 1, resolved_count: 1, resolution_rate: 1.00 },
   ],
+
+  // Cumulative stats from close_watch_start_date to today
+  cumulative: {
+    calls_booked: 42,
+    calls_showed: 28,
+    calls_closed: 3,
+    show_rate: 0.6667,
+    close_rate: 0.1071,
+    cash_collected: 9500,
+    revenue_generated: 18000,
+    script_adherence_avg: 6.8,
+    objections: [
+      { objection_type: 'Financial', count: 5, resolved_count: 3, resolution_rate: 0.60 },
+      { objection_type: 'Spouse/Partner', count: 3, resolved_count: 2, resolution_rate: 0.67 },
+      { objection_type: 'Think About It', count: 2, resolved_count: 1, resolution_rate: 0.50 },
+    ],
+    violations_count: 1,
+  },
 };
 
 module.exports = { weeklyTestData, monthlyTestData, dailyOnboardingTestData };

@@ -158,6 +158,7 @@ router.post('/clients/:clientId/closers', async (req, res) => {
         duration_value: 30,
         until_kpi_met: false,
         enabled: true,
+        watch_type: 'onboarding',
         close_watch_start_date: new Date().toISOString().slice(0, 10),
         created_at: now,
       });

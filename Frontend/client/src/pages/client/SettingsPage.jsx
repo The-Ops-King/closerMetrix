@@ -1115,6 +1115,7 @@ function NotificationsSection({ notifications, closers, onSave }) {
           close_watch_start_date: new Date().toISOString().slice(0, 10),
           until_kpi_met: false,
           enabled: true,
+          watch_type: 'onboarding',
         },
       ],
     }));
@@ -1386,6 +1387,17 @@ function NotificationsSection({ notifications, closers, onSave }) {
             >
               <MenuItem value="days">Days</MenuItem>
               <MenuItem value="calls">Calls</MenuItem>
+            </Select>
+          </FormControl>
+
+          <FormControl size="small" sx={{ minWidth: 120 }}>
+            <Select
+              value={watch.watch_type || 'onboarding'}
+              onChange={(e) => handleUpdateWatch(watch.id, 'watch_type', e.target.value)}
+              sx={{ backgroundColor: COLORS.bg.primary, color: COLORS.text.primary, fontSize: '0.8rem', '& .MuiOutlinedInput-notchedOutline': { borderColor: COLORS.border.subtle } }}
+            >
+              <MenuItem value="onboarding">Onboarding</MenuItem>
+              <MenuItem value="pip">PIP</MenuItem>
             </Select>
           </FormControl>
 
