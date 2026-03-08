@@ -210,9 +210,12 @@ router.post('/test/:type', webhookAuth.admin, async (req, res) => {
  * Without client_id: sends to ALL eligible clients (weekly_enabled/monthly_enabled = true).
  * With client_id: sends for that single client regardless of their enabled setting.
  */
-router.post('/trigger/:type', webhookAuth.admin, async (req, res) => {
+router.post('/trigger/:type', webhookAuth.admin, async (req, res, next) => {
   const { type } = req.params;
   const { client_id, to } = req.query;
+
+  // daily-onboarding is handled by its own dedicated route below — skip here
+  if (type === 'daily-onboarding') return next();
 
   if (type !== 'weekly' && type !== 'monthly') {
     return res.status(400).json({ status: 'error', message: `Invalid type: ${type}. Use "weekly" or "monthly".` });
@@ -281,15 +284,15 @@ router.get('/preview-live/daily-onboarding', previewAuth, async (req, res) => {
  * Uses real BigQuery data. Optional ?to= overrides recipient.
  */
 router.post('/trigger/daily-onboarding', webhookAuth.admin, async (req, res) => {
-  const { client_id, closer_id, to } = req.query;
+  const { client_id, closer_id, to, date } = req.query;
 
   if (!client_id || !closer_id) {
     return res.status(400).json({ status: 'error', message: 'client_id and closer_id query params are required' });
   }
 
   try {
-    logger.info('Email trigger: daily onboarding', { client_id, closer_id, to });
-    const result = await sendOnboardingReportForCloser(client_id, closer_id, to || null);
+    logger.info('Email trigger: daily onboarding', { client_id, closer_id, to, date });
+    const result = await sendOnboardingReportForCloser(client_id, closer_id, to || null, date || null);
     return res.json({ status: result.success ? 'ok' : 'error', ...result });
   } catch (error) {
     logger.error('Daily onboarding trigger failed', { client_id, closer_id, error: error.message });

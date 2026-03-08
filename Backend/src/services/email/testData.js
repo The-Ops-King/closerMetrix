@@ -288,6 +288,7 @@ const dailyOnboardingTestData = {
   company_name: 'How I Met Your Mother Dating',
   closer: { closer_id: 'lilly_erickson', name: 'Lilly Erickson', timezone: 'PST' },
   days_remaining: 7,
+  days_elapsed: 23,
   close_watch_start_date: '2026-02-19',
   watch_type: 'onboarding',  // 'onboarding' or 'pip'
 
@@ -346,7 +347,11 @@ const dailyOnboardingTestData = {
       { objection_type: 'Spouse/Partner', count: 3, resolved_count: 2, resolution_rate: 0.67 },
       { objection_type: 'Think About It', count: 2, resolved_count: 1, resolution_rate: 0.50 },
     ],
-    violations_count: 1,
+    violations_count: 2,
+    violations_items: [
+      { call_date: '2026-02-28', risk_category: 'High Pressure', phrase: 'You need to decide right now', severity: 'high' },
+      { call_date: '2026-02-24', risk_category: 'Income Claims', phrase: 'You will make six figures guaranteed', severity: 'medium' },
+    ],
   },
 };
 

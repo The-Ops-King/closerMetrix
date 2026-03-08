@@ -726,10 +726,6 @@ function computeAlerts(leaderboard) {
  * @returns {Object} Daily onboarding data
  */
 async function fetchDailyOnboardingData(clientId, closerId, dateStr = null) {
-  const today = dateStr || fmtDate(new Date());
-
-  logger.info('EmailDataFetcher: Fetching daily onboarding data', { clientId, closerId, date: today });
-
   // Fetch client + closer + settings in parallel
   const [clientRows, closerRows] = await Promise.all([
     bq.query(
@@ -751,6 +747,19 @@ async function fetchDailyOnboardingData(clientId, closerId, dateStr = null) {
   const closer = closerRows[0];
   if (!closer) throw new Error(`Closer not found: ${closerId} for client ${clientId}`);
 
+  // Use closer's timezone to determine "today" (avoids UTC date mismatch)
+  const tz = closer.timezone || client.timezone || 'America/New_York';
+  let today = dateStr;
+  if (!today) {
+    try {
+      today = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date());
+    } catch {
+      today = fmtDate(new Date());
+    }
+  }
+
+  logger.info('EmailDataFetcher: Fetching daily onboarding data', { clientId, closerId, date: today, timezone: tz });
+
   const settings = typeof client.settings_json === 'string'
     ? JSON.parse(client.settings_json || '{}')
     : (client.settings_json || {});
@@ -768,7 +777,7 @@ async function fetchDailyOnboardingData(clientId, closerId, dateStr = null) {
   // Calculate the lookback period for team averages
   // Use elapsed + remaining days as the total window, fallback to 30
   const elapsed = closeWatchStartDate
-    ? Math.max(0, Math.ceil((todayDate - new Date(closeWatchStartDate)) / (1000 * 60 * 60 * 24)))
+    ? Math.max(0, Math.floor((todayDate - new Date(closeWatchStartDate)) / (1000 * 60 * 60 * 24)))
     : 0;
   const lookbackDays = (elapsed + daysRemaining) || 30;
   const periodStart = new Date(todayDate);
@@ -885,7 +894,7 @@ async function fetchDailyOnboardingData(clientId, closerId, dateStr = null) {
   // ── Cumulative queries (close_watch_start_date → today) ──
   let cumulative = null;
   if (closeWatchStartDate) {
-    const [cumMetrics, cumScript, cumObjections, cumViolations] = await Promise.all([
+    const [cumMetrics, cumScript, cumObjections, cumViolations, cumViolationItems] = await Promise.all([
       // Closer's cumulative calls/shows/closes/cash/revenue
       bq.query(`
         SELECT
@@ -945,6 +954,25 @@ async function fetchDailyOnboardingData(clientId, closerId, dateStr = null) {
           AND c.compliance_flags IS NOT NULL
           AND JSON_VALUE(c.compliance_flags, '$.has_ftc_warning') = 'true'
       `, { clientId, closerId, today, watchStart: closeWatchStartDate }),
+
+      // Closer's cumulative violation detail rows
+      bq.query(`
+        SELECT
+          CAST(c.appointment_date AS DATE) AS call_date,
+          JSON_VALUE(flag, '$.category') AS risk_category,
+          JSON_VALUE(flag, '$.phrase') AS phrase,
+          JSON_VALUE(flag, '$.severity') AS severity
+        FROM ${bq.table('Calls')} c
+        CROSS JOIN UNNEST(JSON_EXTRACT_ARRAY(c.compliance_flags, '$.flags')) AS flag
+        WHERE c.client_id = @clientId
+          AND c.closer_id = @closerId
+          AND DATE(c.appointment_date) BETWEEN DATE(@watchStart) AND DATE(@today)
+          AND c.attendance = 'Show'
+          AND c.compliance_flags IS NOT NULL
+          AND JSON_VALUE(c.compliance_flags, '$.has_ftc_warning') = 'true'
+        ORDER BY c.appointment_date DESC
+        LIMIT 20
+      `, { clientId, closerId, today, watchStart: closeWatchStartDate }),
     ]);
 
     const cumM = cumMetrics[0] || {};
@@ -964,6 +992,12 @@ async function fetchDailyOnboardingData(clientId, closerId, dateStr = null) {
         resolution_rate: num(o.resolution_rate),
       })),
       violations_count: num(cumViolations[0]?.violations_count),
+      violations_items: cumViolationItems.map(v => ({
+        call_date: v.call_date?.value || String(v.call_date),
+        risk_category: v.risk_category,
+        phrase: v.phrase,
+        severity: v.severity,
+      })),
     };
   }
 
@@ -1008,6 +1042,7 @@ async function fetchDailyOnboardingData(clientId, closerId, dateStr = null) {
       timezone: closer.timezone || client.timezone || 'America/New_York',
     },
     days_remaining: daysRemaining,
+    days_elapsed: elapsed,
     close_watch_start_date: closeWatchStartDate,
     calls_booked: num(cm.calls_booked),
     calls_showed: num(cm.calls_showed),

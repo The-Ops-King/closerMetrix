@@ -562,8 +562,7 @@ function renderDailyOnboardingReport(data, opts = {}) {
   _setBaseUrl(opts.baseUrl);
   const logoSrc = _logoUrl;
   const daysLeft = data.days_remaining ?? 0;
-  const startDate = data.close_watch_start_date ? new Date(data.close_watch_start_date) : null;
-  const elapsed = startDate ? Math.max(0, Math.ceil((new Date(data.report_date) - startDate) / (1000 * 60 * 60 * 24))) : 0;
+  const elapsed = data.days_elapsed ?? 0;
   const totalDuration = elapsed + daysLeft;
   const progressPct = totalDuration > 0 ? Math.min(100, Math.round((elapsed / totalDuration) * 100)) : 0;
   const daysColor = daysLeft <= 3 ? C.red : daysLeft <= 7 ? C.amber : C.purple;
@@ -595,9 +594,9 @@ function renderDailyOnboardingReport(data, opts = {}) {
 
   // ── Day at a Glance (3 metric cards) ──
   const glanceCards = _onboardingMetricCards([
-    { label: 'Calls Booked', value: num(data.calls_booked), color: C.cyan },
-    { label: 'Shows', value: `${num(data.calls_showed)} (${pct(data.show_rate)})`, color: C.blue },
-    { label: 'Closes', value: `${num(data.calls_closed)} (${pct(data.close_rate)})`, color: C.green },
+    { label: 'Calls Booked', value: num(data.calls_booked), sub: '', color: C.cyan },
+    { label: 'Held', value: num(data.calls_showed), sub: pct(data.show_rate), color: C.blue },
+    { label: 'Closes', value: num(data.calls_closed), sub: pct(data.close_rate), color: C.green },
   ]);
   const glanceSection = card('Day at a Glance', glanceCards, C.cyan);
 
@@ -614,15 +613,16 @@ function renderDailyOnboardingReport(data, opts = {}) {
   if (sa && sa.score != null) {
     const scoreColor = sa.score >= 7 ? C.green : sa.score >= 5 ? C.amber : C.red;
     const teamColor = C.textMuted;
+    const firstName = data.closer.name.split(' ')[0];
     const scriptContent = `
       <table width="100%" cellpadding="0" cellspacing="0">
         <tr>
-          <td width="50%" style="padding:12px;text-align:center;">
-            <div style="font-size:36px;font-weight:700;color:${scoreColor};">${sa.score.toFixed(1)}</div>
-            <div style="font-size:12px;color:${C.textMuted};text-transform:uppercase;letter-spacing:1px;margin-top:4px;">${data.closer.name}</div>
+          <td width="50%" style="padding:12px;text-align:center;vertical-align:top;">
+            <div style="font-size:36px;font-weight:700;color:${scoreColor};line-height:1.1;">${sa.score.toFixed(1)}</div>
+            <div style="font-size:12px;color:${C.textMuted};text-transform:uppercase;letter-spacing:1px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${firstName}</div>
           </td>
-          <td width="50%" style="padding:12px;text-align:center;">
-            <div style="font-size:36px;font-weight:700;color:${teamColor};">${sa.team_avg != null ? sa.team_avg.toFixed(1) : '—'}</div>
+          <td width="50%" style="padding:12px;text-align:center;vertical-align:top;">
+            <div style="font-size:36px;font-weight:700;color:${teamColor};line-height:1.1;">${sa.team_avg != null ? sa.team_avg.toFixed(1) : '—'}</div>
             <div style="font-size:12px;color:${C.textMuted};text-transform:uppercase;letter-spacing:1px;margin-top:4px;">Team Avg</div>
           </td>
         </tr>
@@ -658,10 +658,11 @@ function renderDailyOnboardingReport(data, opts = {}) {
     objectionsSection = card('Objections', objectionsContent, C.amber);
   }
 
-  // ── Today's Violations ──
+  // ── Today's Violations (always shown) ──
   let violationsSection = '';
-  if (data.violations && data.violations.length > 0) {
-    const violationRows = data.violations.map(v => {
+  const todayViolations = data.violations || [];
+  if (todayViolations.length > 0) {
+    const violationRows = todayViolations.map(v => {
       const sevColor = v.severity === 'high' ? C.red : C.amber;
       return `
         <tr>
@@ -684,6 +685,13 @@ function renderDailyOnboardingReport(data, opts = {}) {
       </table>
     `;
     violationsSection = card('Violations & Risk', violationsContent, C.red);
+  } else {
+    const zeroContent = `
+      <p style="margin:0;font-size:14px;color:${C.green};text-align:center;padding:12px 0;">
+        0 Violations &mdash; No flags today
+      </p>
+    `;
+    violationsSection = card('Violations & Risk', zeroContent, C.green);
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -692,7 +700,7 @@ function renderDailyOnboardingReport(data, opts = {}) {
 
   const cum = data.cumulative;
   const t = data.targets || {};
-  const targetLabel = t.source === 'kpi' ? 'KPI Target' : 'Team Avg';
+  const targetLabel = t.source === 'kpi' ? 'Target' : 'Team Avg';
 
   // Dynamic title based on watch_type
   const thirtyDayTitle = watchType === 'pip'
@@ -705,9 +713,9 @@ function renderDailyOnboardingReport(data, opts = {}) {
   if (cum) {
     // ── Cumulative metric cards (3-up) ──
     const cumGlanceCards = _onboardingMetricCards([
-      { label: 'Calls Booked', value: num(cum.calls_booked), color: C.purple },
-      { label: 'Shows', value: `${num(cum.calls_showed)} (${pct(cum.show_rate)})`, color: C.blue },
-      { label: 'Closes', value: `${num(cum.calls_closed)} (${pct(cum.close_rate)})`, color: C.green },
+      { label: 'Calls Booked', value: num(cum.calls_booked), sub: '', color: C.purple },
+      { label: 'Held', value: num(cum.calls_showed), sub: pct(cum.show_rate), color: C.blue },
+      { label: 'Closes', value: num(cum.calls_closed), sub: pct(cum.close_rate), color: C.green },
     ]);
     const cumGlanceSection = card('Cumulative Performance', cumGlanceCards, C.purple);
 
@@ -717,7 +725,7 @@ function renderDailyOnboardingReport(data, opts = {}) {
     const periodNote = t.period_label ? ` <span style="font-size:11px;color:${C.textMuted};text-transform:none;letter-spacing:0;">(${t.period_label})</span>` : '';
 
     const comparisonRows = [
-      _comparisonRow('Show Rate', pct(cum.show_rate), pct(t.show_rate), cum.show_rate, t.show_rate, false),
+      _comparisonRow('Held Rate', pct(cum.show_rate), pct(t.show_rate), cum.show_rate, t.show_rate, false),
       _comparisonRow('Close Rate', pct(cum.close_rate), pct(t.close_rate), cum.close_rate, t.close_rate, false),
       _comparisonRow('Avg Deal Size', cumAvgDeal > 0 ? usd(cumAvgDeal) : '—', usd(t.avg_deal_size), cumAvgDeal, t.avg_deal_size, false),
       _comparisonRow('Avg Cash / Deal', cumAvgCash > 0 ? usd(cumAvgCash) : '—', usd(t.avg_cash_per_deal), cumAvgCash, t.avg_cash_per_deal, false),
@@ -761,15 +769,16 @@ function renderDailyOnboardingReport(data, opts = {}) {
     if (cum.script_adherence_avg != null) {
       const cumScoreColor = cum.script_adherence_avg >= 7 ? C.green : cum.script_adherence_avg >= 5 ? C.amber : C.red;
       const teamScriptAvg = sa?.team_avg;
+      const cumFirstName = data.closer.name.split(' ')[0];
       const cumScriptContent = `
         <table width="100%" cellpadding="0" cellspacing="0">
           <tr>
-            <td width="50%" style="padding:12px;text-align:center;">
-              <div style="font-size:36px;font-weight:700;color:${cumScoreColor};">${cum.script_adherence_avg.toFixed(1)}</div>
-              <div style="font-size:12px;color:${C.textMuted};text-transform:uppercase;letter-spacing:1px;margin-top:4px;">${data.closer.name} Avg</div>
+            <td width="50%" style="padding:12px;text-align:center;vertical-align:top;">
+              <div style="font-size:36px;font-weight:700;color:${cumScoreColor};line-height:1.1;">${cum.script_adherence_avg.toFixed(1)}</div>
+              <div style="font-size:12px;color:${C.textMuted};text-transform:uppercase;letter-spacing:1px;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${cumFirstName} Avg</div>
             </td>
-            <td width="50%" style="padding:12px;text-align:center;">
-              <div style="font-size:36px;font-weight:700;color:${C.textMuted};">${teamScriptAvg != null ? teamScriptAvg.toFixed(1) : '—'}</div>
+            <td width="50%" style="padding:12px;text-align:center;vertical-align:top;">
+              <div style="font-size:36px;font-weight:700;color:${C.textMuted};line-height:1.1;">${teamScriptAvg != null ? teamScriptAvg.toFixed(1) : '—'}</div>
               <div style="font-size:12px;color:${C.textMuted};text-transform:uppercase;letter-spacing:1px;margin-top:4px;">Team Avg</div>
             </td>
           </tr>
@@ -804,9 +813,40 @@ function renderDailyOnboardingReport(data, opts = {}) {
       cumObjectionsSection = card('Cumulative Objections', cumObjContent, C.amber);
     }
 
-    // ── Cumulative Violations count ──
+    // ── Cumulative Violations (full detail) ──
     let cumViolationsSection = '';
-    if (cum.violations_count > 0) {
+    const cumViolItems = cum.violations_items || [];
+    if (cumViolItems.length > 0) {
+      const fmtViolDate = (d) => {
+        try {
+          const dt = new Date(d + 'T00:00:00');
+          return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        } catch { return d; }
+      };
+
+      const cumViolRows = cumViolItems.map(v => {
+        return `
+          <tr>
+            <td style="padding:6px 4px;color:${C.textMuted};font-size:12px;border-bottom:1px solid ${C.cardBorder};white-space:nowrap;">${fmtViolDate(v.call_date)}</td>
+            <td style="padding:6px 4px;color:${C.text};font-size:12px;border-bottom:1px solid ${C.cardBorder};">${v.risk_category}</td>
+            <td style="padding:6px 4px;color:${C.text};font-size:12px;font-style:italic;border-bottom:1px solid ${C.cardBorder};">"${v.phrase}"</td>
+          </tr>
+        `;
+      }).join('');
+
+      const cumViolContent = `
+        <p style="margin:0 0 8px 0;font-size:13px;color:${C.textMuted};">${cum.violations_count} total violation${cum.violations_count !== 1 ? 's' : ''} flagged</p>
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <th style="padding:6px 4px;color:${C.textMuted};font-size:11px;text-align:left;border-bottom:2px solid ${C.borderDefault};text-transform:uppercase;">Date</th>
+            <th style="padding:6px 4px;color:${C.textMuted};font-size:11px;text-align:left;border-bottom:2px solid ${C.borderDefault};text-transform:uppercase;">Type</th>
+            <th style="padding:6px 4px;color:${C.textMuted};font-size:11px;text-align:left;border-bottom:2px solid ${C.borderDefault};text-transform:uppercase;">Phrase</th>
+          </tr>
+          ${cumViolRows}
+        </table>
+      `;
+      cumViolationsSection = card('Violations & Risk', cumViolContent, C.red);
+    } else if (cum.violations_count > 0) {
       const cumViolContent = metricTable(
         metricRow('Total Violations', num(cum.violations_count), '')
       );
@@ -914,15 +954,21 @@ function _sectionDivider(label, color) {
 
 /** Renders 3 metric cards in a row for the onboarding glance section. */
 function _onboardingMetricCards(items) {
-  const cells = items.map(item => `
-    <td width="33%" style="padding:8px;text-align:center;">
-      <div style="background:${C.elevated};border-radius:6px;padding:16px 8px;">
-        <div style="font-size:24px;font-weight:700;color:${item.color};">${item.value}</div>
-        <div style="font-size:12px;color:${C.textMuted};text-transform:uppercase;letter-spacing:1px;margin-top:4px;">${item.label}</div>
-      </div>
-    </td>
-  `).join('');
-  return `<table width="100%" cellpadding="0" cellspacing="0"><tr>${cells}</tr></table>`;
+  const cells = items.map(item => {
+    const subLine = item.sub
+      ? `<div style="font-size:12px;font-weight:400;color:${C.textMuted};margin-top:2px;">${item.sub}</div>`
+      : `<div style="font-size:12px;margin-top:2px;">&nbsp;</div>`;
+    return `
+      <td width="33%" style="padding:4px;text-align:center;vertical-align:top;">
+        <div style="background:${C.elevated};border-radius:6px;padding:14px 4px;">
+          <div style="font-size:22px;font-weight:700;color:${item.color};line-height:1.2;">${item.value}</div>
+          ${subLine}
+          <div style="font-size:10px;color:${C.textMuted};text-transform:uppercase;letter-spacing:0.5px;margin-top:4px;">${item.label}</div>
+        </div>
+      </td>
+    `;
+  }).join('');
+  return `<table width="100%" cellpadding="0" cellspacing="0" style="table-layout:fixed;"><tr>${cells}</tr></table>`;
 }
 
 /** Renders a comparison row: metric | closer value | target value | color-coded delta. */
