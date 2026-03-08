@@ -97,13 +97,17 @@ const SECTION_ICON_FILES = {
   'Violations & Risk':    'violations.png',
   'Metric Alerts':        'alerts.png',
   'Closer Leaderboard':   'leaderboard.png',
-  // Onboarding report sections
-  'Close Watch Progress': 'clock-purple.png',
+  // Onboarding report sections — Today
+  'Closer Watch Progress': 'clock-purple.png',
   'Day at a Glance':      'calendar-teal.png',
   'Revenue':              'financial.png',
   'Script Adherence':     'sales-cycle.png',
   'vs Team Avg':          'trophy-yellow.png',
   'vs KPI Target':        'trophy-yellow.png',
+  // Onboarding report sections — 30-Day Cumulative
+  'Cumulative Performance': 'clock-purple.png',
+  'Cumulative Revenue':     'financial.png',
+  'Cumulative Objections':  'objections.png',
 };
 
 // Public GCS URL for email icons — works in all email clients, no attachments.
@@ -563,8 +567,9 @@ function renderDailyOnboardingReport(data, opts = {}) {
   const totalDuration = elapsed + daysLeft;
   const progressPct = totalDuration > 0 ? Math.min(100, Math.round((elapsed / totalDuration) * 100)) : 0;
   const daysColor = daysLeft <= 3 ? C.red : daysLeft <= 7 ? C.amber : C.purple;
+  const watchType = data.watch_type || 'onboarding';
 
-  // ── Close Watch Progress ──
+  // ── Closer Watch Progress ──
   const progressContent = `
     <p style="margin:0 0 12px 0;font-size:36px;font-weight:700;color:${daysColor};">
       ${daysLeft} <span style="font-size:14px;font-weight:400;color:${C.textSecondary};text-transform:uppercase;letter-spacing:1px;">days remaining</span>
@@ -580,7 +585,13 @@ function renderDailyOnboardingReport(data, opts = {}) {
       Day ${elapsed} of ${totalDuration}
     </p>
   `;
-  const progressSection = card('Close Watch Progress', progressContent, C.purple);
+  const progressSection = card('Closer Watch Progress', progressContent, C.purple);
+
+  // ══════════════════════════════════════════════════════════════
+  //  TODAY SECTION (cyan accent — single day snapshot)
+  // ══════════════════════════════════════════════════════════════
+
+  const todaySectionHeader = _sectionDivider('Today', C.cyan);
 
   // ── Day at a Glance (3 metric cards) ──
   const glanceCards = _onboardingMetricCards([
@@ -621,54 +632,7 @@ function renderDailyOnboardingReport(data, opts = {}) {
     scriptSection = card('Script Adherence', scriptContent, C.purple);
   }
 
-  // ── vs KPI / Team Avg (full onboarding period) ──
-  const t = data.targets || {};
-  const targetLabel = t.source === 'kpi' ? 'KPI Target' : 'Team Avg';
-  const periodNote = t.period_label ? ` <span style="font-size:11px;color:${C.textMuted};text-transform:none;letter-spacing:0;">(${t.period_label})</span>` : '';
-  const closerAvgCash = data.calls_closed > 0 ? data.cash_collected / data.calls_closed : 0;
-  const closerAvgDeal = data.calls_closed > 0 ? data.revenue_generated / data.calls_closed : 0;
-  const comparisonRows = [
-    _comparisonRow('Show Rate', pct(data.show_rate), pct(t.show_rate), data.show_rate, t.show_rate, false),
-    _comparisonRow('Close Rate', pct(data.close_rate), pct(t.close_rate), data.close_rate, t.close_rate, false),
-    _comparisonRow('Avg Deal Size', closerAvgDeal > 0 ? usd(closerAvgDeal) : '—', usd(t.avg_deal_size), closerAvgDeal, t.avg_deal_size, false),
-    _comparisonRow('Avg Cash / Deal', closerAvgCash > 0 ? usd(closerAvgCash) : '—', usd(t.avg_cash_per_deal), closerAvgCash, t.avg_cash_per_deal, false),
-    _comparisonRow('Cash Collected', usd(data.cash_collected), usd(t.cash_collected), data.cash_collected, t.cash_collected, false),
-    _comparisonRow('Revenue', usd(data.revenue_generated), usd(t.revenue_generated), data.revenue_generated, t.revenue_generated, false),
-  ].join('');
-
-  // Dynamic icon for comparison section — trophy icon
-  const comparisonIconKey = t.source === 'kpi' ? 'vs KPI Target' : 'vs Team Avg';
-  const comparisonIconFile = SECTION_ICON_FILES[comparisonIconKey];
-  const comparisonIconHtml = comparisonIconFile
-    ? `<img src="${_iconsBaseUrl}/${comparisonIconFile}" width="18" height="18" style="vertical-align:middle;margin-right:8px;" alt="" />`
-    : '';
-
-  const comparisonContent = `
-    <table width="100%" cellpadding="0" cellspacing="0">
-      <tr>
-        <th style="padding:6px 8px;color:${C.textMuted};font-size:13px;text-align:left;border-bottom:2px solid ${C.borderDefault};text-transform:uppercase;">Metric</th>
-        <th style="padding:6px 8px;color:${C.textMuted};font-size:13px;text-align:right;border-bottom:2px solid ${C.borderDefault};text-transform:uppercase;">Today</th>
-        <th style="padding:6px 8px;color:${C.textMuted};font-size:13px;text-align:right;border-bottom:2px solid ${C.borderDefault};text-transform:uppercase;">${targetLabel}</th>
-        <th style="padding:6px 8px;color:${C.textMuted};font-size:13px;text-align:right;border-bottom:2px solid ${C.borderDefault};text-transform:uppercase;">Delta</th>
-      </tr>
-      ${comparisonRows}
-    </table>
-  `;
-  // Build comparison card manually to include period note in heading
-  const comparisonSection = `
-    <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
-      <tr>
-        <td style="background:${C.cardBg};border:1px solid ${C.cardBorder};border-top:3px solid ${C.amber};border-radius:8px;padding:20px;">
-          <h2 style="margin:0 0 16px 0;font-size:18px;font-weight:600;color:${C.amber};text-transform:uppercase;letter-spacing:1px;">
-            ${comparisonIconHtml}vs ${targetLabel}${periodNote}
-          </h2>
-          ${comparisonContent}
-        </td>
-      </tr>
-    </table>
-  `;
-
-  // ── Objections ──
+  // ── Today's Objections ──
   let objectionsSection = '';
   if (data.objections && data.objections.length > 0) {
     const objRows = data.objections.map(o => `
@@ -694,7 +658,7 @@ function renderDailyOnboardingReport(data, opts = {}) {
     objectionsSection = card('Objections', objectionsContent, C.amber);
   }
 
-  // ── Violations (bottom, only if present) ──
+  // ── Today's Violations ──
   let violationsSection = '';
   if (data.violations && data.violations.length > 0) {
     const violationRows = data.violations.map(v => {
@@ -722,12 +686,149 @@ function renderDailyOnboardingReport(data, opts = {}) {
     violationsSection = card('Violations & Risk', violationsContent, C.red);
   }
 
+  // ══════════════════════════════════════════════════════════════
+  //  30-DAY SECTION (purple accent — cumulative since watch start)
+  // ══════════════════════════════════════════════════════════════
+
+  const cum = data.cumulative;
+  const t = data.targets || {};
+  const targetLabel = t.source === 'kpi' ? 'KPI Target' : 'Team Avg';
+
+  // Dynamic title based on watch_type
+  const thirtyDayTitle = watchType === 'pip'
+    ? `Last 30 Days — PIP Progress`
+    : `Since Onboarding — Day ${elapsed} of ${totalDuration}`;
+
+  const thirtyDaySectionHeader = _sectionDivider(thirtyDayTitle, C.purple);
+
+  let cumulativeHtml = '';
+  if (cum) {
+    // ── Cumulative metric cards (3-up) ──
+    const cumGlanceCards = _onboardingMetricCards([
+      { label: 'Calls Booked', value: num(cum.calls_booked), color: C.purple },
+      { label: 'Shows', value: `${num(cum.calls_showed)} (${pct(cum.show_rate)})`, color: C.blue },
+      { label: 'Closes', value: `${num(cum.calls_closed)} (${pct(cum.close_rate)})`, color: C.green },
+    ]);
+    const cumGlanceSection = card('Cumulative Performance', cumGlanceCards, C.purple);
+
+    // ── Cumulative vs Target comparison ──
+    const cumAvgCash = cum.calls_closed > 0 ? cum.cash_collected / cum.calls_closed : 0;
+    const cumAvgDeal = cum.calls_closed > 0 ? cum.revenue_generated / cum.calls_closed : 0;
+    const periodNote = t.period_label ? ` <span style="font-size:11px;color:${C.textMuted};text-transform:none;letter-spacing:0;">(${t.period_label})</span>` : '';
+
+    const comparisonRows = [
+      _comparisonRow('Show Rate', pct(cum.show_rate), pct(t.show_rate), cum.show_rate, t.show_rate, false),
+      _comparisonRow('Close Rate', pct(cum.close_rate), pct(t.close_rate), cum.close_rate, t.close_rate, false),
+      _comparisonRow('Avg Deal Size', cumAvgDeal > 0 ? usd(cumAvgDeal) : '—', usd(t.avg_deal_size), cumAvgDeal, t.avg_deal_size, false),
+      _comparisonRow('Avg Cash / Deal', cumAvgCash > 0 ? usd(cumAvgCash) : '—', usd(t.avg_cash_per_deal), cumAvgCash, t.avg_cash_per_deal, false),
+    ].join('');
+
+    const comparisonIconFile = SECTION_ICON_FILES[t.source === 'kpi' ? 'vs KPI Target' : 'vs Team Avg'];
+    const comparisonIconHtml = comparisonIconFile
+      ? `<img src="${_iconsBaseUrl}/${comparisonIconFile}" width="18" height="18" style="vertical-align:middle;margin-right:8px;" alt="" />`
+      : '';
+
+    const comparisonSection = `
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
+        <tr>
+          <td style="background:${C.cardBg};border:1px solid ${C.cardBorder};border-top:3px solid ${C.amber};border-radius:8px;padding:20px;">
+            <h2 style="margin:0 0 16px 0;font-size:18px;font-weight:600;color:${C.amber};text-transform:uppercase;letter-spacing:1px;">
+              ${comparisonIconHtml}vs ${targetLabel}${periodNote}
+            </h2>
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <th style="padding:6px 8px;color:${C.textMuted};font-size:13px;text-align:left;border-bottom:2px solid ${C.borderDefault};text-transform:uppercase;">Metric</th>
+                <th style="padding:6px 8px;color:${C.textMuted};font-size:13px;text-align:right;border-bottom:2px solid ${C.borderDefault};text-transform:uppercase;">Cumulative</th>
+                <th style="padding:6px 8px;color:${C.textMuted};font-size:13px;text-align:right;border-bottom:2px solid ${C.borderDefault};text-transform:uppercase;">${targetLabel}</th>
+                <th style="padding:6px 8px;color:${C.textMuted};font-size:13px;text-align:right;border-bottom:2px solid ${C.borderDefault};text-transform:uppercase;">Delta</th>
+              </tr>
+              ${comparisonRows}
+            </table>
+          </td>
+        </tr>
+      </table>
+    `;
+
+    // ── Cumulative Revenue ──
+    const cumRevenueRows = [
+      metricRow('Cash Collected', usd(cum.cash_collected), ''),
+      metricRow('Revenue Generated', usd(cum.revenue_generated), ''),
+    ].join('');
+    const cumRevenueSection = card('Cumulative Revenue', metricTable(cumRevenueRows), C.teal);
+
+    // ── Cumulative Script Adherence ──
+    let cumScriptSection = '';
+    if (cum.script_adherence_avg != null) {
+      const cumScoreColor = cum.script_adherence_avg >= 7 ? C.green : cum.script_adherence_avg >= 5 ? C.amber : C.red;
+      const teamScriptAvg = sa?.team_avg;
+      const cumScriptContent = `
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td width="50%" style="padding:12px;text-align:center;">
+              <div style="font-size:36px;font-weight:700;color:${cumScoreColor};">${cum.script_adherence_avg.toFixed(1)}</div>
+              <div style="font-size:12px;color:${C.textMuted};text-transform:uppercase;letter-spacing:1px;margin-top:4px;">${data.closer.name} Avg</div>
+            </td>
+            <td width="50%" style="padding:12px;text-align:center;">
+              <div style="font-size:36px;font-weight:700;color:${C.textMuted};">${teamScriptAvg != null ? teamScriptAvg.toFixed(1) : '—'}</div>
+              <div style="font-size:12px;color:${C.textMuted};text-transform:uppercase;letter-spacing:1px;margin-top:4px;">Team Avg</div>
+            </td>
+          </tr>
+        </table>
+      `;
+      cumScriptSection = card('Script Adherence', cumScriptContent, C.purple);
+    }
+
+    // ── Cumulative Objections ──
+    let cumObjectionsSection = '';
+    if (cum.objections && cum.objections.length > 0) {
+      const cumObjRows = cum.objections.map(o => `
+        <tr>
+          <td style="padding:6px 8px;color:${C.text};font-size:14px;border-bottom:1px solid ${C.cardBorder};">${o.objection_type}</td>
+          <td style="padding:6px 8px;color:${C.text};font-size:13px;text-align:center;border-bottom:1px solid ${C.cardBorder};">${o.count}</td>
+          <td style="padding:6px 8px;color:${C.text};font-size:13px;text-align:center;border-bottom:1px solid ${C.cardBorder};">${o.resolved_count}</td>
+          <td style="padding:6px 8px;color:${o.resolution_rate >= 0.6 ? C.green : C.amber};font-size:13px;text-align:right;border-bottom:1px solid ${C.cardBorder};">${pct(o.resolution_rate)}</td>
+        </tr>
+      `).join('');
+
+      const cumObjContent = `
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <th style="padding:6px 8px;color:${C.textMuted};font-size:13px;text-align:left;border-bottom:2px solid ${C.borderDefault};text-transform:uppercase;">Type</th>
+            <th style="padding:6px 8px;color:${C.textMuted};font-size:13px;text-align:center;border-bottom:2px solid ${C.borderDefault};text-transform:uppercase;">Count</th>
+            <th style="padding:6px 8px;color:${C.textMuted};font-size:13px;text-align:center;border-bottom:2px solid ${C.borderDefault};text-transform:uppercase;">Resolved</th>
+            <th style="padding:6px 8px;color:${C.textMuted};font-size:13px;text-align:right;border-bottom:2px solid ${C.borderDefault};text-transform:uppercase;">Rate</th>
+          </tr>
+          ${cumObjRows}
+        </table>
+      `;
+      cumObjectionsSection = card('Cumulative Objections', cumObjContent, C.amber);
+    }
+
+    // ── Cumulative Violations count ──
+    let cumViolationsSection = '';
+    if (cum.violations_count > 0) {
+      const cumViolContent = metricTable(
+        metricRow('Total Violations', num(cum.violations_count), '')
+      );
+      cumViolationsSection = card('Violations & Risk', cumViolContent, C.red);
+    }
+
+    cumulativeHtml = `
+      ${cumGlanceSection}
+      ${comparisonSection}
+      ${cumRevenueSection}
+      ${cumScriptSection}
+      ${cumObjectionsSection}
+      ${cumViolationsSection}
+    `;
+  }
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CloserMetrix Close Watch — ${data.closer.name}</title>
+  <title>CloserMetrix Closer Watch — ${data.closer.name}</title>
   ${refreshScript}
 </head>
 <body style="margin:0;padding:0;background:${C.bg};font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:${C.text};-webkit-font-smoothing:antialiased;">
@@ -741,7 +842,7 @@ function renderDailyOnboardingReport(data, opts = {}) {
             <td style="padding:24px 0;text-align:center;">
               <img src="${logoSrc}" alt="CloserMetrix" width="600" style="width:100%;max-width:600px;height:auto;margin-bottom:8px;" />
               <p style="margin:8px 0 0 0;font-size:14px;color:${C.textSecondary};">
-                Close Watch Report &middot; ${data.company_name}
+                Closer Watch Report &middot; ${data.company_name}
               </p>
               <p style="margin:4px 0 0 0;font-size:16px;font-weight:600;color:${C.cyan};">
                 ${data.closer.name}
@@ -759,14 +860,20 @@ function renderDailyOnboardingReport(data, opts = {}) {
             </td>
           </tr>
 
-          <!-- Sections -->
+          <!-- Progress Bar -->
           <tr><td>${progressSection}</td></tr>
+
+          <!-- ═══ TODAY ═══ -->
+          <tr><td>${todaySectionHeader}</td></tr>
           <tr><td>${glanceSection}</td></tr>
           <tr><td>${revenueSection}</td></tr>
           <tr><td>${scriptSection}</td></tr>
-          <tr><td>${comparisonSection}</td></tr>
           <tr><td>${objectionsSection}</td></tr>
           <tr><td>${violationsSection}</td></tr>
+
+          <!-- ═══ 30-DAY CUMULATIVE ═══ -->
+          <tr><td>${thirtyDaySectionHeader}</td></tr>
+          <tr><td>${cumulativeHtml}</td></tr>
 
           <!-- Footer -->
           <tr>
@@ -787,6 +894,22 @@ function renderDailyOnboardingReport(data, opts = {}) {
   </table>
 </body>
 </html>`;
+}
+
+/** Renders a section divider with a gradient line and label (e.g. "Today" or "Since Onboarding"). */
+function _sectionDivider(label, color) {
+  return `
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0 16px 0;">
+      <tr>
+        <td style="padding:0;">
+          <div style="height:2px;background:linear-gradient(90deg, ${color}, transparent);margin-bottom:12px;"></div>
+          <h2 style="margin:0;font-size:16px;font-weight:700;color:${color};text-transform:uppercase;letter-spacing:2px;">
+            ${label}
+          </h2>
+        </td>
+      </tr>
+    </table>
+  `;
 }
 
 /** Renders 3 metric cards in a row for the onboarding glance section. */

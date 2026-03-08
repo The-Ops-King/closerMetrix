@@ -1341,7 +1341,7 @@ function NotificationsSection({ notifications, closers, onSave }) {
 
       {/* Close watches */}
       <Typography sx={{ color: COLORS.text.secondary, fontSize: '0.8rem', fontWeight: 600, mb: 1, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-        Close Watches
+        Closer Watches
       </Typography>
       {(local.close_watches || []).map((watch) => (
         <Box
@@ -1417,7 +1417,7 @@ function NotificationsSection({ notifications, closers, onSave }) {
         size="small"
         sx={{ color: COLORS.neon.purple, fontSize: '0.8rem', textTransform: 'none', mb: 2 }}
       >
-        Add Close Watch
+        Add Closer Watch
       </Button>
 
       <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>

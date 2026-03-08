@@ -760,6 +760,7 @@ async function fetchDailyOnboardingData(clientId, closerId, dateStr = null) {
   const watch = watches.find(w => w.closer_id === closerId);
   const daysRemaining = watch?.duration_value || 0;
   const closeWatchStartDate = watch?.close_watch_start_date || null;
+  const watchType = watch?.watch_type || 'onboarding';
   const todayDate = new Date(today);
 
   const VIEW = bq.table('v_calls_joined_flat_prefixed');
@@ -881,6 +882,91 @@ async function fetchDailyOnboardingData(clientId, closerId, dateStr = null) {
     `, { clientId, closerId, today }),
   ]);
 
+  // ── Cumulative queries (close_watch_start_date → today) ──
+  let cumulative = null;
+  if (closeWatchStartDate) {
+    const [cumMetrics, cumScript, cumObjections, cumViolations] = await Promise.all([
+      // Closer's cumulative calls/shows/closes/cash/revenue
+      bq.query(`
+        SELECT
+          COUNT(*) as calls_booked,
+          COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END) as calls_showed,
+          COUNT(CASE WHEN calls_call_outcome IN ('Closed - Won', 'Deposit') THEN 1 END) as calls_closed,
+          SAFE_DIVIDE(COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END), COUNT(*)) as show_rate,
+          SAFE_DIVIDE(
+            COUNT(CASE WHEN calls_call_outcome IN ('Closed - Won', 'Deposit') THEN 1 END),
+            COUNT(CASE WHEN calls_attendance = 'Show' THEN 1 END)
+          ) as close_rate,
+          SUM(CASE WHEN calls_call_outcome IN ('Closed - Won', 'Deposit') THEN CAST(calls_cash_collected AS FLOAT64) ELSE 0 END) as cash_collected,
+          SUM(CASE WHEN calls_call_outcome IN ('Closed - Won', 'Deposit') THEN CAST(calls_revenue_generated AS FLOAT64) ELSE 0 END) as revenue_generated
+        FROM ${VIEW}
+        WHERE clients_client_id = @clientId
+          AND closers_closer_id = @closerId
+          AND DATE(calls_appointment_date) BETWEEN DATE(@watchStart) AND DATE(@today)
+      `, { clientId, closerId, today, watchStart: closeWatchStartDate }),
+
+      // Closer's cumulative script adherence avg
+      bq.query(`
+        SELECT AVG(CAST(calls_script_adherence_score AS FLOAT64)) as score
+        FROM ${VIEW}
+        WHERE clients_client_id = @clientId
+          AND closers_closer_id = @closerId
+          AND DATE(calls_appointment_date) BETWEEN DATE(@watchStart) AND DATE(@today)
+          AND calls_attendance = 'Show'
+          AND calls_script_adherence_score IS NOT NULL
+      `, { clientId, closerId, today, watchStart: closeWatchStartDate }),
+
+      // Closer's cumulative objections aggregated
+      bq.query(`
+        SELECT
+          o.objection_type,
+          COUNT(*) AS count,
+          COUNTIF(o.resolved = TRUE) AS resolved_count,
+          SAFE_DIVIDE(COUNTIF(o.resolved = TRUE), COUNT(*)) AS resolution_rate
+        FROM ${bq.table('Objections')} o
+        JOIN ${bq.table('Calls')} c ON o.call_id = c.call_id
+        WHERE o.client_id = @clientId
+          AND c.closer_id = @closerId
+          AND DATE(c.appointment_date) BETWEEN DATE(@watchStart) AND DATE(@today)
+        GROUP BY o.objection_type
+        ORDER BY count DESC
+        LIMIT 6
+      `, { clientId, closerId, today, watchStart: closeWatchStartDate }),
+
+      // Closer's cumulative violations count
+      bq.query(`
+        SELECT COUNT(*) AS violations_count
+        FROM ${bq.table('Calls')} c
+        CROSS JOIN UNNEST(JSON_EXTRACT_ARRAY(c.compliance_flags, '$.flags')) AS flag
+        WHERE c.client_id = @clientId
+          AND c.closer_id = @closerId
+          AND DATE(c.appointment_date) BETWEEN DATE(@watchStart) AND DATE(@today)
+          AND c.attendance = 'Show'
+          AND c.compliance_flags IS NOT NULL
+          AND JSON_VALUE(c.compliance_flags, '$.has_ftc_warning') = 'true'
+      `, { clientId, closerId, today, watchStart: closeWatchStartDate }),
+    ]);
+
+    const cumM = cumMetrics[0] || {};
+    cumulative = {
+      calls_booked: num(cumM.calls_booked),
+      calls_showed: num(cumM.calls_showed),
+      calls_closed: num(cumM.calls_closed),
+      show_rate: num(cumM.show_rate),
+      close_rate: num(cumM.close_rate),
+      cash_collected: num(cumM.cash_collected),
+      revenue_generated: num(cumM.revenue_generated),
+      script_adherence_avg: cumScript[0]?.score != null ? num(cumScript[0].score) : null,
+      objections: cumObjections.map(o => ({
+        objection_type: o.objection_type,
+        count: num(o.count),
+        resolved_count: num(o.resolved_count),
+        resolution_rate: num(o.resolution_rate),
+      })),
+      violations_count: num(cumViolations[0]?.violations_count),
+    };
+  }
+
   const cm = closerMetrics[0] || {};
   const tm = teamMetrics[0] || {};
 
@@ -915,6 +1001,7 @@ async function fetchDailyOnboardingData(clientId, closerId, dateStr = null) {
     report_type: 'daily_onboarding',
     report_date: today,
     company_name: client.company_name,
+    watch_type: watchType,
     closer: {
       closer_id: closer.closer_id,
       name: closer.name,
@@ -947,6 +1034,7 @@ async function fetchDailyOnboardingData(clientId, closerId, dateStr = null) {
       resolved_count: num(o.resolved_count),
       resolution_rate: num(o.resolution_rate),
     })),
+    cumulative,
   };
 
   logger.info('EmailDataFetcher: Daily onboarding data fetched', {

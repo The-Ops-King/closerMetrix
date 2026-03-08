@@ -171,10 +171,10 @@ router.post('/clients/:clientId/closers', async (req, res) => {
         { clientId, settingsJson: JSON.stringify(existingSettings) }
       );
 
-      logger.info('Close watch auto-enrolled', { closerId, clientId, closerName: req.body.name });
+      logger.info('Closer watch auto-enrolled', { closerId, clientId, closerName: req.body.name });
     } catch (enrollError) {
       // Non-fatal — closer is still created, just log the failure
-      logger.error('Failed to auto-enroll close watch', {
+      logger.error('Failed to auto-enroll closer watch', {
         closerId, clientId, error: enrollError.message,
       });
     }

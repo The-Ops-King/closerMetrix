@@ -369,7 +369,7 @@ async function sendOnboardingReportForCloser(clientId, closerId, recipientOverri
     const attachments = getEmailAttachments();
 
     // Send
-    const subject = `CloserMetrix Close Watch — ${data.closer.name} (${data.days_remaining} days left)`;
+    const subject = `CloserMetrix Closer Watch — ${data.closer.name} (${data.days_remaining} days left)`;
 
     const sendResults = [];
     for (const recipient of recipients) {
