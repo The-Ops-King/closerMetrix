@@ -48,6 +48,7 @@ import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import PsychologyIcon from '@mui/icons-material/Psychology';
 import DescriptionIcon from '@mui/icons-material/Description';
 import PaidIcon from '@mui/icons-material/Paid';
+import FilterListIcon from '@mui/icons-material/FilterList';
 import { COLORS, LAYOUT } from '../../theme/constants';
 import { useAuth } from '../../context/AuthContext';
 import { meetsMinTier } from '../../utils/tierConfig';
@@ -79,6 +80,7 @@ const DEFAULT_SETTINGS = {
     avg_deal_size: null,
   },
   offers: [],
+  call_sources: [],
   notifications: {
     weekly_enabled: true,
     monthly_enabled: false,
@@ -207,28 +209,30 @@ function SettingsSection({ title, icon, minTier, tier, children, color = COLORS.
   );
 }
 
-/** Styled save button with success feedback */
-function SaveButton({ onClick, saving, saved, label = 'Save' }) {
+/** Styled save button with success feedback — grayed out when disabled (no changes) */
+function SaveButton({ onClick, saving, saved, disabled, label = 'Save' }) {
+  const isDisabled = saving || disabled;
   return (
     <Button
       onClick={onClick}
-      disabled={saving}
+      disabled={isDisabled}
       variant="contained"
       size="small"
       startIcon={saved ? <CheckCircleIcon /> : <SaveIcon />}
       sx={{
-        backgroundColor: saved ? COLORS.neon.green : COLORS.neon.cyan,
-        color: COLORS.bg.primary,
+        backgroundColor: saved ? COLORS.neon.green : isDisabled ? COLORS.bg.elevated : COLORS.neon.cyan,
+        color: isDisabled ? COLORS.text.muted : COLORS.bg.primary,
         fontWeight: 600,
         fontSize: '0.8rem',
         textTransform: 'none',
+        transition: 'all 0.2s ease',
         '&:hover': {
           backgroundColor: saved ? COLORS.neon.green : COLORS.neon.cyan,
           filter: 'brightness(1.1)',
         },
-        '&:disabled': {
-          backgroundColor: COLORS.text.muted,
-          color: COLORS.bg.primary,
+        '&.Mui-disabled': {
+          backgroundColor: COLORS.bg.elevated,
+          color: COLORS.text.muted,
         },
       }}
     >
@@ -331,25 +335,8 @@ function AiProviderSection({ settings, setSettings, saveSettingsJson, setAiProvi
           );
         })}
       </Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 2 }}>
-        <Button
-          variant="contained"
-          startIcon={<SaveIcon />}
-          disabled={!hasUnsavedChange || saving}
-          onClick={handleSave}
-          sx={{
-            bgcolor: hasUnsavedChange ? COLORS.neon.purple : COLORS.bg.elevated,
-            '&:hover': { bgcolor: hasUnsavedChange ? `${COLORS.neon.purple}cc` : COLORS.bg.elevated },
-            '&.Mui-disabled': { bgcolor: COLORS.bg.elevated, color: COLORS.text.muted },
-          }}
-        >
-          {saving ? 'Saving...' : 'Save AI Provider'}
-        </Button>
-        {saved && (
-          <Typography sx={{ color: COLORS.neon.green, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <CheckCircleIcon sx={{ fontSize: 16 }} /> Saved
-          </Typography>
-        )}
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
+        <SaveButton onClick={handleSave} saving={saving} saved={saved} disabled={!hasUnsavedChange} label="Save AI Provider" />
       </Box>
     </>
   );
@@ -490,7 +477,15 @@ export default function SettingsPage() {
           />
         </SettingsSection>
 
-        {/* 2. AI Provider — all tiers */}
+        {/* 2. Call Sources & Triggers — basic */}
+        <SettingsSection title="Call Sources & Triggers" icon={<FilterListIcon fontSize="small" />} minTier="basic" tier={tier} color={COLORS.neon.green}>
+          <CallSourcesSection
+            sources={settings.call_sources || []}
+            onSave={(call_sources) => saveSettingsJson({ call_sources })}
+          />
+        </SettingsSection>
+
+        {/* 3. AI Provider — all tiers */}
         <SettingsSection title="AI Provider" icon={<SmartToyIcon fontSize="small" />} minTier="basic" tier={tier} color={COLORS.neon.purple}>
           <AiProviderSection
             settings={settings}
@@ -857,6 +852,8 @@ function OffersSection({ offers, onSave }) {
 
   useEffect(() => { setLocalOffers(offers); }, [offers]);
 
+  const hasChanges = JSON.stringify(localOffers) !== JSON.stringify(offers);
+
   const handleAdd = () => {
     const newOffer = { id: uuid(), name: '', price: '', description: '' };
     setLocalOffers((prev) => [...prev, newOffer]);
@@ -987,7 +984,124 @@ function OffersSection({ offers, onSave }) {
         >
           Add Offer
         </Button>
-        <SaveButton onClick={handleSave} saving={saving} saved={saved} />
+        <SaveButton onClick={handleSave} saving={saving} saved={saved} disabled={!hasChanges} />
+      </Box>
+    </Box>
+  );
+}
+
+// ── Call Sources & Triggers ──────────────────────────────────
+
+function CallSourcesSection({ sources, onSave }) {
+  const [localSources, setLocalSources] = useState(sources);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => { setLocalSources(sources); }, [sources]);
+
+  const hasChanges = JSON.stringify(localSources) !== JSON.stringify(sources);
+
+  const handleAdd = () => {
+    if (localSources.length >= 20) return;
+    setLocalSources((prev) => [...prev, { id: uuid(), trigger: '', name: '' }]);
+  };
+
+  const handleUpdate = (id, field, value) => {
+    setLocalSources((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, [field]: value } : s))
+    );
+  };
+
+  const handleRemove = (id) => {
+    setLocalSources((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const cleaned = localSources.filter((s) => s.trigger.trim());
+      await onSave(cleaned);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      alert(`Failed to save call sources: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Box>
+      <Typography sx={{ color: COLORS.text.muted, fontSize: '0.8rem', mb: 2 }}>
+        Define trigger words to match incoming calls to sources. Each trigger is a text pattern found in the calendar event title.
+        The name is the friendly label shown in your dashboard. Max 20 sources.
+      </Typography>
+
+      {/* Header row */}
+      {localSources.length > 0 && (
+        <Box sx={{ display: 'flex', gap: 1.5, mb: 1, px: 0.5 }}>
+          <Typography sx={{ flex: 2, color: COLORS.text.secondary, fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Trigger Word
+          </Typography>
+          <Typography sx={{ flex: 2, color: COLORS.text.secondary, fontSize: '0.7rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Source Name
+          </Typography>
+          <Box sx={{ width: 36 }} />
+        </Box>
+      )}
+
+      {localSources.map((source) => (
+        <Box
+          key={source.id}
+          sx={{
+            display: 'flex',
+            gap: 1.5,
+            alignItems: 'center',
+            py: 1,
+            borderBottom: `1px solid ${COLORS.border.subtle}`,
+          }}
+        >
+          <TronTextField
+            placeholder='e.g. "Strategy Call with"'
+            value={source.trigger}
+            onChange={(e) => handleUpdate(source.id, 'trigger', e.target.value)}
+            sx={{ flex: 2 }}
+            size="small"
+          />
+          <TronTextField
+            placeholder='e.g. "Sales Calls"'
+            value={source.name}
+            onChange={(e) => handleUpdate(source.id, 'name', e.target.value)}
+            sx={{ flex: 2 }}
+            size="small"
+          />
+          <IconButton
+            onClick={() => handleRemove(source.id)}
+            sx={{ color: COLORS.neon.red }}
+            size="small"
+          >
+            <DeleteIcon fontSize="small" />
+          </IconButton>
+        </Box>
+      ))}
+
+      {localSources.length === 0 && (
+        <Typography sx={{ color: COLORS.text.muted, fontSize: '0.85rem', py: 2, textAlign: 'center' }}>
+          No call sources configured. Add one to start categorizing your calls.
+        </Typography>
+      )}
+
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>
+        <Button
+          onClick={handleAdd}
+          startIcon={<AddIcon />}
+          size="small"
+          disabled={localSources.length >= 20}
+          sx={{ color: COLORS.neon.green, fontSize: '0.8rem', textTransform: 'none' }}
+        >
+          Add Source{localSources.length > 0 ? ` (${localSources.length}/20)` : ''}
+        </Button>
+        <SaveButton onClick={handleSave} saving={saving} saved={saved} disabled={!hasChanges} />
       </Box>
     </Box>
   );
@@ -1001,6 +1115,8 @@ function KpiSection({ targets, onSave }) {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => { setLocal(targets); }, [targets]);
+
+  const hasChanges = JSON.stringify(local) !== JSON.stringify(targets);
 
   const handleSave = async () => {
     setSaving(true);
@@ -1059,7 +1175,7 @@ function KpiSection({ targets, onSave }) {
       </Box>
 
       <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <SaveButton onClick={handleSave} saving={saving} saved={saved} />
+        <SaveButton onClick={handleSave} saving={saving} saved={saved} disabled={!hasChanges} />
       </Box>
     </Box>
   );
@@ -1073,6 +1189,8 @@ function NotificationsSection({ notifications, closers, onSave }) {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => { setLocal(notifications); }, [notifications]);
+
+  const hasChanges = JSON.stringify(local) !== JSON.stringify(notifications);
 
   const handleSave = async () => {
     setSaving(true);
@@ -1496,7 +1614,7 @@ function NotificationsSection({ notifications, closers, onSave }) {
       </Box>
 
       <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <SaveButton onClick={handleSave} saving={saving} saved={saved} />
+        <SaveButton onClick={handleSave} saving={saving} saved={saved} disabled={!hasChanges} />
       </Box>
     </Box>
   );
@@ -1505,29 +1623,24 @@ function NotificationsSection({ notifications, closers, onSave }) {
 // ── 5. AI Prompts ────────────────────────────────────────────
 
 function AiPromptsSection({ client, onSave }) {
-  const [local, setLocal] = useState({
-    ai_prompt_overall: client?.ai_prompt_overall || '',
-    ai_prompt_discovery: client?.ai_prompt_discovery || '',
-    ai_prompt_pitch: client?.ai_prompt_pitch || '',
-    ai_prompt_close: client?.ai_prompt_close || '',
-    ai_prompt_objections: client?.ai_prompt_objections || '',
-    ai_context_notes: client?.ai_context_notes || '',
+  const getClientPrompts = (c) => ({
+    ai_prompt_overall: c?.ai_prompt_overall || '',
+    ai_prompt_discovery: c?.ai_prompt_discovery || '',
+    ai_prompt_pitch: c?.ai_prompt_pitch || '',
+    ai_prompt_close: c?.ai_prompt_close || '',
+    ai_prompt_objections: c?.ai_prompt_objections || '',
+    ai_context_notes: c?.ai_context_notes || '',
   });
+
+  const [local, setLocal] = useState(getClientPrompts(client));
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    if (client) {
-      setLocal({
-        ai_prompt_overall: client.ai_prompt_overall || '',
-        ai_prompt_discovery: client.ai_prompt_discovery || '',
-        ai_prompt_pitch: client.ai_prompt_pitch || '',
-        ai_prompt_close: client.ai_prompt_close || '',
-        ai_prompt_objections: client.ai_prompt_objections || '',
-        ai_context_notes: client.ai_context_notes || '',
-      });
-    }
+    if (client) setLocal(getClientPrompts(client));
   }, [client]);
+
+  const hasChanges = JSON.stringify(local) !== JSON.stringify(getClientPrompts(client));
 
   const handleSave = async () => {
     setSaving(true);
@@ -1568,7 +1681,7 @@ function AiPromptsSection({ client, onSave }) {
       </Box>
 
       <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <SaveButton onClick={handleSave} saving={saving} saved={saved} />
+        <SaveButton onClick={handleSave} saving={saving} saved={saved} disabled={!hasChanges} />
       </Box>
     </Box>
   );
@@ -1584,6 +1697,8 @@ function ScriptSection({ client, onSave }) {
   useEffect(() => {
     if (client) setScript(client.script_template || '');
   }, [client]);
+
+  const hasChanges = script !== (client?.script_template || '');
 
   const handleSave = async () => {
     setSaving(true);
@@ -1611,7 +1726,7 @@ function ScriptSection({ client, onSave }) {
       />
 
       <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <SaveButton onClick={handleSave} saving={saving} saved={saved} />
+        <SaveButton onClick={handleSave} saving={saving} saved={saved} disabled={!hasChanges} />
       </Box>
     </Box>
   );
