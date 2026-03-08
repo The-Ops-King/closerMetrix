@@ -14,9 +14,9 @@ const express = require('express');
 const router = express.Router();
 const webhookAuth = require('../../middleware/webhookAuth');
 const config = require('../../config');
-const { renderWeeklyReport, renderMonthlyReport, renderDailyOnboardingReport, ALL_SECTIONS } = require('../../services/email/EmailTemplateEngine');
+const { renderWeeklyReport, renderMonthlyReport, renderDailyOnboardingReport, renderFTCAlertEmail, ALL_SECTIONS } = require('../../services/email/EmailTemplateEngine');
 const emailService = require('../../services/email/EmailService');
-const { weeklyTestData, monthlyTestData, dailyOnboardingTestData } = require('../../services/email/testData');
+const { weeklyTestData, monthlyTestData, dailyOnboardingTestData, ftcAlertTestData } = require('../../services/email/testData');
 const { sendWeeklyReports, sendMonthlyReports, sendReportForClient } = require('../../services/email/EmailScheduler');
 const { sendOnboardingReportForCloser } = require('../../services/email/EmailScheduler');
 const { fetchEmailData, fetchDailyOnboardingData } = require('../../services/email/EmailDataFetcher');
@@ -60,8 +60,10 @@ router.get('/preview/:type', previewAuth, (req, res) => {
     html = renderMonthlyReport(monthlyTestData, sections, { livePreview: true, baseUrl });
   } else if (type === 'daily-onboarding') {
     html = renderDailyOnboardingReport(dailyOnboardingTestData, { livePreview: true, baseUrl });
+  } else if (type === 'ftc-alert') {
+    html = renderFTCAlertEmail(ftcAlertTestData, { livePreview: true, baseUrl });
   } else {
-    return res.status(400).json({ status: 'error', message: `Invalid type: ${type}. Use "weekly", "monthly", or "daily-onboarding".` });
+    return res.status(400).json({ status: 'error', message: `Invalid type: ${type}. Use "weekly", "monthly", "daily-onboarding", or "ftc-alert".` });
   }
 
   res.setHeader('Content-Type', 'text/html');
@@ -242,6 +244,35 @@ router.post('/trigger/:type', webhookAuth.admin, async (req, res, next) => {
     res.json({ status: 'ok', type, ...result });
   } catch (error) {
     logger.error('Email trigger failed', { type, client_id, error: error.message });
+    res.status(500).json({ status: 'error', message: error.message });
+  }
+});
+
+// ── FTC Alert Test Send ──────────────────────────────────────
+
+/**
+ * POST /admin/email/trigger/ftc-alert?client_id=xxx&to=email
+ *
+ * Sends a test FTC alert email using test data.
+ * ?to= overrides recipient (otherwise uses client's ftc_alert_recipients).
+ */
+router.post('/trigger/ftc-alert', webhookAuth.admin, async (req, res) => {
+  const { client_id, to } = req.query;
+
+  try {
+    const testData = { ...ftcAlertTestData };
+    if (client_id) testData.company_name = client_id;
+
+    const html = renderFTCAlertEmail(testData, { baseUrl: `${req.protocol}://${req.get('host')}` });
+    const subject = `FTC ALERT: ${testData.closer_name} — ${testData.violation.category} Violation Detected`;
+    const recipient = to || config.email.testRecipient;
+
+    const result = await emailService.sendEmail(recipient, subject, html);
+    logger.info('FTC alert test sent', { to: recipient, subject });
+
+    res.json({ status: 'ok', to: recipient, subject, ...result });
+  } catch (error) {
+    logger.error('FTC alert test send failed', { error: error.message });
     res.status(500).json({ status: 'error', message: error.message });
   }
 });
