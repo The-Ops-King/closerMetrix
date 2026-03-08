@@ -53,6 +53,11 @@ async function getSettingsData(clientId) {
         closer_id,
         name,
         work_email,
+        personal_email,
+        phone,
+        timezone,
+        transcript_provider,
+        transcript_api_key,
         status
       FROM ${bq.table('Closers')}
       WHERE client_id = @clientId

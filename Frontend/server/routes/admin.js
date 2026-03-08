@@ -129,9 +129,10 @@ router.get('/clients/:clientId', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Client not found' });
     }
 
-    // Fetch ALL closers (active + inactive) so admin can manage status
+    // Fetch ALL closers (active + inactive) with full details for edit form
     const closerRows = await bq.runQuery(
-      `SELECT closer_id, name, status
+      `SELECT closer_id, name, work_email, personal_email, phone, timezone,
+              transcript_provider, transcript_api_key, status
        FROM ${bq.table('Closers')}
        WHERE client_id = @clientId
        ORDER BY LOWER(status) DESC, name`,
@@ -151,7 +152,13 @@ router.get('/clients/:clientId', async (req, res) => {
       success: true,
       data: {
         ...rows[0],
-        closers: closerRows.map((r) => ({ closer_id: r.closer_id, name: r.name, status: r.status })),
+        closers: closerRows.map((r) => ({
+          closer_id: r.closer_id, name: r.name, status: r.status,
+          work_email: r.work_email || '', personal_email: r.personal_email || '',
+          phone: r.phone || '', timezone: r.timezone || '',
+          transcript_provider: r.transcript_provider || 'fathom',
+          transcript_api_key: r.transcript_api_key || '',
+        })),
         call_sources: callSources,
       },
     });

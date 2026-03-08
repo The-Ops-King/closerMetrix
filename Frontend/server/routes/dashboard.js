@@ -962,6 +962,10 @@ router.patch('/closers/:closerId/reactivate', (req, res) => {
   proxyCloserToBackend(req, res, `/admin/clients/${req.clientId}/closers/${req.params.closerId}/reactivate`);
 });
 
+router.post('/closers/:closerId/register-fathom', (req, res) => {
+  proxyCloserToBackend(req, res, `/admin/clients/${req.clientId}/closers/${req.params.closerId}/register-fathom`);
+});
+
 // ── Client-Facing Client Update (AI Prompts, Script) ─────────
 // Lets authenticated clients update their own client record fields.
 

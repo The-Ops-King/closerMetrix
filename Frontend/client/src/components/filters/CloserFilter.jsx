@@ -2,14 +2,14 @@
  * CLOSER FILTER -- Insight+ Only (Multi-Select)
  *
  * Multi-select dropdown of closers for this client with chip rendering.
- * Populated from AuthContext closers list.
- * Hidden for Basic tier clients (controlled by parent -- this component
- * doesn't check tier itself; the page/layout decides whether to render it).
+ * Options are derived from raw call data filtered by the current date range —
+ * only closers who have calls in the selected period appear as options.
+ * Hidden for Basic tier clients (controlled by parent).
  *
  * Updates FilterContext closerIds (string[]) when selection changes.
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import FormControl from '@mui/material/FormControl';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
@@ -19,12 +19,42 @@ import IconButton from '@mui/material/IconButton';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import CloseIcon from '@mui/icons-material/Close';
 import { COLORS } from '../../theme/constants';
-import { useAuth } from '../../context/AuthContext';
+import { useData } from '../../context/DataContext';
 import { useFilters } from '../../context/FilterContext';
 
 export default function CloserFilter({ disabled = false }) {
-  const { closers } = useAuth();
-  const { closerIds, setCloserIds } = useFilters();
+  const { rawData } = useData();
+  const { closerIds, setCloserIds, dateRange } = useFilters();
+
+  // Derive closer options from calls within the selected date range
+  const closerOptions = useMemo(() => {
+    if (!rawData?.calls) return [];
+
+    const start = dateRange.start;
+    const end = dateRange.end;
+
+    const map = new Map(); // closerId -> closerName
+    for (const call of rawData.calls) {
+      if (!call.closerId || !call.closerName) continue;
+      // Filter by date range
+      if (call.appointmentDate < start || call.appointmentDate > end) continue;
+      if (!map.has(call.closerId)) {
+        map.set(call.closerId, call.closerName);
+      }
+    }
+
+    // Sort alphabetically by name
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ closer_id: id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [rawData?.calls, dateRange.start, dateRange.end]);
+
+  // Build lookup map for rendering chips
+  const closerMap = useMemo(() => {
+    const m = {};
+    closerOptions.forEach((c) => { m[c.closer_id] = c.name; });
+    return m;
+  }, [closerOptions]);
 
   // When disabled (Basic tier), render a locked placeholder shell
   if (disabled) {
@@ -57,17 +87,17 @@ export default function CloserFilter({ disabled = false }) {
     );
   }
 
-  // Don't render if no closers available (and not disabled)
-  if (!closers || closers.length === 0) {
+  // Don't render if no closers in the date range
+  if (closerOptions.length === 0) {
     return null;
   }
 
-  // Build a lookup map for closer_id → display name
-  const closerMap = {};
-  closers.forEach((c) => {
-    const isInactive = c.status && c.status.toLowerCase() !== 'active';
-    closerMap[c.closer_id] = isInactive ? `${c.name} (Inactive)` : c.name;
-  });
+  // Clear any selected closerIds that are no longer in the options
+  const validIds = closerIds.filter((id) => closerMap[id]);
+  if (validIds.length !== closerIds.length) {
+    // Defer to avoid render-during-render
+    setTimeout(() => setCloserIds(validIds), 0);
+  }
 
   const hasSelection = closerIds.length > 0;
 
@@ -75,7 +105,7 @@ export default function CloserFilter({ disabled = false }) {
     <FormControl size="small" sx={{ minWidth: { xs: 160, md: 180 }, maxWidth: 320 }}>
       <Select
         multiple
-        value={closerIds}
+        value={validIds}
         onChange={(e) => setCloserIds(typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value)}
         renderValue={(selected) => {
           if (!selected || selected.length === 0) {
@@ -149,27 +179,23 @@ export default function CloserFilter({ disabled = false }) {
           },
         }}
       >
-        {closers.map((closer) => {
-          const isInactive = closer.status && closer.status.toLowerCase() !== 'active';
-          return (
-            <MenuItem
-              key={closer.closer_id}
-              value={closer.closer_id}
-              sx={{
-                color: isInactive ? COLORS.text.muted : COLORS.text.primary,
-                fontStyle: isInactive ? 'italic' : 'normal',
-                '&.Mui-selected': {
-                  backgroundColor: 'rgba(77, 212, 232, 0.08)',
-                },
-                '&.Mui-selected:hover': {
-                  backgroundColor: 'rgba(77, 212, 232, 0.12)',
-                },
-              }}
-            >
-              {isInactive ? `${closer.name} (Inactive)` : closer.name}
-            </MenuItem>
-          );
-        })}
+        {closerOptions.map((closer) => (
+          <MenuItem
+            key={closer.closer_id}
+            value={closer.closer_id}
+            sx={{
+              color: COLORS.text.primary,
+              '&.Mui-selected': {
+                backgroundColor: 'rgba(77, 212, 232, 0.08)',
+              },
+              '&.Mui-selected:hover': {
+                backgroundColor: 'rgba(77, 212, 232, 0.12)',
+              },
+            }}
+          >
+            {closer.name}
+          </MenuItem>
+        ))}
       </Select>
     </FormControl>
   );

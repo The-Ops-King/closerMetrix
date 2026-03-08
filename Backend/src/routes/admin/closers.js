@@ -310,6 +310,24 @@ router.put('/clients/:clientId/closers/:closerId', async (req, res) => {
 
     await closerQueries.update(closerId, clientId, updates);
 
+    // Auto-register Fathom webhook if API key was added/changed
+    if (updates.transcript_api_key && (updates.transcript_provider || closer.transcript_provider) === 'fathom') {
+      try {
+        // Delete old webhook if it exists
+        if (closer.fathom_webhook_id) {
+          try { await fathomAPI.deleteWebhook(closer.transcript_api_key || updates.transcript_api_key, closer.fathom_webhook_id); } catch { /* ignore */ }
+        }
+        const webhook = await fathomAPI.registerWebhook(updates.transcript_api_key);
+        await closerQueries.update(closerId, clientId, {
+          fathom_webhook_id: webhook.id,
+          fathom_webhook_secret: webhook.secret,
+        });
+        logger.info('Fathom webhook auto-registered on closer update', { closerId, webhookId: webhook.id });
+      } catch (regErr) {
+        logger.error('Fathom webhook auto-registration failed on update', { closerId, error: regErr.message });
+      }
+    }
+
     await auditLogger.log({
       clientId,
       entityType: 'closer',
