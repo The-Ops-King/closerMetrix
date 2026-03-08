@@ -79,7 +79,8 @@ async function sendReportForClient(clientId, reportType, recipientOverride = nul
 
     // 3. Render HTML + build CID attachments (logo)
     const renderFn = reportType === 'monthly' ? renderMonthlyReport : renderWeeklyReport;
-    const html = renderFn(data, sections.length > 0 ? sections : undefined);
+    const baseUrl = require('../../config').server.baseUrl || '';
+    const html = renderFn(data, sections.length > 0 ? sections : undefined, { baseUrl });
     const attachments = getEmailAttachments();
 
     // 4. Send to each recipient

@@ -85,8 +85,7 @@ function delta(current, previous, type = 'number', invertColor = false) {
 const fs = require('fs');
 const path = require('path');
 
-// Section icon mapping — maps section titles to PNG filenames in src/public/icons/
-// Icons are pre-generated PNGs from Lucide SVGs, embedded via CID attachments.
+// Section icon mapping — served via URL (not CID) to avoid showing as attachments.
 const SECTION_ICON_FILES = {
   'Overview':           'overview.png',
   'Financial':          'financial.png',
@@ -100,58 +99,23 @@ const SECTION_ICON_FILES = {
   'Closer Leaderboard': 'leaderboard.png',
 };
 
-/**
- * Returns CID key for a section icon.
- */
-function iconCid(title) {
-  const file = SECTION_ICON_FILES[title];
-  return file ? file.replace('.png', '') : null;
-}
+// Public GCS URL for email icons — works in all email clients, no attachments.
+const ICONS_BASE_URL = 'https://storage.googleapis.com/closermetrix-assets/email-icons';
+const LOGO_PUBLIC_URL = `${ICONS_BASE_URL}/logo-wide.png`;
 
 /**
- * Returns nodemailer-compatible attachments array for the logo + all section icons.
- * All images are embedded as CID attachments so Gmail renders them inline.
- *
- * @returns {Object[]} Nodemailer attachment objects
+ * Returns nodemailer-compatible attachments array.
+ * All images (logo + icons) are now served via GCS public URLs,
+ * so no CID attachments needed. Returns empty array.
  */
 function getEmailAttachments() {
-  const attachments = [];
-  const publicDir = path.join(__dirname, '../../public');
-
-  // Logo
-  const logoPath = path.join(publicDir, 'logo-wide.png');
-  if (fs.existsSync(logoPath)) {
-    attachments.push({
-      filename: 'logo.png',
-      path: logoPath,
-      cid: 'logo',
-      contentDisposition: 'inline',
-      contentType: 'image/png',
-    });
-  }
-
-  // Section icons
-  const iconsDir = path.join(publicDir, 'icons');
-  for (const [title, filename] of Object.entries(SECTION_ICON_FILES)) {
-    const iconPath = path.join(iconsDir, filename);
-    if (fs.existsSync(iconPath)) {
-      attachments.push({
-        filename,
-        path: iconPath,
-        cid: iconCid(title),
-        contentDisposition: 'inline',
-        contentType: 'image/png',
-      });
-    }
-  }
-
-  return attachments;
+  return [];
 }
 
 function card(title, content, accentColor = C.cyan) {
-  const cid = iconCid(title);
-  const iconHtml = cid
-    ? `<img src="cid:${cid}" width="18" height="18" style="vertical-align:middle;margin-right:8px;" alt="" />`
+  const iconFile = SECTION_ICON_FILES[title];
+  const iconHtml = iconFile
+    ? `<img src="${ICONS_BASE_URL}/${iconFile}" width="18" height="18" style="vertical-align:middle;margin-right:8px;" alt="" />`
     : '';
   return `
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
@@ -261,8 +225,8 @@ function renderSalesCycleSection(data) {
     metricRow('Avg Days to Close', d.avg_days_to_close?.toFixed(1), delta(d.avg_days_to_close, d.prev?.avg_days_to_close, 'number', true)),
     metricRow('One-Call Close Rate', pct(d.one_call_close_rate), delta(d.one_call_close_rate, d.prev?.one_call_close_rate, 'percent')),
     metricRow('Avg Follow-Ups', d.avg_follow_ups_before_close?.toFixed(1), delta(d.avg_follow_ups_before_close, d.prev?.avg_follow_ups_before_close, 'number', true)),
-    metricRow('Longest Cycle', `${d.longest_cycle_days}d`, ''),
-    metricRow('Shortest Cycle', `${d.shortest_cycle_days}d`, ''),
+    metricRow('Longest Cycle', `${d.longest_cycle_days ?? 0}d`, ''),
+    metricRow('Shortest Cycle', `${d.shortest_cycle_days ?? 0}d`, ''),
   ].join('');
   return card('Sales Cycle', metricTable(rows) + insightBlock(data.insights?.salesCycle), C.purple);
 }
@@ -385,9 +349,6 @@ function renderAlertsSection(data) {
         <td style="padding:8px;color:${C.red};font-size:13px;font-weight:600;text-align:right;border-bottom:1px solid ${C.cardBorder};">
           ${formatted}
         </td>
-        <td style="padding:8px;color:${C.textMuted};font-size:13px;text-align:right;border-bottom:1px solid ${C.cardBorder};">
-          ${a.duration_days}d
-        </td>
       </tr>
     `;
   }).join('');
@@ -397,7 +358,6 @@ function renderAlertsSection(data) {
         <th style="padding:6px 8px;color:${C.textMuted};font-size:13px;text-align:left;border-bottom:2px solid ${C.borderDefault};text-transform:uppercase;">Who</th>
         <th style="padding:6px 8px;color:${C.textMuted};font-size:13px;text-align:left;border-bottom:2px solid ${C.borderDefault};text-transform:uppercase;">Condition</th>
         <th style="padding:6px 8px;color:${C.textMuted};font-size:13px;text-align:right;border-bottom:2px solid ${C.borderDefault};text-transform:uppercase;">Current</th>
-        <th style="padding:6px 8px;color:${C.textMuted};font-size:13px;text-align:right;border-bottom:2px solid ${C.borderDefault};text-transform:uppercase;">Duration</th>
       </tr>
       ${alertRows}
     </table>
@@ -472,6 +432,8 @@ function renderMonthlyReport(data, includeSections = ALL_SECTIONS, opts = {}) {
 }
 
 function renderReport(data, includeSections, reportTitle, opts = {}) {
+  // Set icons base URL so card() can build icon src URLs
+  _iconsBaseUrl = opts.baseUrl || '';
   const sectionsHtml = includeSections
     .filter(s => SECTION_RENDERERS[s])
     .map(s => SECTION_RENDERERS[s](data))
@@ -485,6 +447,9 @@ function renderReport(data, includeSections, reportTitle, opts = {}) {
       setTimeout(function() { location.reload(); }, 2000);
     </script>
   ` : '';
+
+  // Logo served from GCS — same as icons, no CID attachment needed.
+  const logoSrc = LOGO_PUBLIC_URL;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -503,7 +468,7 @@ function renderReport(data, includeSections, reportTitle, opts = {}) {
           <!-- Header -->
           <tr>
             <td style="padding:24px 0;text-align:center;">
-              <img src="cid:logo" alt="CloserMetrix" width="600" style="width:100%;max-width:600px;height:auto;margin-bottom:8px;" />
+              <img src="${logoSrc}" alt="CloserMetrix" width="600" style="width:100%;max-width:600px;height:auto;margin-bottom:8px;" />
               <p style="margin:8px 0 0 0;font-size:14px;color:${C.textSecondary};">
                 ${reportTitle} &middot; ${data.company_name}
               </p>

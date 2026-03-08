@@ -18,6 +18,8 @@ const { renderWeeklyReport, renderMonthlyReport, ALL_SECTIONS } = require('../..
 const emailService = require('../../services/email/EmailService');
 const { weeklyTestData, monthlyTestData } = require('../../services/email/testData');
 const { sendWeeklyReports, sendMonthlyReports, sendReportForClient } = require('../../services/email/EmailScheduler');
+const { fetchEmailData } = require('../../services/email/EmailDataFetcher');
+const { generateInsights } = require('../../services/email/EmailInsightGenerator');
 const logger = require('../../utils/logger');
 
 /**
@@ -61,6 +63,77 @@ router.get('/preview/:type', previewAuth, (req, res) => {
 
   res.setHeader('Content-Type', 'text/html');
   res.send(html);
+});
+
+/**
+ * GET /admin/email/preview-live/weekly?client_id=himym
+ * GET /admin/email/preview-live/monthly?client_id=himym
+ *
+ * Renders HTML in browser using REAL BigQuery data + AI insights.
+ * No email sent — just renders in the browser for fast iteration.
+ *
+ * Query params:
+ *   ?client_id=xxx (required) — Which client to fetch data for
+ *   ?sections=overview,financial — Only render these sections
+ *   ?skip_ai=true — Skip AI insight generation (faster, shows data only)
+ */
+router.get('/preview-live/:type', previewAuth, async (req, res) => {
+  const { type } = req.params;
+  const { client_id, skip_ai } = req.query;
+  const sections = parseSections(req.query.sections);
+
+  if (!client_id) {
+    return res.status(400).json({ status: 'error', message: 'client_id query param is required' });
+  }
+  if (type !== 'weekly' && type !== 'monthly') {
+    return res.status(400).json({ status: 'error', message: `Invalid type: ${type}. Use "weekly" or "monthly".` });
+  }
+
+  try {
+    const data = await fetchEmailData(client_id, type);
+
+    if (skip_ai !== 'true') {
+      const insights = await generateInsights(data, sections);
+      data.insights = insights;
+    }
+
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const renderFn = type === 'monthly' ? renderMonthlyReport : renderWeeklyReport;
+    const html = renderFn(data, sections.length > 0 ? sections : undefined, { livePreview: true, baseUrl });
+
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+  } catch (error) {
+    logger.error('Live preview failed', { type, client_id, error: error.message });
+    res.status(500).json({ status: 'error', message: error.message, stack: error.stack });
+  }
+});
+
+/**
+ * GET /admin/email/preview-data/weekly?client_id=himym
+ * GET /admin/email/preview-data/monthly?client_id=himym
+ *
+ * Returns the RAW JSON data from EmailDataFetcher — for debugging.
+ * Use this to find undefined/missing values before they hit the template.
+ */
+router.get('/preview-data/:type', previewAuth, async (req, res) => {
+  const { type } = req.params;
+  const { client_id } = req.query;
+
+  if (!client_id) {
+    return res.status(400).json({ status: 'error', message: 'client_id query param is required' });
+  }
+  if (type !== 'weekly' && type !== 'monthly') {
+    return res.status(400).json({ status: 'error', message: `Invalid type: ${type}. Use "weekly" or "monthly".` });
+  }
+
+  try {
+    const data = await fetchEmailData(client_id, type);
+    res.json({ status: 'ok', data });
+  } catch (error) {
+    logger.error('Preview data failed', { type, client_id, error: error.message });
+    res.status(500).json({ status: 'error', message: error.message, stack: error.stack });
+  }
 });
 
 /**
