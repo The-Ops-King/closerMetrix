@@ -108,7 +108,7 @@ router.post('/', async (req, res) => {
       offer_description: req.body.offer_description || null,
       filter_word: req.body.filter_word,
       plan_tier: req.body.plan_tier,
-      status: 'active',
+      status: 'Active',
       closer_count: 0,
       calendar_source: req.body.calendar_source || 'google_calendar',
       transcript_provider: req.body.transcript_provider || 'fathom',

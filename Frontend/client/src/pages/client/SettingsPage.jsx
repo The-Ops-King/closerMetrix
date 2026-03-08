@@ -44,6 +44,7 @@ import GroupIcon from '@mui/icons-material/Group';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 import StorefrontIcon from '@mui/icons-material/Storefront';
 import TrackChangesIcon from '@mui/icons-material/TrackChanges';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import PsychologyIcon from '@mui/icons-material/Psychology';
 import DescriptionIcon from '@mui/icons-material/Description';
@@ -361,9 +362,9 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
 
   // Fetch settings data
-  const fetchSettings = useCallback(async () => {
+  const fetchSettings = useCallback(async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const res = await apiGet('/dashboard/settings', null, authOptions);
       if (res.success && res.data) {
         setClient(res.data.client);
@@ -473,7 +474,7 @@ export default function SettingsPage() {
             clientId={effectiveClientId}
             authOptions={authOptions}
             mode={mode}
-            onRefresh={fetchSettings}
+            onRefresh={() => fetchSettings(true)}
           />
         </SettingsSection>
 
@@ -570,8 +571,14 @@ function TeamSection({ closers, clientId, authOptions, mode, onRefresh }) {
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [newCloser, setNewCloser] = useState({ name: '' });
-  const [editFields, setEditFields] = useState({ name: '' });
+  const [newCloser, setNewCloser] = useState({
+    name: '', work_email: '', personal_email: '', phone: '',
+    timezone: '', transcript_provider: 'fathom', transcript_api_key: '',
+  });
+  const [editFields, setEditFields] = useState({
+    name: '', work_email: '', personal_email: '', phone: '',
+    timezone: '', transcript_provider: 'fathom', transcript_api_key: '',
+  });
 
   // Use client-facing dashboard endpoints (authenticated via clientIsolation)
   const closerAuth = authOptions;
@@ -580,11 +587,22 @@ function TeamSection({ closers, clientId, authOptions, mode, onRefresh }) {
   const inactiveClosers = closers.filter((c) => (c.status || '').toLowerCase() !== 'active');
 
   const handleAdd = async () => {
-    if (!newCloser.name.trim()) return;
+    if (!newCloser.name.trim() || !newCloser.work_email.trim()) return;
     setSaving(true);
     try {
-      await apiPost('/dashboard/closers', newCloser, closerAuth);
-      setNewCloser({ name: '' });
+      // Only send non-empty optional fields
+      const payload = { name: newCloser.name, work_email: newCloser.work_email };
+      if (newCloser.personal_email.trim()) payload.personal_email = newCloser.personal_email;
+      if (newCloser.phone.trim()) payload.phone = newCloser.phone;
+      if (newCloser.timezone.trim()) payload.timezone = newCloser.timezone;
+      if (newCloser.transcript_provider) payload.transcript_provider = newCloser.transcript_provider;
+      if (newCloser.transcript_api_key.trim()) payload.transcript_api_key = newCloser.transcript_api_key;
+
+      await apiPost('/dashboard/closers', payload, closerAuth);
+      setNewCloser({
+        name: '', work_email: '', personal_email: '', phone: '',
+        timezone: '', transcript_provider: 'fathom', transcript_api_key: '',
+      });
       setShowAdd(false);
       await onRefresh();
     } catch (err) {
@@ -598,7 +616,26 @@ function TeamSection({ closers, clientId, authOptions, mode, onRefresh }) {
     if (!editFields.name.trim()) return;
     setSaving(true);
     try {
-      await apiPut(`/dashboard/closers/${closerId}`, editFields, closerAuth);
+      const payload = { name: editFields.name };
+      if (editFields.work_email?.trim()) payload.work_email = editFields.work_email;
+      if (editFields.personal_email !== undefined) payload.personal_email = editFields.personal_email || null;
+      if (editFields.phone !== undefined) payload.phone = editFields.phone || null;
+      if (editFields.timezone !== undefined) payload.timezone = editFields.timezone || null;
+      if (editFields.transcript_provider) payload.transcript_provider = editFields.transcript_provider;
+      if (editFields.transcript_api_key !== undefined) payload.transcript_api_key = editFields.transcript_api_key || null;
+      await apiPut(`/dashboard/closers/${closerId}`, payload, closerAuth);
+
+      // Auto-register Fathom webhook if API key was added/changed
+      if (editFields.transcript_api_key?.trim() && editFields.transcript_provider === 'fathom') {
+        try {
+          await apiPost(`/dashboard/closers/${closerId}/register-fathom`, {
+            transcript_api_key: editFields.transcript_api_key,
+          }, closerAuth);
+        } catch (regErr) {
+          alert(`Closer saved, but Fathom webhook registration failed: ${regErr.message}`);
+        }
+      }
+
       setEditingId(null);
       await onRefresh();
     } catch (err) {
@@ -608,28 +645,35 @@ function TeamSection({ closers, clientId, authOptions, mode, onRefresh }) {
     }
   };
 
+  // Track per-closer loading and error states
+  const [pendingIds, setPendingIds] = useState(new Set());
+  const [errorIds, setErrorIds] = useState(new Set());
+
   const handleDeactivate = async (closerId) => {
-    if (!confirm('Deactivate this closer? They will no longer appear in reports.')) return;
-    setSaving(true);
+    setPendingIds((prev) => new Set(prev).add(closerId));
+    setErrorIds((prev) => { const s = new Set(prev); s.delete(closerId); return s; });
     try {
       await apiDelete(`/dashboard/closers/${closerId}`, closerAuth);
       await onRefresh();
     } catch (err) {
-      alert(`Failed to deactivate closer: ${err.message}`);
+      setErrorIds((prev) => new Set(prev).add(closerId));
+      alert(`Failed to deactivate: ${err.message}`);
     } finally {
-      setSaving(false);
+      setPendingIds((prev) => { const s = new Set(prev); s.delete(closerId); return s; });
     }
   };
 
   const handleReactivate = async (closerId) => {
-    setSaving(true);
+    setPendingIds((prev) => new Set(prev).add(closerId));
+    setErrorIds((prev) => { const s = new Set(prev); s.delete(closerId); return s; });
     try {
       await apiPatch(`/dashboard/closers/${closerId}/reactivate`, {}, closerAuth);
       await onRefresh();
     } catch (err) {
-      alert(`Failed to reactivate closer: ${err.message}`);
+      setErrorIds((prev) => new Set(prev).add(closerId));
+      alert(`Failed to reactivate: ${err.message}`);
     } finally {
-      setSaving(false);
+      setPendingIds((prev) => { const s = new Set(prev); s.delete(closerId); return s; });
     }
   };
 
@@ -657,44 +701,124 @@ function TeamSection({ closers, clientId, authOptions, mode, onRefresh }) {
       {showAdd && (
         <Box
           sx={{
-            display: 'flex',
-            gap: 1.5,
-            alignItems: 'flex-end',
             mb: 2,
-            p: 2,
+            p: 2.5,
             backgroundColor: COLORS.bg.tertiary,
             borderRadius: 1.5,
             border: `1px solid ${COLORS.neon.cyan}30`,
           }}
         >
-          <TronTextField
-            label="Name"
-            value={newCloser.name}
-            onChange={(e) => setNewCloser((p) => ({ ...p, name: e.target.value }))}
-            sx={{ flex: 1 }}
-          />
-          <Button
-            onClick={handleAdd}
-            disabled={saving || !newCloser.name.trim()}
-            variant="contained"
-            size="small"
-            sx={{
-              backgroundColor: COLORS.neon.cyan,
-              color: COLORS.bg.primary,
-              fontWeight: 600,
-              textTransform: 'none',
-              minWidth: 80,
-            }}
-          >
-            {saving ? '...' : 'Add'}
-          </Button>
-          <Button
-            onClick={() => { setShowAdd(false); setNewCloser({ name: '' }); }}
-            size="small"
-            sx={{ color: COLORS.text.muted, textTransform: 'none' }}
-          >
-            Cancel
-          </Button>
+          <Typography sx={{ color: COLORS.text.secondary, fontSize: '0.8rem', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', mb: 1.5 }}>
+            New Closer
+          </Typography>
+          {/* Row 1: Name + Work Email (required) */}
+          <Box sx={{ display: 'flex', gap: 1.5, mb: 1.5 }}>
+            <TronTextField
+              label="Name *"
+              value={newCloser.name}
+              onChange={(e) => setNewCloser((p) => ({ ...p, name: e.target.value }))}
+              sx={{ flex: 1 }}
+            />
+            <TronTextField
+              label="Work Email *"
+              type="email"
+              value={newCloser.work_email}
+              onChange={(e) => setNewCloser((p) => ({ ...p, work_email: e.target.value }))}
+              sx={{ flex: 1 }}
+            />
+          </Box>
+          {/* Row 2: Personal Email + Phone */}
+          <Box sx={{ display: 'flex', gap: 1.5, mb: 1.5 }}>
+            <TronTextField
+              label="Personal Email"
+              type="email"
+              value={newCloser.personal_email}
+              onChange={(e) => setNewCloser((p) => ({ ...p, personal_email: e.target.value }))}
+              sx={{ flex: 1 }}
+            />
+            <TronTextField
+              label="Phone"
+              value={newCloser.phone}
+              onChange={(e) => setNewCloser((p) => ({ ...p, phone: e.target.value }))}
+              sx={{ flex: 1 }}
+            />
+          </Box>
+          {/* Row 3: Timezone + Transcript Provider */}
+          <Box sx={{ display: 'flex', gap: 1.5, mb: 1.5 }}>
+            <TronTextField
+              label="Timezone"
+              placeholder="America/New_York"
+              value={newCloser.timezone}
+              onChange={(e) => setNewCloser((p) => ({ ...p, timezone: e.target.value }))}
+              sx={{ flex: 1 }}
+            />
+            <FormControl size="small" sx={{ flex: 1 }}>
+              <InputLabel sx={{ color: COLORS.text.muted, fontSize: '0.85rem' }}>Transcript Provider</InputLabel>
+              <Select
+                value={newCloser.transcript_provider}
+                onChange={(e) => setNewCloser((p) => ({ ...p, transcript_provider: e.target.value }))}
+                label="Transcript Provider"
+                sx={{
+                  color: COLORS.text.primary,
+                  '.MuiOutlinedInput-notchedOutline': { borderColor: COLORS.border.default },
+                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: COLORS.neon.cyan },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: COLORS.neon.cyan },
+                }}
+              >
+                <MenuItem value="fathom">Fathom</MenuItem>
+                <MenuItem value="tldv">tl;dv</MenuItem>
+                <MenuItem value="otter">Otter.ai</MenuItem>
+                <MenuItem value="readai">Read.ai</MenuItem>
+                <MenuItem value="generic">Other</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+          {/* Row 4: API Key (shown for providers that support it) */}
+          {(newCloser.transcript_provider === 'fathom' || newCloser.transcript_provider === 'tldv') && (
+            <Box sx={{ mb: 1.5 }}>
+              <TronTextField
+                label={`${newCloser.transcript_provider === 'fathom' ? 'Fathom' : 'tl;dv'} API Key`}
+                placeholder="Paste your API key — webhook will be registered automatically"
+                value={newCloser.transcript_api_key}
+                onChange={(e) => setNewCloser((p) => ({ ...p, transcript_api_key: e.target.value }))}
+                fullWidth
+              />
+              <Typography sx={{ color: COLORS.text.muted, fontSize: '0.7rem', mt: 0.5 }}>
+                If provided, the webhook will be registered automatically when the closer is added.
+              </Typography>
+            </Box>
+          )}
+          {/* Actions */}
+          <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+            <Button
+              onClick={() => {
+                setShowAdd(false);
+                setNewCloser({
+                  name: '', work_email: '', personal_email: '', phone: '',
+                  timezone: '', transcript_provider: 'fathom', transcript_api_key: '',
+                });
+              }}
+              size="small"
+              sx={{ color: COLORS.text.muted, textTransform: 'none' }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAdd}
+              disabled={saving || !newCloser.name.trim() || !newCloser.work_email.trim()}
+              variant="contained"
+              size="small"
+              sx={{
+                backgroundColor: COLORS.neon.cyan,
+                color: COLORS.bg.primary,
+                fontWeight: 600,
+                textTransform: 'none',
+                minWidth: 100,
+              }}
+            >
+              {saving ? 'Adding...' : 'Add Closer'}
+            </Button>
+          </Box>
         </Box>
       )}
 
@@ -709,9 +833,6 @@ function TeamSection({ closers, clientId, authOptions, mode, onRefresh }) {
         <Box
           key={closer.closer_id}
           sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1.5,
             py: 1.5,
             px: 2,
             borderBottom: `1px solid ${COLORS.border.subtle}`,
@@ -719,54 +840,131 @@ function TeamSection({ closers, clientId, authOptions, mode, onRefresh }) {
           }}
         >
           {editingId === closer.closer_id ? (
-            <>
-              <TronTextField
-                value={editFields.name}
-                onChange={(e) => setEditFields((p) => ({ ...p, name: e.target.value }))}
-                sx={{ flex: 1 }}
-                size="small"
-              />
-              <IconButton
-                onClick={() => handleEdit(closer.closer_id)}
-                disabled={saving}
-                sx={{ color: COLORS.neon.green }}
-                size="small"
-              >
-                <SaveIcon fontSize="small" />
-              </IconButton>
-              <IconButton
-                onClick={() => setEditingId(null)}
-                sx={{ color: COLORS.text.muted }}
-                size="small"
-              >
-                <RestoreIcon fontSize="small" />
-              </IconButton>
-            </>
+            <Box sx={{ p: 1, backgroundColor: COLORS.bg.secondary, borderRadius: 1.5, border: `1px solid ${COLORS.neon.cyan}20` }}>
+              <Typography sx={{ color: COLORS.text.secondary, fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', mb: 1 }}>
+                Edit Closer
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 1.5, mb: 1 }}>
+                <TronTextField label="Name" value={editFields.name} onChange={(e) => setEditFields((p) => ({ ...p, name: e.target.value }))} sx={{ flex: 1 }} size="small" />
+                <TronTextField label="Work Email" type="email" value={editFields.work_email} onChange={(e) => setEditFields((p) => ({ ...p, work_email: e.target.value }))} sx={{ flex: 1 }} size="small" />
+              </Box>
+              <Box sx={{ display: 'flex', gap: 1.5, mb: 1 }}>
+                <TronTextField label="Personal Email" type="email" value={editFields.personal_email} onChange={(e) => setEditFields((p) => ({ ...p, personal_email: e.target.value }))} sx={{ flex: 1 }} size="small" />
+                <TronTextField label="Phone" value={editFields.phone} onChange={(e) => setEditFields((p) => ({ ...p, phone: e.target.value }))} sx={{ flex: 1 }} size="small" />
+              </Box>
+              <Box sx={{ display: 'flex', gap: 1.5, mb: 1 }}>
+                <TronTextField label="Timezone" placeholder="America/New_York" value={editFields.timezone} onChange={(e) => setEditFields((p) => ({ ...p, timezone: e.target.value }))} sx={{ flex: 1 }} size="small" />
+                <FormControl size="small" sx={{ flex: 1 }}>
+                  <InputLabel sx={{ color: COLORS.text.muted, fontSize: '0.85rem' }}>Provider</InputLabel>
+                  <Select
+                    value={editFields.transcript_provider || 'fathom'}
+                    onChange={(e) => setEditFields((p) => ({ ...p, transcript_provider: e.target.value }))}
+                    label="Provider"
+                    sx={{
+                      color: COLORS.text.primary,
+                      '.MuiOutlinedInput-notchedOutline': { borderColor: COLORS.border.default },
+                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: COLORS.neon.cyan },
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: COLORS.neon.cyan },
+                    }}
+                  >
+                    <MenuItem value="fathom">Fathom</MenuItem>
+                    <MenuItem value="tldv">tl;dv</MenuItem>
+                    <MenuItem value="otter">Otter.ai</MenuItem>
+                    <MenuItem value="readai">Read.ai</MenuItem>
+                    <MenuItem value="generic">Other</MenuItem>
+                  </Select>
+                </FormControl>
+              </Box>
+              {(editFields.transcript_provider === 'fathom' || editFields.transcript_provider === 'tldv') && (
+                <Box sx={{ mb: 1 }}>
+                  <TronTextField
+                    label={`${editFields.transcript_provider === 'fathom' ? 'Fathom' : 'tl;dv'} API Key`}
+                    value={editFields.transcript_api_key}
+                    onChange={(e) => setEditFields((p) => ({ ...p, transcript_api_key: e.target.value }))}
+                    fullWidth
+                    size="small"
+                  />
+                </Box>
+              )}
+              <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+                <Button onClick={() => setEditingId(null)} size="small" sx={{ color: COLORS.text.muted, textTransform: 'none' }}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => handleEdit(closer.closer_id)}
+                  disabled={saving || !editFields.name.trim()}
+                  variant="contained"
+                  size="small"
+                  sx={{ backgroundColor: COLORS.neon.cyan, color: COLORS.bg.primary, fontWeight: 600, textTransform: 'none', minWidth: 80 }}
+                >
+                  {saving ? '...' : 'Save'}
+                </Button>
+              </Box>
+            </Box>
           ) : (
-            <>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, opacity: pendingIds.has(closer.closer_id) ? 0.5 : 1, transition: 'opacity 0.2s ease' }}>
               <Box sx={{ flex: 1 }}>
                 <Typography sx={{ color: COLORS.text.primary, fontSize: '0.9rem', fontWeight: 500 }}>
                   {closer.name}
                 </Typography>
+                <Typography sx={{ color: COLORS.text.muted, fontSize: '0.75rem' }}>
+                  {closer.work_email || '—'}
+                  {closer.transcript_provider && (
+                    <span style={{ marginLeft: 8, color: COLORS.text.secondary }}>
+                      ({closer.transcript_provider})
+                    </span>
+                  )}
+                </Typography>
+                {mode === 'admin' && (
+                  <Typography sx={{ color: COLORS.text.muted, fontSize: '0.65rem', fontFamily: 'monospace', mt: 0.25 }}>
+                    {closer.closer_id}
+                  </Typography>
+                )}
               </Box>
-              <Chip
-                label="Active"
-                size="small"
-                sx={{
-                  backgroundColor: `${COLORS.neon.green}15`,
-                  color: COLORS.neon.green,
-                  fontSize: '0.7rem',
-                  fontWeight: 600,
-                  height: 22,
-                }}
-              />
+              {errorIds.has(closer.closer_id) && (
+                <ErrorOutlineIcon sx={{ color: COLORS.neon.red, fontSize: '1.1rem' }} />
+              )}
+              {pendingIds.has(closer.closer_id) ? (
+                <Chip
+                  label="Deactivating..."
+                  size="small"
+                  sx={{
+                    backgroundColor: `${COLORS.neon.amber}15`,
+                    color: COLORS.neon.amber,
+                    fontSize: '0.7rem',
+                    fontWeight: 600,
+                    height: 22,
+                  }}
+                />
+              ) : (
+                <Chip
+                  label="Active"
+                  size="small"
+                  sx={{
+                    backgroundColor: `${COLORS.neon.green}15`,
+                    color: COLORS.neon.green,
+                    fontSize: '0.7rem',
+                    fontWeight: 600,
+                    height: 22,
+                  }}
+                />
+              )}
               <IconButton
                 onClick={() => {
                   setEditingId(closer.closer_id);
-                  setEditFields({ name: closer.name });
+                  setEditFields({
+                    name: closer.name || '',
+                    work_email: closer.work_email || '',
+                    personal_email: closer.personal_email || '',
+                    phone: closer.phone || '',
+                    timezone: closer.timezone || '',
+                    transcript_provider: closer.transcript_provider || 'fathom',
+                    transcript_api_key: closer.transcript_api_key || '',
+                  });
                 }}
                 sx={{ color: COLORS.text.muted }}
                 size="small"
+                disabled={pendingIds.has(closer.closer_id)}
               >
                 <EditIcon fontSize="small" />
               </IconButton>
@@ -774,10 +972,11 @@ function TeamSection({ closers, clientId, authOptions, mode, onRefresh }) {
                 onClick={() => handleDeactivate(closer.closer_id)}
                 sx={{ color: COLORS.neon.red }}
                 size="small"
+                disabled={pendingIds.has(closer.closer_id)}
               >
                 <DeleteIcon fontSize="small" />
               </IconButton>
-            </>
+            </Box>
           )}
         </Box>
       ))}
@@ -806,7 +1005,8 @@ function TeamSection({ closers, clientId, authOptions, mode, onRefresh }) {
                 gap: 1.5,
                 py: 1,
                 px: 2,
-                opacity: 0.6,
+                opacity: pendingIds.has(closer.closer_id) ? 0.3 : 0.6,
+                transition: 'opacity 0.2s ease',
                 borderBottom: `1px solid ${COLORS.border.subtle}`,
                 '&:last-child': { borderBottom: 'none' },
               }}
@@ -815,21 +1015,43 @@ function TeamSection({ closers, clientId, authOptions, mode, onRefresh }) {
                 <Typography sx={{ color: COLORS.text.muted, fontSize: '0.85rem' }}>
                   {closer.name}
                 </Typography>
+                {mode === 'admin' && (
+                  <Typography sx={{ color: COLORS.text.muted, fontSize: '0.65rem', fontFamily: 'monospace', mt: 0.25 }}>
+                    {closer.closer_id}
+                  </Typography>
+                )}
               </Box>
-              <Chip
-                label="Inactive"
-                size="small"
-                sx={{
-                  backgroundColor: `${COLORS.text.muted}15`,
-                  color: COLORS.text.muted,
-                  fontSize: '0.7rem',
-                  height: 22,
-                }}
-              />
+              {errorIds.has(closer.closer_id) && (
+                <ErrorOutlineIcon sx={{ color: COLORS.neon.red, fontSize: '1.1rem' }} />
+              )}
+              {pendingIds.has(closer.closer_id) ? (
+                <Chip
+                  label="Reactivating..."
+                  size="small"
+                  sx={{
+                    backgroundColor: `${COLORS.neon.cyan}15`,
+                    color: COLORS.neon.cyan,
+                    fontSize: '0.7rem',
+                    height: 22,
+                  }}
+                />
+              ) : (
+                <Chip
+                  label="Inactive"
+                  size="small"
+                  sx={{
+                    backgroundColor: `${COLORS.text.muted}15`,
+                    color: COLORS.text.muted,
+                    fontSize: '0.7rem',
+                    height: 22,
+                  }}
+                />
+              )}
               <Button
                 onClick={() => handleReactivate(closer.closer_id)}
                 startIcon={<RestoreIcon />}
                 size="small"
+                disabled={pendingIds.has(closer.closer_id)}
                 sx={{ color: COLORS.neon.cyan, fontSize: '0.75rem', textTransform: 'none' }}
               >
                 Reactivate

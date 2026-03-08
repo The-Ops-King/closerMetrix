@@ -1121,45 +1121,7 @@ function ClosersTab({ selectedClientId, executeRequest }) {
         </Button>
       </Box>
 
-      {/* ── Register Fathom ── */}
-      <Box sx={cardSx}>
-        <Typography sx={sectionHeaderSx}>Register Fathom Webhook</Typography>
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <FormControl size="small" sx={{ minWidth: 250 }}>
-            <InputLabel sx={{ color: COLORS.text.secondary }}>Select Closer</InputLabel>
-            <Select
-              value={fathomCloserId}
-              onChange={(e) => setFathomCloserId(e.target.value)}
-              label="Select Closer"
-            >
-              <MenuItem value="">
-                <em>None</em>
-              </MenuItem>
-              {closers.map((c) => (
-                <MenuItem key={c.closer_id} value={c.closer_id}>
-                  {c.name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <TextField
-            size="small"
-            label="Transcript API Key"
-            value={fathomApiKey}
-            onChange={(e) => setFathomApiKey(e.target.value)}
-            sx={{ minWidth: 250, flexGrow: 1, ...inputSx }}
-          />
-          <Button
-            variant="contained"
-            startIcon={registeringFathom ? <CircularProgress size={16} /> : <SendIcon />}
-            onClick={handleRegisterFathom}
-            disabled={registeringFathom || !fathomCloserId || !fathomApiKey}
-            sx={{ fontWeight: 600, textTransform: 'none', px: 3 }}
-          >
-            Register
-          </Button>
-        </Box>
-      </Box>
+      {/* Fathom webhook registration removed — now automatic when API key is added/changed on a closer */}
     </>
   );
 }
