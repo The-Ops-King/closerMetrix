@@ -13,6 +13,7 @@
 import React from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
+import Tooltip from '@mui/material/Tooltip';
 import { COLORS } from '../../theme/constants';
 import { hexToRgba } from '../../utils/colors';
 
@@ -20,7 +21,10 @@ export default function PowerScoreBadge({ score = 0, size = 56, color }) {
   const resolvedColor = color || COLORS.neon.green;
   const displayScore = Math.round(score);
 
+  const tooltip = 'Power Score is a weighted composite of Revenue (30%), Close Rate (25%), Cash (15%), Show Rate (10%), Call Quality (10%), and Objection Handling (10%), ranked against other closers.';
+
   return (
+    <Tooltip title={tooltip} arrow placement="top">
     <Box
       sx={{
         width: size,
@@ -47,5 +51,6 @@ export default function PowerScoreBadge({ score = 0, size = 56, color }) {
         {displayScore}
       </Typography>
     </Box>
+    </Tooltip>
   );
 }
