@@ -327,7 +327,7 @@ function m(label, value, format, glowColor) {
 // MAIN DISPATCHER
 // ─────────────────────────────────────────────────────────────
 
-export function computePageData(section, rawData, filters) {
+export function computePageData(section, rawData, filters, kpiTargets) {
   if (!rawData || !rawData.calls) return null;
 
   const { dateStart, dateEnd, closerId, granularity: rawGranularity, objectionType, riskCategory, callSource } = filters;
@@ -375,7 +375,7 @@ export function computePageData(section, rawData, filters) {
     case 'violations': return computeViolations(calls, granularity, prev, riskCategory);
     case 'adherence': return computeAdherence(calls, granularity, prev);
     case 'market-insight': return computeMarketInsight(rawData);
-    case 'closer-scoreboard': return computeCloserScoreboard(calls, objections, closeCycles, granularity, prev);
+    case 'closer-scoreboard': return computeCloserScoreboard(calls, objections, closeCycles, granularity, prev, kpiTargets);
     default: return null;
   }
 }
@@ -2275,7 +2275,7 @@ function computeAdherence(calls, granularity, prev) {
  *
  * Returns champion data, comparison table, bar charts, radar, and trends.
  */
-function computeCloserScoreboard(calls, objections, closeCycles, granularity, prev) {
+function computeCloserScoreboard(calls, objections, closeCycles, granularity, prev, kpiTargets) {
   const held = calls.filter(isShow);
 
   // Group by closer — exclude closers with < 3 held calls
@@ -2452,6 +2452,13 @@ function computeCloserScoreboard(calls, objections, closeCycles, granularity, pr
   // 6 clean axes — all real data fields, no derived metrics
   const radarAxes = ['Close Rate', 'Show Rate', 'Rev/Call', 'Call Quality', 'Obj Handling', 'Adherence'];
   const maxRevPerCall = Math.max(...closerStats.map(s => s.heldCount > 0 ? s.revenue / s.heldCount : 0), 1);
+  // Normalize Close Rate & Show Rate: 10 = KPI target or best closer (whichever is higher)
+  const crKpi = kpiTargets?.close_rate || 0;
+  const srKpi = kpiTargets?.show_rate || 0;
+  const maxCR = Math.max(...closerStats.map(c => c.closeRate), crKpi);
+  const maxSR = Math.max(...closerStats.map(c => c.showRate), srKpi);
+  const normKpi = (val, ceiling) => ceiling > 0 ? Math.min(10, round((val / ceiling) * 10, 1)) : 5;
+
   const radarByCloser = closerStats.map(c => {
     const revPerCall = c.heldCount > 0 ? c.revenue / c.heldCount : 0;
     const adherence = avg(held.filter(h => (h.closerName || h.closerId || 'Unknown') === c.name), 'scriptAdherenceScore') || 0;
@@ -2459,8 +2466,8 @@ function computeCloserScoreboard(calls, objections, closeCycles, granularity, pr
       label: c.name,
       closerId: c.closerId,
       values: [
-        round(c.closeRate * 10, 1),              // Close Rate (0-1 → 0-10)
-        round(c.showRate * 10, 1),                // Show Rate (0-1 → 0-10)
+        normKpi(c.closeRate, maxCR),              // Close Rate (0-10, KPI or best = 10)
+        normKpi(c.showRate, maxSR),               // Show Rate (0-10, KPI or best = 10)
         round((revPerCall / maxRevPerCall) * 10, 1), // Rev/Call (normalized to 0-10)
         round(c.callQuality, 1),                  // Call Quality (already 0-10)
         round(c.objHandling, 1),                  // Obj Handling (already 0-10)
@@ -2510,11 +2517,11 @@ function computeCloserScoreboard(calls, objections, closeCycles, granularity, pr
     avgDuration: [...closerStats].filter(c => c.avgDuration > 0).sort((a, b) => b.avgDuration - a.avgDuration).map(c => ({ name: c.name, dealsClosed: c.heldCount + ' calls', revenue: round(c.avgDuration, 1) + ' min' })),
   };
 
-  // ── Section 6: Trends Over Time (top 5 closers by power score) ──
+  // ── Section 6: Trends Over Time (up to 10 closers by power score) ──
   // Force weekly granularity for trends — daily is too noisy per-closer
   const trendGranularity = 'weekly';
-  const top5 = closerStats.slice(0, 5);
-  const rankColors = ['green', 'cyan', 'blue', 'purple', 'amber'];
+  const top5 = closerStats.slice(0, 10);
+  const rankColors = ['green', 'cyan', 'blue', 'purple', 'amber', 'red', 'teal', 'muted', 'green', 'cyan'];
 
   // Pre-group ALL calls (not just held) by time bucket for close rate denominator
   const allCallBuckets = groupByTime(calls, 'appointmentDate', trendGranularity);

@@ -60,9 +60,15 @@ export default function TronPieChart({
    *
    * The valueFormatter shows both the raw value and its percentage of total.
    */
+  // Sort data by value descending so largest slice is first
+  const sortedData = useMemo(
+    () => [...data].sort((a, b) => (b.value || 0) - (a.value || 0)),
+    [data]
+  );
+
   const pieData = useMemo(
     () =>
-      data.map((d, i) => {
+      sortedData.map((d, i) => {
         const val = d.value || 0;
         const pct = total > 0 ? ((val / total) * 100).toFixed(1) : '0.0';
         const name = d.label || `Segment ${i + 1}`;
@@ -73,7 +79,7 @@ export default function TronPieChart({
           color: resolveColor(d.color, i),
         };
       }),
-    [data, total]
+    [sortedData, total]
   );
 
   /**

@@ -493,7 +493,8 @@ export default function CloserScoreboardPage() {
                 series={charts.closeRateTrend?.series || []}
                 height={340}
                 yAxisFormat="percent"
-                showArea={false}
+                showArea={true}
+                areaOpacity={0.25}
               />
             </ChartWrapper>
 
@@ -509,7 +510,8 @@ export default function CloserScoreboardPage() {
                 series={charts.revenueTrend?.series || []}
                 height={340}
                 yAxisFormat="currency"
-                showArea={false}
+                showArea={true}
+                areaOpacity={0.25}
               />
             </ChartWrapper>
           </Box>

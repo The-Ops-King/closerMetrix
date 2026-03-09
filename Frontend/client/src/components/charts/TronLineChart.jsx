@@ -82,16 +82,20 @@ export default function TronLineChart({
   const chartSeries = useMemo(() => {
     const tooltipFmt = getTooltipFormatter(yAxisFormat);
 
-    return series.map((s) => ({
-      data: data.map((d) => d[s.key] ?? null),
-      label: s.label,
-      color: COLOR_MAP[s.color] || s.color || COLORS.neon.cyan,
-      area: showArea,
-      ...(stacked ? { stack: 'total', stackOrder: 'none' } : {}),
-      showMark: data.length <= 2,
-      curve: 'catmullRom',
-      valueFormatter: tooltipFmt,
-    }));
+    return series.map((s) => {
+      const values = data.map((d) => d[s.key] ?? null);
+      const nonNullCount = values.filter((v) => v != null).length;
+      return {
+        data: values,
+        label: s.label,
+        color: COLOR_MAP[s.color] || s.color || COLORS.neon.cyan,
+        area: showArea,
+        ...(stacked ? { stack: 'total', stackOrder: 'none' } : {}),
+        showMark: nonNullCount === 1,
+        curve: 'catmullRom',
+        valueFormatter: tooltipFmt,
+      };
+    });
   }, [data, series, showArea, stacked, yAxisFormat]);
 
   // Build a stable key that forces remount when series structure changes

@@ -62,7 +62,7 @@ export default function ObjectionsPage() {
   // Dynamic heights for Row 2 (closer table + trend chart)
   const closerRowTarget = useMemo(() => {
     const count = tables.byCloser?.rows?.length || 0;
-    return Math.max(280, 100 + count * 40);
+    return Math.max(300, 100 + count * 40);
   }, [tables.byCloser?.rows?.length]);
   const closerRowHeight = useAnimatedValue(closerRowTarget);
 
@@ -167,6 +167,7 @@ export default function ObjectionsPage() {
             sx={{
               display: 'grid',
               gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+              gridAutoRows: 'minmax(300px, auto)',
               gap: '16px',
               alignItems: 'stretch',
             }}
@@ -184,7 +185,7 @@ export default function ObjectionsPage() {
               loading={isLoading}
               error={error?.message}
               isEmpty={!charts.objectionTrends?.data?.length}
-              height={closerRowHeight}
+              height={300}
             >
               <TronLineChart
                 data={charts.objectionTrends?.data || []}

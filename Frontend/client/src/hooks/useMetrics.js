@@ -32,7 +32,7 @@ import { computePageData } from '../utils/computePageData';
  */
 export function useMetrics(section, options = {}) {
   const { queryParams } = useFilters();
-  const { isAuthenticated, mode, adminViewClientId } = useAuth();
+  const { isAuthenticated, mode, adminViewClientId, kpiTargets } = useAuth();
   const { rawData, isDataLoading, dataError, refetchData } = useData();
 
   // Determine if computation should run
@@ -59,7 +59,7 @@ export function useMetrics(section, options = {}) {
       callSource: queryParams.callSource || null,
     };
 
-    return computePageData(section, rawData, filters);
+    return computePageData(section, rawData, filters, kpiTargets);
   }, [
     enabled,
     rawData,
@@ -71,6 +71,7 @@ export function useMetrics(section, options = {}) {
     queryParams.objectionType,
     queryParams.riskCategory,
     queryParams.callSource,
+    kpiTargets,
   ]);
 
   // Update the cached data whenever we get a fresh computation

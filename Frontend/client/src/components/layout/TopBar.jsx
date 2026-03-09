@@ -74,6 +74,7 @@ export default function TopBar({ companyName, tier, onMenuClick }) {
   const isViolationsPage = location.pathname.includes('/violations');
   const isMarketInsightPage = location.pathname.includes('/market-insight');
   const isDataAnalysisPage = location.pathname.includes('/data-analysis');
+  const isProjectionsPage = location.pathname.includes('/projections');
   const isSettingsPage = location.pathname.endsWith('/settings');
   const { token, mode, adminViewClientId } = useAuth();
   const { queryParams, dateRange } = useFilters();
@@ -153,7 +154,7 @@ export default function TopBar({ companyName, tier, onMenuClick }) {
       {/* Right: Filter controls + Download button — wraps to full width on mobile */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, md: 2 }, flexWrap: 'wrap', width: { xs: '100%', md: 'auto' } }}>
         {/* Market Insight uses auto last-30-days; Settings has no data filters */}
-        {!isMarketInsightPage && !isSettingsPage && !isDataAnalysisPage && (
+        {!isMarketInsightPage && !isSettingsPage && !isDataAnalysisPage && !isProjectionsPage && (
           <>
             <CallSourceFilter />
             {meetsMinTier(tier, 'insight') ? (
