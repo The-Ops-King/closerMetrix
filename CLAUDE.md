@@ -51,12 +51,14 @@ cd Frontend/client && nohup npm run dev > /tmp/closermetrix-vite.log 2>&1 &
 
 ### Test Tokens — Never Demo Tokens
 
-| Token | Tier | Notes |
-|-------|------|-------|
-| `af3016c9-5377-43f3-9d16-03428af0cc4d` | executive | All pages including Violations + Adherence |
-| `eca9e04e-f035-4107-9f25-ebce1c64c89f` | insight | All insight-tier pages |
+Tokens are stored in `.env` (gitignored). Never commit raw tokens to tracked files.
 
-`friends_inc` = the client_id for direct BQ/backend testing (no token needed).
+| Env Var | Tier | Notes |
+|---------|------|-------|
+| `TEST_TOKEN_EXECUTIVE` | executive | All pages including Violations + Adherence |
+| `TEST_TOKEN_INSIGHT` | insight | All insight-tier pages |
+
+`TEST_CLIENT_ID` = the client_id for direct BQ/backend testing (no token needed).
 
 ### Deploy
 
@@ -187,6 +189,29 @@ Backend/
 
 ---
 
+  ### Security — Build Secure, Always Audit                                                                                                                            
+   
+  **Security is not optional.** Every feature, route, middleware, and query must be built with security in mind from the start.                                        
+                                                        
+  **Before completing any feature:**                       
+  - Validate all user input server-side (never trust the client)
+  - Use parameterized queries only — never string interpolation in SQL
+  - Enforce auth on every route — no unauthenticated endpoints except public health checks
+  - Enforce client isolation (`client_id` filtering) on every data query
+  - Use `crypto.timingSafeEqual` for all secret/token comparisons — never `===` or `!==`
+  - Use allowlists (not denylists) for mass assignment on update endpoints
+  - Never leak stack traces, internal paths, or error details in API responses
+  - Never hardcode secrets, API keys, or tokens in source code — use env vars or Secret Manager
+
+  **After completing any feature or sprint:**
+  - Run a security sweep across all touched files (routes, middleware, queries, config)
+  - Check for OWASP Top 10: broken access control, injection, auth failures, SSRF, misconfig
+  - Verify tier enforcement is applied server-side (not just frontend hiding)
+  - Verify webhook endpoints have signature/auth verification
+  - Check CORS is restricted to known origins
+  - Ensure rate limiting exists on auth and admin endpoints
+
+
 ## Learned Rules Log
 
 *Every correction gets logged here. This is how the file gets smarter.*
@@ -201,3 +226,6 @@ Backend/
 | 7 | init | review.md audit | Negative metrics need `desiredDirection: 'down'` or delta arrows will invert wrong |
 | 8 | init | review.md audit | `orange` is not a color token — Rescheduled uses `amber` |
 | 9 | init | review.md audit | Auto-granularity thresholds: ≤14d=daily, 15-90d=weekly, >90d=monthly |
+  | 10 | 2026-03-09 | security audit | Always build with security in mind and run security sweep after every feature |
+| 11 | 2026-03-10 | Tyler correction | Run `cd Backend && npm test` after every significant code change — verify 0 new failures before moving on |
+
