@@ -1,0 +1,28 @@
+{
+  "enabledPlugins": {
+    "claude-mem@thedotmack": true,
+    "playwright@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": true,
+    "context7@claude-plugins-official": true,
+    "code-review@claude-plugins-official": true,
+    "superpowers@claude-plugins-official": true,
+    "security-guidance@claude-plugins-official": true
+  },
+  "env": {
+    "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "80"
+  },
+  "hooks": {
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd $CLAUDE_PROJECT_DIR && git add CLAUDE.md .claude/ 2>/dev/null; git diff --cached --quiet || git commit -m 'auto: pre-compact checkpoint' 2>/dev/null; echo 'Checkpoint saved'",
+            "async": true
+          }
+        ]
+      }
+    ]
+  }
+}
+

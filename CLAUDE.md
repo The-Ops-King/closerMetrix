@@ -1,34 +1,212 @@
-# CloserMetrix Landing Page
+# CloserMetrix
 
-## Dev Server
+Sales call intelligence platform. Turns call recordings → structured BI for high-ticket sales teams.
+Stack: Node.js/Express · Vite/React · MUI X Charts · Google BigQuery · Cloud Run
+GCP project: `closer-automation` | BQ dataset: `CloserAutomation`
 
-Always run the Vite dev server on **port 3000**:
+---
+
+## This File Improves Itself
+
+**Every time Tyler corrects Claude, the correction becomes a permanent rule.**
+
+The mechanic:
+1. Tyler makes a correction mid-session ("that's wrong, it should be X")
+2. Claude immediately asks: "Should I add that as a rule to CLAUDE.md?"
+3. If yes — Claude edits CLAUDE.md, appends to the Learned Rules Log with today's date and what triggered it, and promotes it to "Rules Claude Gets Wrong" if it's universal
+4. At end of session, run `/wrap-up` — it auto-reviews the conversation for additional improvements and applies them
+
+Run `/reflect` at any time to do a deep review of recent sessions and propose batch improvements.
+
+The goal: every conversation makes Claude slightly more accurate on this codebase. Rules compound.
+
+---
+
+## Reference Docs
+
+Read the relevant doc **before** starting any task. Don't guess at metrics, field names, or formulas.
+
+| Task | Read This |
+|------|-----------|
+| Any dashboard page, metric, scorecard, or chart | `docs/review.md` — every page, every formula |
+| BigQuery schema, views, column names | `docs/database.md` |
+| Colors, typography, component props | `docs/design-system.md` |
+| Backend pipeline, webhooks, AI config | `docs/backend-pipeline.md` |
+
+---
+
+## Dev Servers
+
+**Always restart both after any frontend change.**
 
 ```bash
-npm run dev
+lsof -ti:3001 -ti:5173 | xargs kill -9 2>/dev/null
+cd Frontend && nohup npm run dev > /tmp/closermetrix-express.log 2>&1 &
+cd Frontend/client && nohup npm run dev > /tmp/closermetrix-vite.log 2>&1 &
+# Open: http://localhost:5173
 ```
 
-The server runs at http://localhost:3000
+Landing page (separate project): `cd LandingPage && npm run dev` → http://localhost:3000
 
-## Demo Booking Link
+### Test Tokens — Never Demo Tokens
 
-All CTAs use "Book a Demo" linking to: https://calendar.app.google/42Lw245o4mHrd35j9
+| Token | Tier | Notes |
+|-------|------|-------|
+| `af3016c9-5377-43f3-9d16-03428af0cc4d` | executive | All pages including Violations + Adherence |
+| `eca9e04e-f035-4107-9f25-ebce1c64c89f` | insight | All insight-tier pages |
 
-Do NOT use "Join Waitlist" — always use "Book a Demo" with the link above.
+`friends_inc` = the client_id for direct BQ/backend testing (no token needed).
 
-## Lead Capture Popup
+### Deploy
 
-All "Book a Demo" buttons open a modal popup (DemoModal.jsx) that collects:
-- Name (required)
-- Email and/or Phone (at least one required)
+```bash
+export PATH="/Users/user/google-cloud-sdk/bin:$PATH"
+gcloud builds submit --config cloudbuild.yaml \
+  --substitutions=COMMIT_SHA=$(git rev-parse --short HEAD) \
+  --project=closer-automation
+```
 
-On submit:
-1. Sends email notification via EmailJS to closermetrix@jtylerray.com
-2. n8n webhook for sheet logging (TODO: needs Google Sheets OAuth in n8n)
-3. Redirects to Google Calendar booking page
+---
 
-Credentials are in `.env` (gitignored). Restart dev server after changing `.env`.
+## Rules Claude Gets Wrong
 
-## Logo
+These are recurring mistakes. Read this section every session.
 
-Use the `logo_wide_3-removebg-preview.png` (transparent background version). It's deployed as `public/logo.png` and `public/logo-full.png`.
+### Colors
+
+**Never hardcode hex.** Always use token names from `Frontend/client/src/theme/constants.js`.
+
+```js
+// Frontend code — use COLORS object
+COLORS.neon.cyan / green / amber / red / blue / purple / teal / magenta
+COLORS.bg.primary / secondary / tertiary / elevated
+COLORS.text.primary / secondary / muted
+COLORS.border.glow
+```
+
+In backend/config/data files use string names: `'cyan'`, `'green'`, `'amber'`, `'red'`, `'blue'`, `'purple'`, `'teal'`, `'muted'`.
+
+**`orange` is NOT a token.** Attendance page uses orange for Rescheduled — it maps to `COLORS.neon.amber`. There is no separate orange token.
+
+**Magenta is emergency-only** — only use for 8+ segment charts when all other colors are exhausted.
+
+### BigQuery
+
+**Every query must include `client_id`.** This is non-negotiable client isolation. No exceptions.
+
+```js
+// Always parameterized — never string interpolation
+WHERE client_id = @clientId
+
+// Full table names always
+`closer-automation.CloserAutomation.Calls`
+`closer-automation.CloserAutomation.Closers`
+```
+
+**`appointment_date` is a STRING** (legacy field). Parse as ISO timestamp. Never treat as DATE type.
+
+**`call_id` (UUID) is the true PK**, not `appointment_id`.
+
+**Views are read-only.** Never modify `v_*` views. Query them; don't touch their definitions.
+
+### Score Field Names — Exact, No Guessing
+
+BQ columns for script adherence (all on the `Calls` table):
+
+```
+intro_score            pain_score             goal_score
+transition_score       pitch_adherence_score  close_adherence_score
+objection_adherence_score  script_adherence_score  overall_call_score
+prospect_fit_score
+```
+
+⚠️ There is **NO `discovery_score`** column. Discovery was split into `pain_score` + `goal_score`. If you write `discovery_score` you will get a BQ error.
+
+### Metrics & Computation
+
+**`computePageData.js` owns client-side logic.** BQ queries return raw/aggregated data. `Frontend/client/src/utils/computePageData.js` handles: filtering, time bucketing, delta calculations, chart data shaping. Don't move this logic server-side without a deliberate architectural decision.
+
+**Negative metrics use `desiredDirection: 'down'`.** Lower is better for: Lost %, DQ Rate, Not Pitched Rate, Risk Flags, % Calls w/ Flags, Avg Days to Close, Avg Calls to Close, Calls Required per Deal. Delta arrows invert for these.
+
+**Auto-granularity for time-series charts:**
+- ≤14 days → Daily
+- 15–90 days → Weekly  
+- >90 days → Monthly
+
+**Safe divide everywhere.** `sd(a, b)` = `a / b` or `0` if `b === 0`. Never let a divide-by-zero reach the UI.
+
+### UI
+
+**No white backgrounds anywhere.** Full dark Tron theme throughout.
+
+**No inline styles.** Use MUI `sx` prop or theme overrides only.
+
+**No dummy data in production.** Empty state: scorecards → `'-'`, charts → `[]`. Only exception: blurred tier-gate preview cards.
+
+**Tier enforcement is three layers** — all three must be present:
+1. Frontend sidebar hides inaccessible pages (UX only)
+2. `tierGate.js` middleware returns 403 (real enforcement)
+3. Tier-specific query files — lower tiers never execute restricted queries
+
+### Landing Page
+
+**CTAs always say "Book a Demo"** — never "Join Waitlist" or any other variant.
+
+All CTA buttons open `DemoModal.jsx` first (lead capture), which then redirects to the Google Calendar booking link.
+
+---
+
+## Repo Map
+
+```
+Frontend/
+  server/              ← Express API (:3001) — proxies /api/* to Backend:8080
+    db/queries/        ← BigQuery SQL, one file per page
+    middleware/        ← clientIsolation.js, tierGate.js, adminAuth.js
+    routes/            ← dashboard.js, admin.js, partner.js, auth.js
+  client/src/
+    theme/             ← constants.js (COLORS), tronTheme.js, chartTheme.js
+    utils/             ← computePageData.js ← client-side metric computation lives here
+    hooks/             ← useMetrics, useFilters, useTier, useAuth
+    components/
+      scorecards/      ← Scorecard.jsx, ScorecardGrid.jsx, ScorecardRow.jsx
+      charts/          ← TronLineChart, TronBarChart, TronPieChart, TronRadarChart, TronFunnelChart
+      tables/          ← ObjectionsTable, RiskReviewTable, CloserLeaderboard
+      filters/         ← DateRangeFilter, CloserFilter, GranularityToggle
+      layout/          ← DashboardShell, Sidebar, TopBar
+    pages/
+      client/          ← Overview, Financial, Attendance, CallOutcomes, SalesCycle,
+                          Objections, Projections, Violations, Adherence
+      admin/           ← AdminDashboard, ClientManager, TokenManager, ApiConsole
+      partner/         ← PartnerDashboard
+
+Backend/
+  src/
+    config/            ← objection-types.js, call-outcomes.js, attendance-types.js,
+                          scoring-rubric.js, transcript-providers.js, calendar-providers.js
+    services/          ← CalendarService, TranscriptService, AIProcessor, PaymentService
+    db/                ← BigQueryClient.js (all queries route through here)
+    routes/webhooks/   ← calendar.js, transcript.js, payment.js
+
+LandingPage/
+  src/components/
+    DemoModal.jsx      ← Lead capture: EmailJS → closermetrix@jtylerray.com
+```
+
+---
+
+## Learned Rules Log
+
+*Every correction gets logged here. This is how the file gets smarter.*
+
+| # | Date | Triggered By | Rule |
+|---|------|-------------|------|
+| 1 | init | — | Always restart both dev servers after any frontend change |
+| 2 | init | — | Never use demo tokens — always use real BQ tokens |
+| 3 | init | — | Landing page CTAs = "Book a Demo", never "Join Waitlist" |
+| 4 | init | — | Never hardcode hex — always use COLORS token names |
+| 5 | init | review.md audit | `discovery_score` BQ column does not exist — use `pain_score` + `goal_score` |
+| 6 | init | review.md audit | `computePageData.js` owns client-side computation — don't move it server-side |
+| 7 | init | review.md audit | Negative metrics need `desiredDirection: 'down'` or delta arrows will invert wrong |
+| 8 | init | review.md audit | `orange` is not a color token — Rescheduled uses `amber` |
+| 9 | init | review.md audit | Auto-granularity thresholds: ≤14d=daily, 15-90d=weekly, >90d=monthly |
