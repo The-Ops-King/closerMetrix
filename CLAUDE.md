@@ -37,16 +37,17 @@ Read the relevant doc **before** starting any task. Don't guess at metrics, fiel
 
 ## Dev Servers
 
-**Always restart both after any frontend change.**
+**Always restart all 3 servers after any change.**
 
 ```bash
-lsof -ti:3001 -ti:5173 | xargs kill -9 2>/dev/null
+lsof -ti:8080 -ti:3001 -ti:5173 | xargs kill -9 2>/dev/null
+cd Backend && nohup npm start > /tmp/closermetrix-backend.log 2>&1 &
 cd Frontend && nohup npm run dev > /tmp/closermetrix-express.log 2>&1 &
 cd Frontend/client && nohup npm run dev > /tmp/closermetrix-vite.log 2>&1 &
-# Open: http://localhost:5173
+# Backend: http://localhost:8080
+# Express: http://localhost:3001
+# Vite:    http://localhost:5173
 ```
-
-Landing page (separate project): `cd LandingPage && npm run dev` → http://localhost:3000
 
 ### Test Tokens — Never Demo Tokens
 
@@ -103,7 +104,7 @@ WHERE client_id = @clientId
 `closer-automation.CloserAutomation.Closers`
 ```
 
-**`appointment_date` is a STRING** (legacy field). Parse as ISO timestamp. Never treat as DATE type.
+**`appointment_date` is a TIMESTAMP** in BigQuery. BQ SDK returns as `{ value: '...' }` — normalize with `toISO()` from `Backend/src/utils/dateUtils.js`. **`appointment_end_date` is a STRING** — requires `SAFE_CAST(appointment_end_date AS TIMESTAMP)` in queries.
 
 **`call_id` (UUID) is the true PK**, not `appointment_id`.
 
@@ -148,12 +149,6 @@ prospect_fit_score
 2. `tierGate.js` middleware returns 403 (real enforcement)
 3. Tier-specific query files — lower tiers never execute restricted queries
 
-### Landing Page
-
-**CTAs always say "Book a Demo"** — never "Join Waitlist" or any other variant.
-
-All CTA buttons open `DemoModal.jsx` first (lead capture), which then redirects to the Google Calendar booking link.
-
 ---
 
 ## Repo Map
@@ -188,9 +183,6 @@ Backend/
     db/                ← BigQueryClient.js (all queries route through here)
     routes/webhooks/   ← calendar.js, transcript.js, payment.js
 
-LandingPage/
-  src/components/
-    DemoModal.jsx      ← Lead capture: EmailJS → closermetrix@jtylerray.com
 ```
 
 ---
@@ -203,7 +195,6 @@ LandingPage/
 |---|------|-------------|------|
 | 1 | init | — | Always restart both dev servers after any frontend change |
 | 2 | init | — | Never use demo tokens — always use real BQ tokens |
-| 3 | init | — | Landing page CTAs = "Book a Demo", never "Join Waitlist" |
 | 4 | init | — | Never hardcode hex — always use COLORS token names |
 | 5 | init | review.md audit | `discovery_score` BQ column does not exist — use `pain_score` + `goal_score` |
 | 6 | init | review.md audit | `computePageData.js` owns client-side computation — don't move it server-side |
