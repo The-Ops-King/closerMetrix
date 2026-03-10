@@ -56,7 +56,7 @@ async function insertActivity(row) {
   };
 
   try {
-    await bq.runAdminQuery(sql, params);
+    await bq.runQuery(sql, params);
     logger.debug('Activity logged', {
       clientId: row.clientId,
       eventType: row.eventType,

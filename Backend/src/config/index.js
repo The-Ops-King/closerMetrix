@@ -27,7 +27,13 @@ const config = {
 
   /** Admin authentication — single static key for Tyler */
   admin: {
-    apiKey: process.env.ADMIN_API_KEY || '',
+    apiKey: (() => {
+      const key = process.env.ADMIN_API_KEY;
+      if (!key && process.env.NODE_ENV === 'production') {
+        throw new Error('ADMIN_API_KEY must be set in production');
+      }
+      return key || '';
+    })(),
   },
 
   /** Google Cloud Platform */
@@ -111,6 +117,18 @@ const config = {
     pollIntervals: (process.env.FATHOM_POLL_INTERVALS || '30,60,120,300,600,900')
       .split(',')
       .map(s => parseInt(s.trim(), 10)),
+  },
+
+  /** Transcript webhook HMAC verification */
+  transcriptWebhook: {
+    /** Supported signature header names (checked in order) */
+    signatureHeaders: [
+      'x-fathom-signature',
+      'x-tldv-signature',
+      'x-webhook-signature',
+    ],
+    /** Allow requests through when client has no webhook_secret (rollout mode) */
+    allowUnsigned: process.env.TRANSCRIPT_WEBHOOK_ALLOW_UNSIGNED !== 'false',
   },
 
   /** Transcript evaluation thresholds */

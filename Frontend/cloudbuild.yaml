@@ -14,6 +14,14 @@
 #   - Service account with BigQuery access
 
 steps:
+  # Audit npm dependencies (non-blocking warning)
+  - name: 'node:20'
+    dir: 'Frontend'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - 'npm audit --audit-level=moderate || true'
+
   # Build the Docker image
   - name: 'gcr.io/cloud-builders/docker'
     dir: 'Frontend'

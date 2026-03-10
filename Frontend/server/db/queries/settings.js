@@ -78,9 +78,20 @@ async function getSettingsData(clientId) {
     }
   }
 
+  // Mask transcript_api_key on closers before sending to frontend
+  const closers = closerRows.map(c => {
+    if (c.transcript_api_key) {
+      const key = String(c.transcript_api_key);
+      c.transcript_api_key = key.length > 4
+        ? '****' + key.slice(-4)
+        : '****';
+    }
+    return c;
+  });
+
   return {
     client: client ? { ...client, parsed_settings: settingsJson } : null,
-    closers: closerRows,
+    closers,
   };
 }
 

@@ -23,6 +23,16 @@ const { BigQuery } = require('@google-cloud/bigquery');
 const config = require('../config');
 const logger = require('../utils/logger');
 
+/** Validates that a column name matches standard SQL identifier pattern */
+const VALID_COLUMN_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+function validateColumnNames(columns, context) {
+  for (const col of columns) {
+    if (!VALID_COLUMN_RE.test(col)) {
+      throw new Error(`SECURITY: Invalid column name "${col}" in ${context}. Column names must match /^[a-zA-Z_][a-zA-Z0-9_]*$/.`);
+    }
+  }
+}
+
 /** Fully-qualified table path helper */
 function tablePath(tableName) {
   return `\`${config.bigquery.projectId}.${config.bigquery.dataset}.${tableName}\``;
@@ -38,14 +48,43 @@ class BigQueryClient {
   }
 
   /**
-   * Executes a parameterized SQL query against BigQuery.
+   * Executes a client-scoped parameterized SQL query against BigQuery.
+   * REQUIRES clientId in params — throws if missing.
+   * This is the default method and enforces tenant isolation.
+   *
+   * @param {string} sql — SQL string with @param placeholders
+   * @param {Object} params — Must include clientId for data isolation
+   * @returns {Array} Array of row objects
+   * @throws {Error} If clientId is missing or query fails
+   */
+  async query(sql, params = {}) {
+    if (!params.clientId) {
+      throw new Error('SECURITY: query() requires clientId parameter for data isolation. Use queryAdmin() for intentional cross-tenant operations.');
+    }
+    return this._execute(sql, params);
+  }
+
+  /**
+   * Executes a cross-tenant query WITHOUT client_id enforcement.
+   * Use ONLY for operations that intentionally span all clients:
+   * - Stuck call recovery (background jobs)
+   * - Client listing (admin-only)
+   * - Cost reporting (admin-only)
+   * - Health checks
+   *
+   * Callers MUST verify admin auth before using this method.
    *
    * @param {string} sql — SQL string with @param placeholders
    * @param {Object} params — Key-value map of parameter values
    * @returns {Array} Array of row objects
    * @throws {Error} If the query fails
    */
-  async query(sql, params = {}) {
+  async queryAdmin(sql, params = {}) {
+    return this._execute(sql, params);
+  }
+
+  /** @private Internal query executor */
+  async _execute(sql, params = {}) {
     const options = {
       query: sql,
       params,
@@ -103,6 +142,7 @@ class BigQueryClient {
     }
 
     const columns = Object.keys(cleanRow);
+    validateColumnNames(columns, `insert into ${tableName}`);
     const paramNames = columns.map(col =>
       jsonColumns.includes(col) ? `PARSE_JSON(@${col})` : `@${col}`
     );
@@ -110,7 +150,7 @@ class BigQueryClient {
     const sql = `INSERT INTO ${tablePath(tableName)} (${columns.join(', ')}) VALUES (${paramNames.join(', ')})`;
 
     try {
-      await this.query(sql, cleanRow);
+      await this._execute(sql, cleanRow);
     } catch (error) {
       logger.error('BigQuery insert failed', {
         table: tableName,
@@ -154,6 +194,9 @@ class BigQueryClient {
   async update(tableName, updates, where) {
     // For SET clauses: null values use literal NULL instead of params
     // (BigQuery requires type info for null params which we don't have)
+    validateColumnNames(Object.keys(updates), `update ${tableName} SET`);
+    validateColumnNames(Object.keys(where), `update ${tableName} WHERE`);
+
     const setClauses = [];
     const params = {};
 
@@ -180,7 +223,7 @@ class BigQueryClient {
 
     const sql = `UPDATE ${tablePath(tableName)} SET ${setClauses.join(', ')} WHERE ${whereClauses}`;
 
-    return this.query(sql, params);
+    return this._execute(sql, params);
   }
 
   /**
@@ -201,7 +244,7 @@ class BigQueryClient {
    */
   async healthCheck() {
     try {
-      await this.query('SELECT 1 as ok');
+      await this.queryAdmin('SELECT 1 as ok');
       return true;
     } catch (error) {
       logger.error('BigQuery health check failed', { error: error.message });

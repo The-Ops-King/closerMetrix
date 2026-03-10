@@ -226,6 +226,6 @@ Backend/
 | 7 | init | review.md audit | Negative metrics need `desiredDirection: 'down'` or delta arrows will invert wrong |
 | 8 | init | review.md audit | `orange` is not a color token — Rescheduled uses `amber` |
 | 9 | init | review.md audit | Auto-granularity thresholds: ≤14d=daily, 15-90d=weekly, >90d=monthly |
-  | 10 | 2026-03-09 | security audit | Always build with security in mind and run security sweep after every feature |
+| 10 | 2026-03-09 | security audit | Always build with security in mind and run security sweep after every feature |
 | 11 | 2026-03-10 | Tyler correction | Run `cd Backend && npm test` after every significant code change — verify 0 new failures before moving on |
 

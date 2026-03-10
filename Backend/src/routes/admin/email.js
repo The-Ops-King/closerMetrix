@@ -46,8 +46,8 @@ function parseSections(query) {
  * Query params:
  *   ?sections=overview,financial  — Only render these sections
  */
-// Preview is open in development (so Tyler can view in browser), auth-gated in production
-const previewAuth = config.server.nodeEnv === 'production' ? webhookAuth.admin : (req, res, next) => next();
+// All email routes require admin auth — no environment bypass
+const previewAuth = webhookAuth.admin;
 router.get('/preview/:type', previewAuth, (req, res) => {
   const { type } = req.params;
   const sections = parseSections(req.query.sections);
@@ -104,7 +104,7 @@ router.get('/preview-live/:type', previewAuth, async (req, res) => {
       return res.send(html);
     } catch (error) {
       logger.error('Daily onboarding live preview failed', { client_id, closer_id: req.query.closer_id, error: error.message });
-      return res.status(500).json({ status: 'error', message: error.message, stack: error.stack });
+      return res.status(500).json({ status: 'error', message: 'Daily onboarding preview failed' });
     }
   }
 
@@ -128,7 +128,7 @@ router.get('/preview-live/:type', previewAuth, async (req, res) => {
     res.send(html);
   } catch (error) {
     logger.error('Live preview failed', { type, client_id, error: error.message });
-    res.status(500).json({ status: 'error', message: error.message, stack: error.stack });
+    res.status(500).json({ status: 'error', message: 'Internal server error' });
   }
 });
 
@@ -155,7 +155,7 @@ router.get('/preview-data/:type', previewAuth, async (req, res) => {
     res.json({ status: 'ok', data });
   } catch (error) {
     logger.error('Preview data failed', { type, client_id, error: error.message });
-    res.status(500).json({ status: 'error', message: error.message, stack: error.stack });
+    res.status(500).json({ status: 'error', message: 'Internal server error' });
   }
 });
 
@@ -304,7 +304,7 @@ router.get('/preview-live/daily-onboarding', previewAuth, async (req, res) => {
     res.send(html);
   } catch (error) {
     logger.error('Daily onboarding live preview failed', { client_id, closer_id, error: error.message });
-    res.status(500).json({ status: 'error', message: error.message, stack: error.stack });
+    res.status(500).json({ status: 'error', message: 'Internal server error' });
   }
 });
 

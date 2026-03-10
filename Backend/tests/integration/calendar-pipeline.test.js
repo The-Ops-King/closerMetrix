@@ -28,7 +28,7 @@ const mockBQ = require('../helpers/mockBigQuery');
 
 // ── Test constants ─────────────────────────────────────────────────
 
-const CLIENT_ID = 'friends_inc';
+const CLIENT_ID = process.env.TEST_CLIENT_ID || 'friends_inc';
 
 const MOCK_CLIENT = {
   client_id: CLIENT_ID,

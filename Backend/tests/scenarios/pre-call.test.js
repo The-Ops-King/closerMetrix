@@ -19,7 +19,7 @@ const cancelledFixture = require('../helpers/fixtures/google-calendar-cancelled.
 const updatedFixture = require('../helpers/fixtures/google-calendar-updated.json');
 
 // Test constants
-const CLIENT_ID = 'friends_inc';
+const CLIENT_ID = process.env.TEST_CLIENT_ID || 'friends_inc';
 const MOCK_CLOSER = {
   closer_id: 'closer_sarah_001',
   client_id: CLIENT_ID,

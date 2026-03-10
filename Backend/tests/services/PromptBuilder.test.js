@@ -10,7 +10,7 @@ const objectionTypes = require('../../src/config/objection-types');
 const scoringRubric = require('../../src/config/scoring-rubric');
 
 const MOCK_CLIENT = {
-  client_id: 'friends_inc',
+  client_id: process.env.TEST_CLIENT_ID || 'friends_inc',
   company_name: 'Friends Inc',
   offer_name: 'Elite Coaching Program',
   offer_price: 5000,

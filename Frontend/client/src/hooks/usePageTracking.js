@@ -5,7 +5,7 @@
  * Sends data to /api/activity/* endpoints as fire-and-forget POSTs.
  *
  * Session ID is stored in sessionStorage — new tab = new session.
- * Uses sendBeacon for reliable tracking on tab close/navigation.
+ * Uses fetch with keepalive for reliable tracking on tab close/navigation.
  *
  * Only tracks client views — skips admin mode.
  */
@@ -79,15 +79,21 @@ function sendEvent(endpoint, body, token) {
 }
 
 /**
- * Send a tracking event via sendBeacon (for tab close / page unload).
- * Beacon payloads must be sent as Blob since sendBeacon doesn't support headers.
- * We use a query param for the token instead.
+ * Send a tracking event on tab close / page unload.
+ * Uses fetch with keepalive: true instead of sendBeacon so we can
+ * include the auth token in a header rather than a query parameter.
  */
-function sendBeaconEvent(endpoint, body, token) {
+function sendUnloadEvent(endpoint, body, token) {
   try {
-    const url = `${endpoint}?_token=${encodeURIComponent(token)}`;
-    const blob = new Blob([JSON.stringify(body)], { type: 'application/json' });
-    navigator.sendBeacon(url, blob);
+    fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Client-Token': token,
+      },
+      body: JSON.stringify(body),
+      keepalive: true,
+    }).catch(() => {});
   } catch {
     // Silently ignore
   }
@@ -157,7 +163,7 @@ export default function usePageTracking() {
       const durationSeconds = Math.round((Date.now() - pageEnteredAt.current) / 1000);
       const sessionId = getSessionId();
 
-      sendBeaconEvent('/api/activity/page-view', {
+      sendUnloadEvent('/api/activity/page-view', {
         sessionId,
         page: currentPage.current,
         durationSeconds,

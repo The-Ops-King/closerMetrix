@@ -70,7 +70,7 @@ async function getPriorInsights(clientId, section, count = 3) {
 
 /**
  * Insert a new insight row into InsightLog.
- * Uses runAdminQuery since the daily job runs without client auth context.
+ * Uses runQuery with clientId for proper client isolation.
  *
  * @param {object} row
  * @param {string} row.insightId - UUID
@@ -112,7 +112,7 @@ async function insertInsight(row) {
     generationType: row.generationType,
   };
 
-  await bq.runAdminQuery(sql, params);
+  await bq.runQuery(sql, params);
 
   logger.info('Insight inserted into InsightLog', {
     clientId: row.clientId,

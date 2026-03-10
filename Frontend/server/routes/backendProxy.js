@@ -11,10 +11,33 @@
  */
 
 const express = require('express');
+const { GoogleAuth } = require('google-auth-library');
 const config = require('../config');
 const logger = require('../utils/logger');
 
 const router = express.Router();
+
+// Google Auth client for fetching ID tokens when calling authenticated Cloud Run services
+const auth = new GoogleAuth();
+let cachedClient = null;
+
+/**
+ * Returns a Google ID token for the Backend Cloud Run service.
+ * In local dev (localhost URLs), returns null — no token needed.
+ */
+async function getIdToken() {
+  if (config.backendApiUrl.includes('localhost')) return null;
+  try {
+    if (!cachedClient) {
+      cachedClient = await auth.getIdTokenClient(config.backendApiUrl);
+    }
+    const headers = await cachedClient.getRequestHeaders();
+    return headers.Authorization; // "Bearer <id-token>"
+  } catch (err) {
+    logger.error('Failed to get Cloud Run ID token', { error: err.message });
+    return null;
+  }
+}
 
 /**
  * Generic proxy helper — forwards a request to the Backend API.
@@ -35,11 +58,17 @@ async function proxyToBackend(req, res, backendPath, method) {
     });
   }
 
-  // Build headers — translate X-Admin-Key → Authorization: Bearer
+  // Build headers — translate X-Admin-Key → X-Admin-Key (keep separate from Cloud Run auth)
   const headers = { 'Content-Type': 'application/json' };
   const adminKey = req.headers['x-admin-key'];
   if (adminKey) {
-    headers['Authorization'] = `Bearer ${adminKey}`;
+    headers['X-Admin-Key'] = adminKey;
+  }
+
+  // Add Cloud Run ID token for service-to-service auth (production only)
+  const idToken = await getIdToken();
+  if (idToken) {
+    headers['Authorization'] = idToken;
   }
 
   // Build fetch options
@@ -56,7 +85,7 @@ async function proxyToBackend(req, res, backendPath, method) {
     res.status(backendRes.status).json(data);
   } catch (err) {
     logger.error('Backend proxy error', { path: backendPath, error: err.message });
-    res.status(502).json({ error: 'Backend unreachable', details: err.message });
+    res.status(502).json({ error: 'Backend unreachable' });
   }
 }
 

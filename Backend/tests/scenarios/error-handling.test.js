@@ -16,7 +16,7 @@ const calendarService = require('../../src/services/calendar/CalendarService');
 const googleAdapter = require('../../src/services/calendar/adapters/GoogleCalendarAdapter');
 const mockBQ = require('../helpers/mockBigQuery');
 
-const CLIENT_ID = 'friends_inc';
+const CLIENT_ID = process.env.TEST_CLIENT_ID || 'friends_inc';
 
 /**
  * Seeds the minimum data needed for most tests: one client and one closer.

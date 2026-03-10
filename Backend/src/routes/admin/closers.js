@@ -297,11 +297,14 @@ router.put('/clients/:clientId/closers/:closerId', async (req, res) => {
       return res.status(404).json({ status: 'error', message: 'Closer not found' });
     }
 
-    // Prevent updating immutable fields
-    const immutableFields = ['closer_id', 'client_id', 'created_at'];
-    const updates = { ...req.body };
-    for (const field of immutableFields) {
-      delete updates[field];
+    // Allowlist — only permit known safe fields (never closer_id, client_id, created_at)
+    const ALLOWED_UPDATE_FIELDS = [
+      'name', 'work_email', 'personal_email', 'phone', 'status', 'role',
+      'transcript_provider', 'transcript_api_key', 'calendar_email', 'timezone',
+    ];
+    const updates = {};
+    for (const field of ALLOWED_UPDATE_FIELDS) {
+      if (req.body[field] !== undefined) updates[field] = req.body[field];
     }
 
     if (Object.keys(updates).length === 0) {

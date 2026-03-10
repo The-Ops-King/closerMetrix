@@ -47,7 +47,6 @@ function errorHandler(err, req, res, next) {
   res.status(statusCode).json({
     status: 'error',
     message: isServerError ? 'Internal server error' : err.message,
-    ...(process.env.NODE_ENV !== 'production' && { stack: err.stack }),
   });
 }
 

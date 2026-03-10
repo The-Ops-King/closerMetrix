@@ -9,6 +9,15 @@ const bq = require('../BigQueryClient');
 
 const CLOSERS_TABLE = bq.table('Closers');
 
+// Explicit column list for closer records — used instead of SELECT *
+const CLOSER_COLUMNS = [
+  'closer_id', 'client_id', 'name', 'work_email', 'personal_email',
+  'personal_phone', 'status', 'calendar_email', 'calendar_source',
+  'transcript_provider', 'transcript_api_key',
+  'onboarding_status', 'onboarding_start_date',
+  'created_at', 'last_modified',
+].join(', ');
+
 module.exports = {
   /**
    * Finds a closer by their work email and client_id.
@@ -21,7 +30,7 @@ module.exports = {
    */
   async findByWorkEmail(workEmail, clientId) {
     const rows = await bq.query(
-      `SELECT * FROM ${CLOSERS_TABLE}
+      `SELECT ${CLOSER_COLUMNS} FROM ${CLOSERS_TABLE}
        WHERE work_email = @workEmail
          AND client_id = @clientId
          AND LOWER(status) = 'active'
@@ -40,8 +49,8 @@ module.exports = {
    * @returns {Object|null} Closer record (with client_id) or null
    */
   async findByWorkEmailAnyClient(workEmail) {
-    const rows = await bq.query(
-      `SELECT * FROM ${CLOSERS_TABLE}
+    const rows = await bq.queryAdmin(
+      `SELECT closer_id, client_id, name, work_email FROM ${CLOSERS_TABLE}
        WHERE work_email = @workEmail
          AND LOWER(status) = 'active'
        LIMIT 1`,
@@ -55,7 +64,7 @@ module.exports = {
    */
   async findById(closerId, clientId) {
     const rows = await bq.query(
-      `SELECT * FROM ${CLOSERS_TABLE}
+      `SELECT ${CLOSER_COLUMNS} FROM ${CLOSERS_TABLE}
        WHERE closer_id = @closerId AND client_id = @clientId
        LIMIT 1`,
       { closerId, clientId }
@@ -68,7 +77,7 @@ module.exports = {
    */
   async listByClient(clientId) {
     return bq.query(
-      `SELECT * FROM ${CLOSERS_TABLE}
+      `SELECT ${CLOSER_COLUMNS} FROM ${CLOSERS_TABLE}
        WHERE client_id = @clientId AND LOWER(status) = 'active'
        ORDER BY name ASC`,
       { clientId }
@@ -80,7 +89,7 @@ module.exports = {
    */
   async listAllByClient(clientId) {
     return bq.query(
-      `SELECT * FROM ${CLOSERS_TABLE}
+      `SELECT ${CLOSER_COLUMNS} FROM ${CLOSERS_TABLE}
        WHERE client_id = @clientId
        ORDER BY status ASC, name ASC`,
       { clientId }
@@ -116,8 +125,8 @@ module.exports = {
    * @returns {Array} Array of closer records with transcript_api_key
    */
   async findFathomClosersWithApiKey() {
-    return bq.query(
-      `SELECT * FROM ${CLOSERS_TABLE}
+    return bq.queryAdmin(
+      `SELECT closer_id, client_id, name, work_email, transcript_api_key FROM ${CLOSERS_TABLE}
        WHERE LOWER(status) = 'active'
          AND transcript_provider = 'fathom'
          AND transcript_api_key IS NOT NULL

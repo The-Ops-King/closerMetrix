@@ -22,8 +22,14 @@ const config = {
   gcpServiceAccountKey: process.env.GCP_SERVICE_ACCOUNT_KEY || '',
 
   // Authentication
-  // Default 'dev-admin-key' in development so admin login works without .env
-  adminApiKey: process.env.ADMIN_API_KEY || 'dev-admin-key',
+  // Fail-closed: require ADMIN_API_KEY in production, allow dev fallback only in development
+  adminApiKey: (() => {
+    const key = process.env.ADMIN_API_KEY;
+    if (!key && process.env.NODE_ENV === 'production') {
+      throw new Error('ADMIN_API_KEY must be set in production');
+    }
+    return key || 'dev-admin-key';
+  })(),
 
   // Backend API (the separate CloserMetrix Backend service)
   backendApiUrl: process.env.BACKEND_API_URL || 'http://localhost:8080',

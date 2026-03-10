@@ -50,14 +50,18 @@ function toDateStr(val) {
  * @param {string} clientId - Client ID for data isolation
  * @returns {Promise<{ calls: Array, objections: Array, closeCycles: Array }>}
  */
-async function getRawData(clientId) {
+async function getRawData(clientId, { page = 1, pageSize = 500 } = {}) {
+  // Validate and clamp pagination params
+  page = Math.max(1, Math.floor(Number(page)) || 1);
+  pageSize = Math.min(1000, Math.max(1, Math.floor(Number(pageSize)) || 500));
+
   if (!bq.isAvailable() || clientId.startsWith('demo_')) {
     logger.debug('Returning demo raw data', { clientId });
     return getDemoData();
   }
 
   try {
-    return await queryBigQuery(clientId);
+    return await queryBigQuery(clientId, { page, pageSize });
   } catch (err) {
     logger.error('Raw data BQ query failed, falling back to demo', { error: err.message, clientId });
     return getDemoData();
@@ -71,9 +75,10 @@ async function getRawData(clientId) {
  * @param {string} clientId - Client ID for data isolation
  * @returns {Promise<{ calls: Array, objections: Array, closeCycles: Array }>}
  */
-async function queryBigQuery(clientId) {
+async function queryBigQuery(clientId, { page = 1, pageSize = 500 } = {}) {
   const { num } = require('./helpers');
-  const params = { clientId };
+  const offset = (page - 1) * pageSize;
+  const params = { clientId, pageSize, offset };
 
   const callsView = bq.table('v_calls_joined_flat_prefixed');
   const objectionsView = bq.table('v_objections_joined');
@@ -115,7 +120,8 @@ async function queryBigQuery(clientId) {
       calls_call_source
     FROM ${callsView}
     WHERE clients_client_id = @clientId
-    ORDER BY calls_appointment_date DESC`;
+    ORDER BY calls_appointment_date DESC
+    LIMIT @pageSize OFFSET @offset`;
 
   // 2) All objections — no date or closer filter
   const objectionsSql = `
@@ -134,7 +140,8 @@ async function queryBigQuery(clientId) {
       calls_attendance
     FROM ${objectionsView}
     WHERE obj_client_id = @clientId
-    ORDER BY calls_appointment_date DESC`;
+    ORDER BY calls_appointment_date DESC
+    LIMIT @pageSize OFFSET @offset`;
 
   // 3) Close cycle stats — no date filter
   const closersTable = bq.table('Closers');
@@ -149,7 +156,8 @@ async function queryBigQuery(clientId) {
       cc.calls_to_close
     FROM ${closeCycleView} cc
     LEFT JOIN ${closersTable} cl ON cc.closer_id = cl.closer_id
-    WHERE cc.client_id = @clientId`;
+    WHERE cc.client_id = @clientId
+    LIMIT @pageSize OFFSET @offset`;
 
   // 4) Client record — goals for GoalsPacing on Projections page
   const clientsTable = bq.table('Clients');
@@ -169,7 +177,8 @@ async function queryBigQuery(clientId) {
     SELECT call_id, pains, goals
     FROM ${callsTable}
     WHERE client_id = @clientId
-      AND (pains IS NOT NULL OR goals IS NOT NULL)`;
+      AND (pains IS NOT NULL OR goals IS NOT NULL)
+    LIMIT @pageSize OFFSET @offset`;
 
   // Run all 5 in parallel, catching individual failures
   const [callsResult, objectionsResult, closeCycleResult, clientResult, painsGoalsResult] = await Promise.all([

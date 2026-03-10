@@ -24,10 +24,10 @@ const clientQueries = require('../db/queries/clients');
 const logger = require('../utils/logger');
 
 async function clientIsolation(req, res, next) {
-  // Extract client_id from multiple possible locations
+  // Priority: route params first, then request body as fallback.
+  // Query string is intentionally excluded to prevent URL-based client_id spoofing.
   const clientId = req.params.clientId
-    || req.body?.client_id
-    || req.query?.client_id;
+    || req.body?.client_id;
 
   if (!clientId) {
     return res.status(400).json({

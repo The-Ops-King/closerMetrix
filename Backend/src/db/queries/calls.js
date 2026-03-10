@@ -9,6 +9,31 @@ const bq = require('../BigQueryClient');
 
 const CALLS_TABLE = bq.table('Calls');
 
+// Explicit column list for call records — used instead of SELECT *
+const CALL_COLS_ARRAY = [
+  'call_id', 'client_id', 'closer_id', 'appointment_id',
+  'prospect_name', 'prospect_email', 'prospect_phone',
+  'appointment_date', 'appointment_end_date',
+  'attendance', 'outcome', 'revenue_generated', 'payment_collected',
+  'payment_plan', 'lost_reason', 'call_source', 'call_type',
+  'objections', 'calendar_event_id', 'closer_name',
+  'offer_name', 'offer_price', 'date_closed',
+  'transcript_url', 'transcript_text', 'transcript_status',
+  'ai_piped', 'overall_call_score', 'script_adherence_score',
+  'intro_score', 'pain_score', 'goal_score', 'transition_score',
+  'pitch_adherence_score', 'close_adherence_score',
+  'objection_adherence_score', 'prospect_fit_score',
+  'ai_summary', 'ai_strengths', 'ai_weaknesses',
+  'ai_coaching', 'ai_objection_analysis',
+  'risk_flags', 'ftc_violations',
+  'cash_collected', 'total_payment_amount',
+  'processing_status', 'ingestion_source',
+  'created_at', 'last_modified', 'status',
+];
+const CALL_COLUMNS = CALL_COLS_ARRAY.join(', ');
+// Prefixed version for JOINed queries (e.g., c.call_id, c.client_id, ...)
+const CALL_COLUMNS_C = CALL_COLS_ARRAY.map(col => 'c.' + col).join(', ');
+
 module.exports = {
   /**
    * Finds an existing call record by appointment_id and client_id.
@@ -20,7 +45,7 @@ module.exports = {
    */
   async findByAppointmentId(appointmentId, clientId) {
     const rows = await bq.query(
-      `SELECT * FROM ${CALLS_TABLE}
+      `SELECT ${CALL_COLUMNS} FROM ${CALLS_TABLE}
        WHERE appointment_id = @appointmentId AND client_id = @clientId
        ORDER BY created DESC
        LIMIT 1`,
@@ -38,7 +63,7 @@ module.exports = {
    */
   async findById(callId, clientId) {
     const rows = await bq.query(
-      `SELECT * FROM ${CALLS_TABLE}
+      `SELECT ${CALL_COLUMNS} FROM ${CALLS_TABLE}
        WHERE call_id = @callId AND client_id = @clientId
        LIMIT 1`,
       { callId, clientId }
@@ -58,7 +83,7 @@ module.exports = {
    */
   async findForTranscriptMatch(clientId, closerEmail, scheduledStartTime, toleranceMinutes = 30) {
     const rows = await bq.query(
-      `SELECT c.* FROM ${CALLS_TABLE} c
+      `SELECT ${CALL_COLUMNS_C} FROM ${CALLS_TABLE} c
        JOIN ${bq.table('Closers')} cl ON c.closer_id = cl.closer_id
        WHERE c.client_id = @clientId
          AND cl.work_email = @closerEmail
@@ -81,7 +106,7 @@ module.exports = {
    */
   async findForTranscriptMatchWithProspect(clientId, closerEmail, prospectEmail, scheduledStartTime, toleranceMinutes = 30) {
     const rows = await bq.query(
-      `SELECT c.* FROM ${CALLS_TABLE} c
+      `SELECT ${CALL_COLUMNS_C} FROM ${CALLS_TABLE} c
        JOIN ${bq.table('Closers')} cl ON c.closer_id = cl.closer_id
        WHERE c.client_id = @clientId
          AND cl.work_email = @closerEmail
@@ -128,7 +153,7 @@ module.exports = {
    */
   async findMostRecentShowForProspect(prospectEmail, clientId) {
     const rows = await bq.query(
-      `SELECT * FROM ${CALLS_TABLE}
+      `SELECT ${CALL_COLUMNS} FROM ${CALLS_TABLE}
        WHERE prospect_email = @prospectEmail
          AND client_id = @clientId
          AND attendance IN ('Show', 'Follow Up', 'Lost', 'Closed - Won', 'Deposit', 'Disqualified', 'Not Pitched')
@@ -153,10 +178,10 @@ module.exports = {
    */
   async findStuckScheduled(clientId, cutoffTimestamp) {
     return bq.query(
-      `SELECT * FROM ${CALLS_TABLE}
+      `SELECT ${CALL_COLUMNS} FROM ${CALLS_TABLE}
        WHERE client_id = @clientId
          AND attendance = 'Scheduled'
-         AND COALESCE(SAFE_CAST(appointment_end_date AS TIMESTAMP), SAFE_CAST(appointment_date AS TIMESTAMP)) < @cutoffTimestamp
+         AND COALESCE(SAFE_CAST(appointment_end_date AS TIMESTAMP), appointment_date) < @cutoffTimestamp
        ORDER BY appointment_date ASC`,
       { clientId, cutoffTimestamp }
     );
@@ -173,10 +198,10 @@ module.exports = {
    * @returns {Array} Array of call records with client_id for proper scoping
    */
   async findAllStuckScheduled(cutoffTimestamp) {
-    return bq.query(
-      `SELECT * FROM ${CALLS_TABLE}
+    return bq.queryAdmin(
+      `SELECT call_id, client_id, appointment_date FROM ${CALLS_TABLE}
        WHERE attendance = 'Scheduled'
-         AND COALESCE(SAFE_CAST(appointment_end_date AS TIMESTAMP), SAFE_CAST(appointment_date AS TIMESTAMP)) < @cutoffTimestamp
+         AND COALESCE(SAFE_CAST(appointment_end_date AS TIMESTAMP), appointment_date) < @cutoffTimestamp
        ORDER BY appointment_date ASC`,
       { cutoffTimestamp }
     );
@@ -192,10 +217,10 @@ module.exports = {
    * @returns {Array} Array of call records to transition
    */
   async findPendingPastEndTime(cutoffTimestamp) {
-    return bq.query(
-      `SELECT * FROM ${CALLS_TABLE}
+    return bq.queryAdmin(
+      `SELECT call_id, client_id, appointment_date FROM ${CALLS_TABLE}
        WHERE (attendance IS NULL OR attendance = 'Scheduled')
-         AND COALESCE(SAFE_CAST(appointment_end_date AS TIMESTAMP), SAFE_CAST(appointment_date AS TIMESTAMP)) < @cutoffTimestamp
+         AND COALESCE(SAFE_CAST(appointment_end_date AS TIMESTAMP), appointment_date) < @cutoffTimestamp
        ORDER BY appointment_date ASC`,
       { cutoffTimestamp }
     );
@@ -206,10 +231,10 @@ module.exports = {
    */
   async findPendingPastEndTimeForClient(clientId, cutoffTimestamp) {
     return bq.query(
-      `SELECT * FROM ${CALLS_TABLE}
+      `SELECT ${CALL_COLUMNS} FROM ${CALLS_TABLE}
        WHERE client_id = @clientId
          AND (attendance IS NULL OR attendance = 'Scheduled')
-         AND COALESCE(SAFE_CAST(appointment_end_date AS TIMESTAMP), SAFE_CAST(appointment_date AS TIMESTAMP)) < @cutoffTimestamp
+         AND COALESCE(SAFE_CAST(appointment_end_date AS TIMESTAMP), appointment_date) < @cutoffTimestamp
        ORDER BY appointment_date ASC`,
       { clientId, cutoffTimestamp }
     );
@@ -225,10 +250,10 @@ module.exports = {
    * @returns {Array} Array of call records to transition
    */
   async findWaitingPastTimeout(cutoffTimestamp) {
-    return bq.query(
-      `SELECT * FROM ${CALLS_TABLE}
+    return bq.queryAdmin(
+      `SELECT call_id, client_id, appointment_date FROM ${CALLS_TABLE}
        WHERE attendance = 'Waiting for Outcome'
-         AND COALESCE(SAFE_CAST(appointment_end_date AS TIMESTAMP), SAFE_CAST(appointment_date AS TIMESTAMP)) < @cutoffTimestamp
+         AND COALESCE(SAFE_CAST(appointment_end_date AS TIMESTAMP), appointment_date) < @cutoffTimestamp
        ORDER BY appointment_date ASC`,
       { cutoffTimestamp }
     );
@@ -239,10 +264,10 @@ module.exports = {
    */
   async findWaitingPastTimeoutForClient(clientId, cutoffTimestamp) {
     return bq.query(
-      `SELECT * FROM ${CALLS_TABLE}
+      `SELECT ${CALL_COLUMNS} FROM ${CALLS_TABLE}
        WHERE client_id = @clientId
          AND attendance = 'Waiting for Outcome'
-         AND COALESCE(SAFE_CAST(appointment_end_date AS TIMESTAMP), SAFE_CAST(appointment_date AS TIMESTAMP)) < @cutoffTimestamp
+         AND COALESCE(SAFE_CAST(appointment_end_date AS TIMESTAMP), appointment_date) < @cutoffTimestamp
        ORDER BY appointment_date ASC`,
       { clientId, cutoffTimestamp }
     );
@@ -267,13 +292,13 @@ module.exports = {
    */
   async findOverlappingPreOutcomeCalls(closerId, clientId, excludeCallId, startTime, endTime) {
     return bq.query(
-      `SELECT * FROM ${CALLS_TABLE}
+      `SELECT ${CALL_COLUMNS} FROM ${CALLS_TABLE}
        WHERE closer_id = @closerId
          AND client_id = @clientId
          AND call_id != @excludeCallId
          AND (attendance IS NULL OR attendance IN ('Scheduled', 'Waiting for Outcome', 'Ghosted - No Show'))
          AND appointment_date < @endTime
-         AND COALESCE(SAFE_CAST(appointment_end_date AS TIMESTAMP), SAFE_CAST(appointment_date AS TIMESTAMP)) > @startTime`,
+         AND COALESCE(SAFE_CAST(appointment_end_date AS TIMESTAMP), appointment_date) > @startTime`,
       { closerId, clientId, excludeCallId, startTime, endTime }
     );
   },
@@ -293,7 +318,7 @@ module.exports = {
    */
   async findWaitingForTranscript(closerId, clientId) {
     return bq.query(
-      `SELECT * FROM ${CALLS_TABLE}
+      `SELECT ${CALL_COLUMNS} FROM ${CALLS_TABLE}
        WHERE closer_id = @closerId
          AND client_id = @clientId
          AND (attendance IS NULL OR attendance IN ('Scheduled', 'Waiting for Outcome'))
@@ -308,7 +333,7 @@ module.exports = {
    */
   async findErrored(clientId) {
     return bq.query(
-      `SELECT * FROM ${CALLS_TABLE}
+      `SELECT ${CALL_COLUMNS} FROM ${CALLS_TABLE}
        WHERE client_id = @clientId
          AND processing_status = 'error'
        ORDER BY last_modified DESC`,
@@ -329,7 +354,7 @@ module.exports = {
    */
   async findCallByName(clientId, name) {
     const rows = await bq.query(
-      `SELECT * FROM ${CALLS_TABLE}
+      `SELECT ${CALL_COLUMNS} FROM ${CALLS_TABLE}
        WHERE client_id = @clientId
          AND LOWER(TRIM(prospect_name)) = LOWER(TRIM(@name))
          AND attendance IN ('Show', 'Follow Up', 'Lost', 'Closed - Won', 'Deposit', 'Disqualified', 'Not Pitched')
@@ -353,7 +378,7 @@ module.exports = {
    */
   async findCallsByPayers(clientId) {
     return bq.query(
-      `SELECT * FROM ${CALLS_TABLE}
+      `SELECT ${CALL_COLUMNS} FROM ${CALLS_TABLE}
        WHERE client_id = @clientId
          AND (cash_collected > 0 OR total_payment_amount > 0)
          AND attendance IN ('Show', 'Follow Up', 'Lost', 'Closed - Won', 'Deposit', 'Disqualified', 'Not Pitched')

@@ -138,7 +138,7 @@ async function _sendReports(reportType) {
   const enabledField = reportType === 'monthly' ? 'monthly_enabled' : 'weekly_enabled';
 
   // Query all clients that have this report type enabled
-  const clients = await bq.query(
+  const clients = await bq.queryAdmin(
     `SELECT client_id, company_name, primary_contact_email, settings_json
      FROM ${bq.table('Clients')}
      WHERE LOWER(status) = 'active'
@@ -235,7 +235,7 @@ async function sendDailyOnboardingReports() {
   logger.info('EmailScheduler: Starting daily onboarding check');
 
   // Query all active clients with close_watches in settings_json
-  const clients = await bq.query(
+  const clients = await bq.queryAdmin(
     `SELECT client_id, company_name, primary_contact_email, settings_json, timezone
      FROM ${bq.table('Clients')}
      WHERE LOWER(status) = 'active'

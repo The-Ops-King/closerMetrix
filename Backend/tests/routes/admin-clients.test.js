@@ -146,7 +146,7 @@ describe('Admin Client Routes', () => {
       const clients = mockBQ._getTable('Clients');
       expect(clients).toHaveLength(1);
       expect(clients[0].company_name).toBe('Acme Coaching');
-      expect(clients[0].status).toBe('active');
+      expect(clients[0].status).toBe('Active');
       expect(clients[0].closer_count).toBe(0);
       expect(clients[0].offer_price).toBe(10000);
     });
@@ -230,18 +230,18 @@ describe('Admin Client Routes', () => {
         client_id: 'c1',
         company_name: 'Old Name',
         status: 'active',
-        plan_tier: 'starter',
+        plan_tier: 'basic',
         offer_price: 5000,
       }]);
 
       const res = await request(app)
         .put('/admin/clients/c1')
         .set('Authorization', AUTH_HEADER)
-        .send({ company_name: 'New Name', plan_tier: 'growth' });
+        .send({ company_name: 'New Name', plan_tier: 'executive' });
 
       expect(res.status).toBe(200);
       expect(res.body.company_name).toBe('New Name');
-      expect(res.body.plan_tier).toBe('growth');
+      expect(res.body.plan_tier).toBe('executive');
     });
 
     it('should write audit log on update', async () => {

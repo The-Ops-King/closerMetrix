@@ -10,7 +10,7 @@ jest.mock('../../src/db/BigQueryClient', () => require('../helpers/mockBigQuery'
 const transcriptService = require('../../src/services/transcript/TranscriptService');
 const mockBQ = require('../helpers/mockBigQuery');
 
-const CLIENT_ID = 'friends_inc';
+const CLIENT_ID = process.env.TEST_CLIENT_ID || 'friends_inc';
 
 const MOCK_CLOSER = {
   closer_id: 'closer_sarah_001',

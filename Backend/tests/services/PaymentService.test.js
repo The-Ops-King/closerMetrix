@@ -10,7 +10,7 @@ jest.mock('../../src/db/BigQueryClient', () => require('../helpers/mockBigQuery'
 const paymentService = require('../../src/services/PaymentService');
 const mockBQ = require('../helpers/mockBigQuery');
 
-const CLIENT_ID = 'friends_inc';
+const CLIENT_ID = process.env.TEST_CLIENT_ID || 'friends_inc';
 
 function seedClientAndCloser() {
   mockBQ._seedTable('Clients', [{

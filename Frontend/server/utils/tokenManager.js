@@ -102,6 +102,7 @@ async function validateToken(tokenId) {
         t.revoked_at,
         c.company_name,
         c.plan_tier,
+        c.status,
         c.settings_json
       FROM ${bq.table('AccessTokens')} t
       JOIN ${bq.table('Clients')} c ON t.client_id = c.client_id
@@ -125,6 +126,12 @@ async function validateToken(tokenId) {
     // Check if expired
     if (token.expires_at && new Date(token.expires_at) < new Date()) {
       logger.warn('Token is expired', { token: tokenId.slice(0, 8) });
+      return null;
+    }
+
+    // Check if client is active (case-insensitive)
+    if (!token.status || token.status.toLowerCase() !== 'active') {
+      logger.warn('Token rejected — client is inactive', { token: tokenId.slice(0, 8) });
       return null;
     }
 

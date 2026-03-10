@@ -24,7 +24,7 @@ const aiProcessor = require('../../src/services/ai/AIProcessor');
 const timeoutService = require('../../src/services/TimeoutService');
 const mockBQ = require('../helpers/mockBigQuery');
 
-const CLIENT_ID = 'friends_inc';
+const CLIENT_ID = process.env.TEST_CLIENT_ID || 'friends_inc';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS

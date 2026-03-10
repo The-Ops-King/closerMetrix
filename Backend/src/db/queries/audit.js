@@ -28,7 +28,10 @@ module.exports = {
    * @returns {Array} Array of audit entries
    */
   async findByEntity(entityType, entityId) {
-    return bq.query(
+    // Intentionally uses queryAdmin without client_id filter:
+    // Audit lookups by entity_type + entity_id are admin-only operations
+    // and the caller may not have a client_id context available.
+    return bq.queryAdmin(
       `SELECT * FROM ${AUDIT_TABLE}
        WHERE entity_type = @entityType AND entity_id = @entityId
        ORDER BY timestamp ASC`,

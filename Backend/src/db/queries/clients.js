@@ -34,7 +34,7 @@ module.exports = {
    */
   async list(status = null) {
     if (status) {
-      return bq.query(
+      return bq.queryAdmin(
         `SELECT client_id, name, company_name, status, plan_tier, closer_count, created_at
          FROM ${CLIENTS_TABLE}
          WHERE status = @status
@@ -42,7 +42,7 @@ module.exports = {
         { status }
       );
     }
-    return bq.query(
+    return bq.queryAdmin(
       `SELECT client_id, name, company_name, status, plan_tier, closer_count, created_at
        FROM ${CLIENTS_TABLE}
        ORDER BY company_name ASC`

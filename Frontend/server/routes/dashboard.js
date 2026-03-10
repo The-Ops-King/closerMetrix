@@ -4,21 +4,20 @@
  * Client-facing dashboard data endpoints.
  * All routes require X-Client-Token header (clientIsolation middleware).
  *
- * Tier gating is handled on the FRONTEND via the TierGate component,
- * which blurs restricted content and shows an "Upgrade to X" overlay.
- * The API returns data for all tiers so the frontend can render blurred
- * previews as upgrade teasers. Client isolation still prevents cross-client access.
+ * Tier enforcement is SERVER-SIDE via requireTier() middleware.
+ * The frontend also blurs restricted content for UX, but the API
+ * returns 403 for unauthorized tiers as the real enforcement layer.
  *
  * Routes:
  *   GET /api/dashboard/overview         — All tiers
- *   GET /api/dashboard/financial        — All tiers (blurred for Basic)
- *   GET /api/dashboard/attendance       — All tiers (blurred for Basic)
- *   GET /api/dashboard/call-outcomes    — All tiers (blurred for Basic)
- *   GET /api/dashboard/sales-cycle      — All tiers (blurred for Basic)
- *   GET /api/dashboard/objections       — All tiers (blurred for Basic)
- *   GET /api/dashboard/projections      — All tiers (blurred for Basic)
- *   GET /api/dashboard/violations       — All tiers (blurred for Basic/Insight)
- *   GET /api/dashboard/adherence        — All tiers (blurred for Basic/Insight)
+ *   GET /api/dashboard/financial        — Insight+
+ *   GET /api/dashboard/attendance       — Insight+
+ *   GET /api/dashboard/call-outcomes    — Insight+
+ *   GET /api/dashboard/sales-cycle      — Insight+
+ *   GET /api/dashboard/objections       — Insight+
+ *   GET /api/dashboard/projections      — Insight+
+ *   GET /api/dashboard/violations       — Executive only
+ *   GET /api/dashboard/adherence        — Executive only
  *
  * Query params (all optional):
  *   dateStart, dateEnd — ISO date strings for filtering
@@ -27,6 +26,7 @@
 
 const express = require('express');
 const clientIsolation = require('../middleware/clientIsolation');
+const { requireTier } = require('../middleware/tierGate');
 const bq = require('../db/BigQueryClient');
 const logger = require('../utils/logger');
 const { getOverviewData } = require('../db/queries/overview');
@@ -47,6 +47,31 @@ const { getLatestInsight, getLatestInsightForDate, getCompareInsightsForDate, in
 const { v4: uuidv4 } = require('uuid');
 
 const router = express.Router();
+
+/** Validates UUID v4 format */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isValidUUID(str) { return typeof str === 'string' && UUID_RE.test(str); }
+
+/** Validates ISO date format YYYY-MM-DD */
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Validate common dashboard query params: dateStart, dateEnd, closerId.
+ * Returns an error string if invalid, or null if all valid.
+ */
+function validateDashboardParams(query) {
+  const { dateStart, dateEnd, closerId } = query;
+  if (dateStart && !ISO_DATE_RE.test(dateStart)) {
+    return 'Invalid dateStart format — expected YYYY-MM-DD';
+  }
+  if (dateEnd && !ISO_DATE_RE.test(dateEnd)) {
+    return 'Invalid dateEnd format — expected YYYY-MM-DD';
+  }
+  if (closerId && !UUID_RE.test(closerId)) {
+    return 'Invalid closerId format — expected UUID';
+  }
+  return null;
+}
 
 // Bump this version when AI prompts or data formatting change to invalidate cached insights.
 // Old cached insights keyed with a different version will be bypassed automatically.
@@ -112,6 +137,8 @@ function buildMeta(req) {
 
 router.get('/overview', async (req, res) => {
   try {
+    const paramError = validateDashboardParams(req.query);
+    if (paramError) return res.status(400).json({ success: false, error: paramError });
     const { dateStart, dateEnd, closerId } = req.query;
     const result = await getOverviewData(req.clientId, { dateStart, dateEnd, closerId }, req.tier);
     res.json(buildResponse(result.sections, result.charts, {}, buildMeta(req)));
@@ -123,8 +150,10 @@ router.get('/overview', async (req, res) => {
 
 // ── Financial (Insight+) ─────────────────────────────────────────
 
-router.get('/financial', async (req, res) => {
+router.get('/financial', requireTier('insight'), async (req, res) => {
   try {
+    const paramError = validateDashboardParams(req.query);
+    if (paramError) return res.status(400).json({ success: false, error: paramError });
     const { dateStart, dateEnd, closerId } = req.query;
     const result = await getFinancialData(req.clientId, { dateStart, dateEnd, closerId }, req.tier);
     res.json(buildResponse(result.sections, result.charts, result.tables || {}, buildMeta(req)));
@@ -136,8 +165,10 @@ router.get('/financial', async (req, res) => {
 
 // ── Attendance (Insight+) ────────────────────────────────────────
 
-router.get('/attendance', async (req, res) => {
+router.get('/attendance', requireTier('insight'), async (req, res) => {
   try {
+    const paramError = validateDashboardParams(req.query);
+    if (paramError) return res.status(400).json({ success: false, error: paramError });
     const { dateStart, dateEnd, closerId } = req.query;
     const result = await getAttendanceData(req.clientId, { dateStart, dateEnd, closerId }, req.tier);
     res.json(buildResponse(result.sections, result.charts, result.tables || {}, buildMeta(req)));
@@ -149,8 +180,10 @@ router.get('/attendance', async (req, res) => {
 
 // ── Call Outcomes (Insight+) ─────────────────────────────────────
 
-router.get('/call-outcomes', async (req, res) => {
+router.get('/call-outcomes', requireTier('insight'), async (req, res) => {
   try {
+    const paramError = validateDashboardParams(req.query);
+    if (paramError) return res.status(400).json({ success: false, error: paramError });
     const { dateStart, dateEnd, closerId } = req.query;
     const result = await getCallOutcomesData(req.clientId, { dateStart, dateEnd, closerId }, req.tier);
     const response = buildResponse(result.sections, result.charts, result.tables || {}, buildMeta(req));
@@ -165,8 +198,10 @@ router.get('/call-outcomes', async (req, res) => {
 
 // ── Sales Cycle (Insight+) ──────────────────────────────────────
 
-router.get('/sales-cycle', async (req, res) => {
+router.get('/sales-cycle', requireTier('insight'), async (req, res) => {
   try {
+    const paramError = validateDashboardParams(req.query);
+    if (paramError) return res.status(400).json({ success: false, error: paramError });
     const { dateStart, dateEnd, closerId } = req.query;
     const result = await getSalesCycleData(req.clientId, { dateStart, dateEnd, closerId }, req.tier);
     res.json(buildResponse(result.sections, result.charts, result.tables || {}, buildMeta(req)));
@@ -178,8 +213,10 @@ router.get('/sales-cycle', async (req, res) => {
 
 // ── Objections (Insight+) ───────────────────────────────────────
 
-router.get('/objections', async (req, res) => {
+router.get('/objections', requireTier('insight'), async (req, res) => {
   try {
+    const paramError = validateDashboardParams(req.query);
+    if (paramError) return res.status(400).json({ success: false, error: paramError });
     const { dateStart, dateEnd, closerId, objectionType } = req.query;
     const result = await getObjectionsData(
       req.clientId,
@@ -195,8 +232,10 @@ router.get('/objections', async (req, res) => {
 
 // ── Projections (Insight+) ──────────────────────────────────────
 
-router.get('/projections', async (req, res) => {
+router.get('/projections', requireTier('insight'), async (req, res) => {
   try {
+    const paramError = validateDashboardParams(req.query);
+    if (paramError) return res.status(400).json({ success: false, error: paramError });
     const { dateStart, dateEnd, closerId } = req.query;
     const result = await getProjectionsData(req.clientId, { dateStart, dateEnd, closerId }, req.tier);
     const response = buildResponse(result.sections, result.charts, {}, buildMeta(req));
@@ -261,8 +300,10 @@ router.put('/goals', async (req, res) => {
 
 // ── Violations (Executive Only) ─────────────────────────────────
 
-router.get('/violations', async (req, res) => {
+router.get('/violations', requireTier('executive'), async (req, res) => {
   try {
+    const paramError = validateDashboardParams(req.query);
+    if (paramError) return res.status(400).json({ success: false, error: paramError });
     const { dateStart, dateEnd, closerId } = req.query;
     const result = await getViolationsData(req.clientId, { dateStart, dateEnd, closerId }, req.tier);
     res.json(buildResponse(result.sections, result.charts, result.tables || {}, buildMeta(req)));
@@ -274,8 +315,10 @@ router.get('/violations', async (req, res) => {
 
 // ── Adherence (Executive Only) ──────────────────────────────────
 
-router.get('/adherence', async (req, res) => {
+router.get('/adherence', requireTier('executive'), async (req, res) => {
   try {
+    const paramError = validateDashboardParams(req.query);
+    if (paramError) return res.status(400).json({ success: false, error: paramError });
     const { dateStart, dateEnd, closerId } = req.query;
     const result = await getAdherenceData(req.clientId, { dateStart, dateEnd, closerId }, req.tier);
     res.json(buildResponse(result.sections, result.charts, result.tables || {}, buildMeta(req)));
@@ -289,6 +332,8 @@ router.get('/adherence', async (req, res) => {
 
 router.get('/export-calls', async (req, res) => {
   try {
+    const paramError = validateDashboardParams(req.query);
+    if (paramError) return res.status(400).json({ success: false, error: paramError });
     const { dateStart, dateEnd, closerId } = req.query;
     // Basic tier clients cannot filter by closer
     const effectiveCloserId = req.tier === 'basic' ? null : closerId;
@@ -304,14 +349,28 @@ router.get('/export-calls', async (req, res) => {
   }
 });
 
-// ── Raw Data (All Tiers — Bulk Fetch for Client-Side Computation) ──
+// ── Raw Data (Insight+ — Bulk Fetch for Client-Side Computation) ──
 
-router.get('/raw-data', async (req, res) => {
+router.get('/raw-data', requireTier('insight'), async (req, res) => {
   try {
-    const result = await getRawData(req.clientId);
+    // Validate pagination params
+    let page = parseInt(req.query.page, 10) || 1;
+    let pageSize = parseInt(req.query.pageSize, 10) || 500;
+
+    if (page < 1 || !Number.isInteger(page)) {
+      return res.status(400).json({ success: false, error: 'page must be a positive integer' });
+    }
+    if (pageSize < 1 || pageSize > 1000 || !Number.isInteger(pageSize)) {
+      return res.status(400).json({ success: false, error: 'pageSize must be an integer between 1 and 1000' });
+    }
+
+    const result = await getRawData(req.clientId, { page, pageSize });
     res.json({
       success: true,
       data: result,
+      page,
+      pageSize,
+      hasMore: (result.calls || []).length === pageSize,
       meta: buildMeta(req),
     });
   } catch (err) {
@@ -951,18 +1010,22 @@ router.post('/closers', (req, res) => {
 });
 
 router.put('/closers/:closerId', (req, res) => {
+  if (!isValidUUID(req.params.closerId)) return res.status(400).json({ success: false, error: 'Invalid closerId format' });
   proxyCloserToBackend(req, res, `/admin/clients/${req.clientId}/closers/${req.params.closerId}`);
 });
 
 router.delete('/closers/:closerId', (req, res) => {
+  if (!isValidUUID(req.params.closerId)) return res.status(400).json({ success: false, error: 'Invalid closerId format' });
   proxyCloserToBackend(req, res, `/admin/clients/${req.clientId}/closers/${req.params.closerId}`);
 });
 
 router.patch('/closers/:closerId/reactivate', (req, res) => {
+  if (!isValidUUID(req.params.closerId)) return res.status(400).json({ success: false, error: 'Invalid closerId format' });
   proxyCloserToBackend(req, res, `/admin/clients/${req.clientId}/closers/${req.params.closerId}/reactivate`);
 });
 
 router.post('/closers/:closerId/register-fathom', (req, res) => {
+  if (!isValidUUID(req.params.closerId)) return res.status(400).json({ success: false, error: 'Invalid closerId format' });
   proxyCloserToBackend(req, res, `/admin/clients/${req.clientId}/closers/${req.params.closerId}/register-fathom`);
 });
 

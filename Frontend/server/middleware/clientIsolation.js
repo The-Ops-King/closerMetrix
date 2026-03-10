@@ -34,8 +34,10 @@ const logger = require('../utils/logger');
  */
 function safeCompare(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string') return false;
-  if (a.length !== b.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+  // Hash to fixed length to avoid leaking length info
+  const aHash = crypto.createHash('sha256').update(a).digest();
+  const bHash = crypto.createHash('sha256').update(b).digest();
+  return crypto.timingSafeEqual(aHash, bHash);
 }
 
 /**
@@ -54,7 +56,11 @@ async function clientIsolation(req, res, next) {
   // bypass the normal token flow and resolve the client directly.
   // This allows the admin panel to render any client's dashboard
   // using the same /api/dashboard/* endpoints.
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (adminKey && viewClientId) {
+    if (!UUID_RE.test(viewClientId) && !viewClientId.startsWith('demo')) {
+      return res.status(400).json({ success: false, error: 'Invalid client ID format' });
+    }
     if (!safeCompare(adminKey, config.adminApiKey)) {
       logger.warn('Invalid admin key in client view attempt', { ip: req.ip });
       return res.status(403).json({

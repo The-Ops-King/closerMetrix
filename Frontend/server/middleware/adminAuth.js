@@ -54,10 +54,11 @@ function adminAuth(req, res, next) {
  */
 function safeCompare(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string') return false;
-  if (a.length !== b.length) return false;
-
+  // Hash to fixed length to avoid leaking length info
   const crypto = require('crypto');
-  return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+  const aHash = crypto.createHash('sha256').update(a).digest();
+  const bHash = crypto.createHash('sha256').update(b).digest();
+  return crypto.timingSafeEqual(aHash, bHash);
 }
 
 module.exports = adminAuth;

@@ -11,7 +11,7 @@ const callStateManager = require('../../src/services/CallStateManager');
 const mockBQ = require('../helpers/mockBigQuery');
 
 // Reusable test data
-const CLIENT_ID = 'friends_inc';
+const CLIENT_ID = process.env.TEST_CLIENT_ID || 'friends_inc';
 
 const CLOSER = {
   closer_id: 'closer_sarah_001',

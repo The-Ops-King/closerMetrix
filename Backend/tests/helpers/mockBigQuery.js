@@ -122,6 +122,14 @@ const mockBigQuery = {
     }
   },
 
+  /**
+   * Admin query — same as query() in mock (no client isolation enforcement in tests).
+   * Mirrors the real BigQueryClient.queryAdmin() for cross-tenant operations.
+   */
+  async queryAdmin(sql, params = {}) {
+    return mockBigQuery.query(sql, params);
+  },
+
   table(tableName) {
     return `\`closer-automation.CloserAutomation.${tableName}\``;
   },

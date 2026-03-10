@@ -42,7 +42,7 @@ router.get('/validate', async (req, res) => {
       });
     }
 
-    logger.info('Token validated', {
+    logger.debug('Token validated', {
       clientId: clientRecord.client_id,
       tier: clientRecord.plan_tier,
     });

@@ -93,7 +93,7 @@ class CostTracker {
     const since = periodFilter[period] || periodFilter.today;
     const clientFilter = clientId ? 'AND client_id = @clientId' : '';
 
-    const totals = await bq.query(
+    const totals = await bq.queryAdmin(
       `SELECT
          COUNT(*) as total_calls_processed,
          ROUND(SUM(total_cost_usd), 2) as total_cost_usd,
@@ -103,7 +103,7 @@ class CostTracker {
       clientId ? { clientId } : {}
     );
 
-    const byClient = await bq.query(
+    const byClient = await bq.queryAdmin(
       `SELECT
          ct.client_id,
          cl.company_name,

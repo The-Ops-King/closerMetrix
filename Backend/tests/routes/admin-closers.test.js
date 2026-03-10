@@ -135,24 +135,11 @@ describe('Admin Closer Routes', () => {
       expect(closers).toHaveLength(1);
       expect(closers[0].name).toBe('Sarah Closer');
       expect(closers[0].work_email).toBe('sarah@acmecoaching.com');
-      expect(closers[0].status).toBe('active');
+      expect(closers[0].status).toBe('Active');
       expect(closers[0].client_id).toBe(CLIENT_ID);
     });
 
-    it('should increment client closer_count', async () => {
-      seedClient({ closer_count: 2 });
-
-      await request(app)
-        .post(`/admin/clients/${CLIENT_ID}/closers`)
-        .set('Authorization', AUTH_HEADER)
-        .send({
-          name: 'Sarah Closer',
-          work_email: 'sarah@acmecoaching.com',
-        });
-
-      const clients = mockBQ._getTable('Clients');
-      expect(clients[0].closer_count).toBe(3);
-    });
+    // closer_count is computed via live subquery, not stored/incremented
 
     it('should write audit log on create', async () => {
       seedClient();
@@ -262,20 +249,10 @@ describe('Admin Closer Routes', () => {
         .set('Authorization', AUTH_HEADER);
 
       const closers = mockBQ._getTable('Closers');
-      expect(closers[0].status).toBe('inactive');
+      expect(closers[0].status).toBe('Inactive');
     });
 
-    it('should decrement client closer_count', async () => {
-      seedCloser();
-      mockBQ._getTable('Clients')[0].closer_count = 3;
-
-      await request(app)
-        .delete(`/admin/clients/${CLIENT_ID}/closers/closer_001`)
-        .set('Authorization', AUTH_HEADER);
-
-      const clients = mockBQ._getTable('Clients');
-      expect(clients[0].closer_count).toBe(2);
-    });
+    // closer_count is computed via live subquery, not stored/decremented
 
     it('should write audit log on deactivate', async () => {
       seedCloser();
@@ -287,12 +264,12 @@ describe('Admin Closer Routes', () => {
       const audit = mockBQ._getTable('AuditLog');
       const deactivateAudit = audit.find(a => a.entity_type === 'closer' && a.action === 'deactivated');
       expect(deactivateAudit).toBeDefined();
-      expect(deactivateAudit.old_value).toBe('active');
-      expect(deactivateAudit.new_value).toBe('inactive');
+      expect(deactivateAudit.old_value).toBe('Active');
+      expect(deactivateAudit.new_value).toBe('Inactive');
     });
 
     it('should not allow deactivating an already inactive closer', async () => {
-      seedCloser({ status: 'inactive' });
+      seedCloser({ status: 'Inactive' });
 
       const res = await request(app)
         .delete(`/admin/clients/${CLIENT_ID}/closers/closer_001`)

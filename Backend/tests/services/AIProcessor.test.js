@@ -20,7 +20,7 @@ const aiProcessor = require('../../src/services/ai/AIProcessor');
 const mockBQ = require('../helpers/mockBigQuery');
 const Anthropic = require('@anthropic-ai/sdk');
 
-const CLIENT_ID = 'friends_inc';
+const CLIENT_ID = process.env.TEST_CLIENT_ID || 'friends_inc';
 
 const MOCK_CLIENT = {
   client_id: CLIENT_ID,

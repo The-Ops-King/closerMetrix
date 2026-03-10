@@ -9,10 +9,18 @@
 #   - GCP project: closer-automation
 #   - Cloud Run service name: closermetrix-api
 #   - Artifact Registry repo: us-central1-docker.pkg.dev/closer-automation/closermetrix
-#   - Secrets in Secret Manager: ADMIN_API_KEY, ANTHROPIC_API_KEY, GOOGLE_CALENDAR_CREDENTIALS
+#   - Secrets in Secret Manager: ADMIN_API_KEY, ANTHROPIC_API_KEY, GOOGLE_CALENDAR_CREDENTIALS, smtp-user, smtp-pass
 #   - Service account with BigQuery and Calendar API access
 
 steps:
+  # Audit npm dependencies (non-blocking warning)
+  - name: 'node:20'
+    dir: 'Backend'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - 'npm audit --audit-level=moderate || true'
+
   # Build the Docker image
   - name: 'gcr.io/cloud-builders/docker'
     dir: 'Backend'
@@ -63,7 +71,7 @@ steps:
       - '300s'
       # ── Secrets from GCP Secret Manager ──
       - '--set-secrets'
-      - 'ADMIN_API_KEY=ADMIN_API_KEY:latest,ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,GOOGLE_CALENDAR_CREDENTIALS=GOOGLE_CALENDAR_CREDENTIALS:latest'
+      - 'ADMIN_API_KEY=ADMIN_API_KEY:latest,ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,GOOGLE_CALENDAR_CREDENTIALS=GOOGLE_CALENDAR_CREDENTIALS:latest,SMTP_USER=smtp-user:latest,SMTP_PASS=smtp-pass:latest'
       # ── Non-sensitive environment variables ──
       - '--set-env-vars'
       - 'GCP_PROJECT_ID=closer-automation,BQ_DATASET=CloserAutomation,NODE_ENV=production,BASE_URL=https://api.closermetrix.com,AI_MODEL=claude-sonnet-4-5-20250929,AI_MAX_TOKENS=8000,AI_INPUT_COST_PER_MILLION=3.00,AI_OUTPUT_COST_PER_MILLION=15.00,TRANSCRIPT_TIMEOUT_MINUTES=120,GHOST_CHECK_INTERVAL_MINUTES=30,FATHOM_POLL_INTERVALS=30:60:120:300:600:900,GCP_LOCATION=us-central1,CLOUD_TASKS_QUEUE=closermetrix-processing'

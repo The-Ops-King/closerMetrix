@@ -19,7 +19,7 @@ const callStateManager = require('../../src/services/CallStateManager');
 const fathomAdapter = require('../../src/services/transcript/adapters/FathomAdapter');
 const mockBQ = require('../helpers/mockBigQuery');
 
-const CLIENT_ID = 'friends_inc';
+const CLIENT_ID = process.env.TEST_CLIENT_ID || 'friends_inc';
 const MOCK_CLOSER = {
   closer_id: 'closer_sarah_001',
   client_id: CLIENT_ID,

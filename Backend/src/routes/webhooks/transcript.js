@@ -20,12 +20,13 @@ const transcriptProviders = require('../../config/transcript-providers');
 const transcriptService = require('../../services/transcript/TranscriptService');
 const alertService = require('../../utils/AlertService');
 const logger = require('../../utils/logger');
+const webhookAuth = require('../../middleware/webhookAuth');
 
 // Validate that the provider in the URL is known
 const validProviders = new Set(transcriptProviders.map(p => p.webhookPath));
 
 // POST /webhooks/transcript/:provider
-router.post('/:provider', (req, res) => {
+router.post('/:provider', webhookAuth.transcript, (req, res) => {
   const { provider } = req.params;
 
   if (!validProviders.has(provider)) {

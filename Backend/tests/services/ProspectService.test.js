@@ -9,7 +9,7 @@ jest.mock('../../src/db/BigQueryClient', () => require('../helpers/mockBigQuery'
 const prospectService = require('../../src/services/ProspectService');
 const mockBQ = require('../helpers/mockBigQuery');
 
-const CLIENT_ID = 'friends_inc';
+const CLIENT_ID = process.env.TEST_CLIENT_ID || 'friends_inc';
 
 beforeEach(() => {
   mockBQ._reset();

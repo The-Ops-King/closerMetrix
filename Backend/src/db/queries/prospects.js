@@ -9,6 +9,12 @@ const bq = require('../BigQueryClient');
 
 const PROSPECTS_TABLE = bq.table('Prospects');
 
+// Explicit column list for prospect records — used instead of SELECT *
+const PROSPECT_COLUMNS = [
+  'prospect_id', 'client_id', 'prospect_name', 'prospect_email',
+  'prospect_phone', 'status', 'created_at', 'last_modified',
+].join(', ');
+
 module.exports = {
   /**
    * Finds a prospect by email within a specific client.
@@ -20,7 +26,7 @@ module.exports = {
    */
   async findByEmail(prospectEmail, clientId) {
     const rows = await bq.query(
-      `SELECT * FROM ${PROSPECTS_TABLE}
+      `SELECT ${PROSPECT_COLUMNS} FROM ${PROSPECTS_TABLE}
        WHERE prospect_email = @prospectEmail AND client_id = @clientId
        LIMIT 1`,
       { prospectEmail, clientId }
@@ -33,7 +39,7 @@ module.exports = {
    */
   async findById(prospectId, clientId) {
     const rows = await bq.query(
-      `SELECT * FROM ${PROSPECTS_TABLE}
+      `SELECT ${PROSPECT_COLUMNS} FROM ${PROSPECTS_TABLE}
        WHERE prospect_id = @prospectId AND client_id = @clientId
        LIMIT 1`,
       { prospectId, clientId }

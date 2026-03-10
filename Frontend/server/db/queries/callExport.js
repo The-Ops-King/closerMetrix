@@ -125,7 +125,7 @@ async function queryBigQuery(clientId, filters, tier) {
       calls_cash_collected AS cash,
       calls_duration_minutes AS duration,
       calls_recording_url AS recording_url
-    FROM \`closer-automation.CloserAutomation.v_calls_joined_flat_prefixed\`
+    FROM ${bq.table('v_calls_joined_flat_prefixed')}
     WHERE ${whereClause}
     ORDER BY calls_appointment_date DESC
   `;
