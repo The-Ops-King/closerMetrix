@@ -49,6 +49,7 @@ export function AuthProvider({ children }) {
     companyName: null,
     tier: null,
     closers: [],
+    closerScope: null, // closer_id when using a closer-scoped token
     callSources: [],
     kpiTargets: null,
     aiProvider: 'claude',
@@ -82,6 +83,7 @@ export function AuthProvider({ children }) {
         companyName: data.company_name,
         tier: data.plan_tier,
         closers: data.closers || [],
+        closerScope: data.closer_id || null, // closer-scoped token
         callSources: data.call_sources || [],
         kpiTargets: data.kpi_targets || null,
         aiProvider: data.ai_provider || 'claude',

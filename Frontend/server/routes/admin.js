@@ -236,6 +236,41 @@ router.post('/tokens', async (req, res) => {
   }
 });
 
+// ── Generate or Retrieve Closer Token ───────────────────────────
+
+router.post('/closer-tokens', async (req, res) => {
+  const { clientId, closerId, closerName } = req.body;
+
+  if (!clientId || !closerId) {
+    return res.status(400).json({ success: false, error: 'clientId and closerId are required' });
+  }
+
+  try {
+    // Check if a closer token already exists
+    let tokenId = await tokenManager.getCloserToken(clientId, closerId);
+
+    if (!tokenId) {
+      // Generate a new one
+      const label = closerName ? `Closer: ${closerName}` : 'Closer link';
+      tokenId = await tokenManager.generateCloserToken(clientId, closerId, label);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        token_id: tokenId,
+        client_id: clientId,
+        closer_id: closerId,
+        token_type: 'closer',
+        dashboard_url: `/d/${tokenId}/closer-view`,
+      },
+    });
+  } catch (err) {
+    logger.error('Closer token generation failed', { error: err.message });
+    res.status(500).json({ success: false, error: 'Failed to generate closer token' });
+  }
+});
+
 // ── Revoke Token ────────────────────────────────────────────────
 
 router.delete('/tokens/:tokenId', async (req, res) => {

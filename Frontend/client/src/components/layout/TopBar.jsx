@@ -82,13 +82,14 @@ export default function TopBar({ companyName, tier, onMenuClick }) {
   const isMarketInsightPage = location.pathname.includes('/market-insight');
   const isDataAnalysisPage = location.pathname.includes('/data-analysis');
   const isProjectionsPage = location.pathname.includes('/projections');
+  const isCloserViewPage = location.pathname.includes('/closer-view');
   const isSettingsPage = location.pathname.endsWith('/settings');
   const { token, mode, adminViewClientId } = useAuth();
   const { queryParams, dateRange } = useFilters();
   const [downloading, setDownloading] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
 
-  const hasFilters = !isMarketInsightPage && !isSettingsPage && !isDataAnalysisPage && !isProjectionsPage;
+  const hasFilters = !isMarketInsightPage && !isSettingsPage && !isDataAnalysisPage && !isProjectionsPage && !isCloserViewPage;
 
   const handleDownload = useCallback(async () => {
     setDownloading(true);

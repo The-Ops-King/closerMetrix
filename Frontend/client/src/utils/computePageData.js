@@ -376,6 +376,7 @@ export function computePageData(section, rawData, filters, kpiTargets) {
     case 'adherence': return computeAdherence(calls, granularity, prev);
     case 'market-insight': return computeMarketInsight(rawData);
     case 'closer-scoreboard': return computeCloserScoreboard(calls, objections, closeCycles, granularity, prev, kpiTargets);
+    case 'closer-view': return computeCloserView(rawData, calls, objections, closeCycles, granularity, prev);
     default: return null;
   }
 }
@@ -2661,4 +2662,365 @@ function computeMarketInsight(rawData) {
       goals: goalsRows,
     },
   };
+}
+
+
+// ─────────────────────────────────────────────────────────────
+// CLOSER VIEW PAGE (Insight+)
+// ─────────────────────────────────────────────────────────────
+
+function computeCloserView(rawData, calls, objections, closeCycles, granularity, prev) {
+  const allCalls = rawData.calls || [];
+  const held = calls.filter(isShow);
+  const prevHeld = prev.calls.filter(isShow);
+
+  // Group by closer — include ALL closers (even with few calls)
+  const closerBuckets = groupByCloser(held);
+  const prevBuckets = groupByCloser(prevHeld);
+  const allCallsBuckets = groupByCloser(calls); // includes no-shows for show rate
+
+  // Team-level aggregates for comparison
+  const teamClosed = held.filter(isClosed);
+  const teamRevenue = sum(held, 'revenueGenerated', hasRevenue);
+  const teamCloseRate = sd(teamClosed.length, held.length);
+  const teamShowRate = sd(held.length, calls.length);
+  const teamCallQuality = avg(held, 'overallCallScore') || 0;
+  const teamAvgDealSize = teamClosed.length > 0 ? teamRevenue / teamClosed.length : 0;
+  const teamObjResolved = objections.filter(o => o.resolved).length;
+  const teamObjResRate = sd(teamObjResolved, objections.length);
+  const teamCycles = closeCycles;
+  const teamAvgDaysToClose = teamCycles.length > 0
+    ? teamCycles.reduce((s, c) => s + (c.daysToClose || 0), 0) / teamCycles.length : 0;
+  const teamAvgCallsToClose = teamCycles.length > 0
+    ? teamCycles.reduce((s, c) => s + (c.callsToClose || 0), 0) / teamCycles.length : 0;
+
+  const teamAverages = {
+    closeRate: round(teamCloseRate, 3),
+    showRate: round(teamShowRate, 3),
+    revenue: round(teamRevenue, 0),
+    callQuality: round(teamCallQuality, 1),
+    avgDealSize: round(teamAvgDealSize, 0),
+    objResRate: round(teamObjResRate, 3),
+    avgDaysToClose: round(teamAvgDaysToClose, 1),
+    avgCallsToClose: round(teamAvgCallsToClose, 1),
+  };
+
+  // Build per-closer data
+  const closers = [];
+  for (const [name, closerHeld] of closerBuckets) {
+    const closerId = closerHeld[0]?.closerId;
+    const closerAll = allCallsBuckets.get(name) || [];
+    const closerClosed = closerHeld.filter(isClosed);
+    const closerDeposits = closerHeld.filter(isDeposit);
+    const closerRevenue = closerHeld.reduce((s, c) => s + (c.revenueGenerated || 0), 0);
+    const closerCash = closerHeld.reduce((s, c) => s + (c.cashCollected || 0), 0);
+    const closeRate = sd(closerClosed.length, closerHeld.length);
+    const showRate = sd(closerHeld.length, closerAll.length);
+
+    // Power score — simplified single-closer version (absolute scale)
+    const closerObjsAll = objections.filter(o => o.closerId === closerId);
+    const closerObjsResolved = closerObjsAll.filter(o => o.resolved).length;
+    const closerObjRate = sd(closerObjsResolved, closerObjsAll.length);
+    const powerScore = round(
+      (Math.min(closeRate / 0.3, 1) * 25) +
+      (Math.min(showRate / 0.8, 1) * 10) +
+      (Math.min(closerRevenue / Math.max(teamRevenue * 0.5, 1), 1) * 30) +
+      (Math.min(closerCash / Math.max(teamRevenue * 0.4, 1), 1) * 15) +
+      (Math.min((avg(closerHeld, 'overallCallScore') || 0) / 10, 1) * 10) +
+      (Math.min(closerObjRate, 1) * 10),
+    1);
+
+    // Previous period stats
+    const prevCloserHeld = prevBuckets.get(name) || [];
+    const prevCloserAll = prev.calls.filter(c => (c.closerName || c.closerId || 'Unknown') === name);
+    const prevCloserClosed = prevCloserHeld.filter(isClosed);
+    const prevRevenue = prevCloserHeld.reduce((s, c) => s + (c.revenueGenerated || 0), 0);
+    const prevCash = prevCloserHeld.reduce((s, c) => s + (c.cashCollected || 0), 0);
+    const prevCloseRate = sd(prevCloserClosed.length, prevCloserHeld.length);
+    const prevShowRate = sd(prevCloserHeld.length, prevCloserAll.length);
+
+    const hero = {
+      revenue: closerRevenue,
+      cashCollected: closerCash,
+      closeRate,
+      showRate,
+      dealsWon: closerClosed.length,
+      callsHeld: closerHeld.length,
+      powerScore,
+    };
+    const heroPrev = {
+      revenue: prevRevenue,
+      cashCollected: prevCash,
+      closeRate: prevCloseRate,
+      showRate: prevShowRate,
+      dealsWon: prevCloserClosed.length,
+      callsHeld: prevCloserHeld.length,
+    };
+
+    // ── Red Zone ──
+    // Build a prospect → calls map from ALL calls (not date-filtered) for follow-up staleness
+    const allCloserCalls = allCalls.filter(c => c.closerId === closerId);
+    const prospectCalls = new Map();
+    for (const c of allCloserCalls) {
+      const key = (c.prospectEmail || c.prospectName || c.callId).toLowerCase();
+      if (!prospectCalls.has(key)) prospectCalls.set(key, []);
+      prospectCalls.get(key).push(c);
+    }
+
+    // Overdue follow-ups
+    const now = new Date();
+    const followUpCalls = closerHeld.filter(isFollowUpOutcome);
+    const overdueFollowUps = [];
+    for (const fu of followUpCalls) {
+      const key = (fu.prospectEmail || fu.prospectName || fu.callId).toLowerCase();
+      const allForProspect = prospectCalls.get(key) || [];
+      const hasSubsequent = allForProspect.some(c => c.appointmentDate > fu.appointmentDate);
+      if (hasSubsequent) continue;
+      const daysSince = Math.round((now - new Date(fu.appointmentDate + 'T12:00:00')) / 86400000);
+      const fitScore = fu.prospectFitScore || 0;
+      // Include if high-fit OR stale (7+ days)
+      if (fitScore >= 7 || daysSince >= 7) {
+        overdueFollowUps.push({
+          prospectName: fu.prospectName || 'Unknown',
+          prospectEmail: fu.prospectEmail || '',
+          daysSince,
+          lastOutcome: fu.callOutcome,
+          appointmentDate: fu.appointmentDate,
+          prospectFitScore: fitScore,
+        });
+      }
+    }
+    overdueFollowUps.sort((a, b) => (b.prospectFitScore || 0) - (a.prospectFitScore || 0));
+
+    // Aging deposits — deposit calls where no closed_won exists for that prospect
+    const depositCalls = closerHeld.filter(isDeposit);
+    const agingDeposits = [];
+    for (const dep of depositCalls) {
+      const key = (dep.prospectEmail || dep.prospectName || dep.callId).toLowerCase();
+      const allForProspect = prospectCalls.get(key) || [];
+      const hasClosed = allForProspect.some(c => isClosed(c));
+      if (hasClosed) continue;
+      const daysSince = Math.round((now - new Date(dep.appointmentDate + 'T12:00:00')) / 86400000);
+      agingDeposits.push({
+        prospectName: dep.prospectName || 'Unknown',
+        depositDate: dep.appointmentDate,
+        daysSince,
+        amount: dep.revenueGenerated || dep.cashCollected || 0,
+      });
+    }
+    agingDeposits.sort((a, b) => b.daysSince - a.daysSince);
+
+    // Recent losses — last 7 days
+    const sevenDaysAgo = new Date(now);
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const lostCutoff = sevenDaysAgo.toISOString().split('T')[0];
+    const recentLosses = closerHeld
+      .filter(c => isLost(c) && c.appointmentDate >= lostCutoff)
+      .map(c => ({
+        prospectName: c.prospectName || 'Unknown',
+        lostReason: c.lostReason || 'No reason given',
+        date: c.appointmentDate,
+      }))
+      .sort((a, b) => b.date.localeCompare(a.date));
+
+    const redZone = { overdueFollowUps, agingDeposits, recentLosses };
+
+    // ── Pipeline ──
+    const pipelineFollowUps = closerHeld
+      .filter(isFollowUpOutcome)
+      .map(c => ({
+        prospectName: c.prospectName || 'Unknown',
+        email: c.prospectEmail || '',
+        lastCallDate: c.appointmentDate,
+        callCount: (prospectCalls.get((c.prospectEmail || c.prospectName || c.callId).toLowerCase()) || []).length,
+      }))
+      .sort((a, b) => b.lastCallDate.localeCompare(a.lastCallDate));
+
+    const pipelineDeposits = depositCalls
+      .map(c => ({
+        prospectName: c.prospectName || 'Unknown',
+        email: c.prospectEmail || '',
+        depositDate: c.appointmentDate,
+        amount: c.revenueGenerated || c.cashCollected || 0,
+      }))
+      .sort((a, b) => b.depositDate.localeCompare(a.depositDate));
+
+    const pipelineCloses = closerClosed
+      .map(c => {
+        const key = (c.prospectEmail || c.prospectName || c.callId).toLowerCase();
+        const cycle = closeCycles.find(cy => cy.closerId === closerId &&
+          (cy.prospectEmail || '').toLowerCase() === (c.prospectEmail || '').toLowerCase());
+        return {
+          prospectName: c.prospectName || 'Unknown',
+          closeDate: c.appointmentDate,
+          revenue: c.revenueGenerated || 0,
+          daysToClose: cycle ? cycle.daysToClose : null,
+        };
+      })
+      .sort((a, b) => b.closeDate.localeCompare(a.closeDate));
+
+    const pipeline = { followUps: pipelineFollowUps, deposits: pipelineDeposits, recentCloses: pipelineCloses };
+
+    // ── Scorecards (performance vs team) ──
+    const closerObjs = objections.filter(o => o.closerId === closerId);
+    const closerObjResolved = closerObjs.filter(o => o.resolved).length;
+    const closerObjResRate = sd(closerObjResolved, closerObjs.length);
+    const closerCycles = closeCycles.filter(c => c.closerId === closerId);
+    const avgDaysToClose = closerCycles.length > 0
+      ? closerCycles.reduce((s, c) => s + (c.daysToClose || 0), 0) / closerCycles.length : 0;
+    const avgCallsToClose = closerCycles.length > 0
+      ? closerCycles.reduce((s, c) => s + (c.callsToClose || 0), 0) / closerCycles.length : 0;
+    const closerCallQuality = avg(closerHeld, 'overallCallScore') || 0;
+    const avgDealSize = closerClosed.length > 0 ? closerRevenue / closerClosed.length : 0;
+    const cashPerCall = sd(closerCash, closerHeld.length);
+
+    // Previous period scorecards
+    const prevObjs = prev.objections ? prev.objections.filter(o => o.closerId === closerId) : [];
+    const prevObjResRate = sd(prevObjs.filter(o => o.resolved).length, prevObjs.length);
+    const prevCycles = prev.closeCycles ? prev.closeCycles.filter(c => c.closerId === closerId) : [];
+    const prevAvgDays = prevCycles.length > 0
+      ? prevCycles.reduce((s, c) => s + (c.daysToClose || 0), 0) / prevCycles.length : 0;
+    const prevAvgCallsToClose = prevCycles.length > 0
+      ? prevCycles.reduce((s, c) => s + (c.callsToClose || 0), 0) / prevCycles.length : 0;
+    const prevCallQuality = avg(prevCloserHeld, 'overallCallScore') || 0;
+    const prevAvgDealSize = prevCloserClosed.length > 0
+      ? prevCloserHeld.reduce((s, c) => s + (c.revenueGenerated || 0), 0) / prevCloserClosed.length : 0;
+    const prevCashPerCall = sd(prevCash, prevCloserHeld.length);
+
+    const scorecards = {
+      closeRate: round(closeRate, 3), showRate: round(showRate, 3),
+      avgDealSize: round(avgDealSize, 0), cashPerCall: round(cashPerCall, 0),
+      avgDaysToClose: round(avgDaysToClose, 1), avgCallsToClose: round(avgCallsToClose, 1),
+      objResRate: round(closerObjResRate, 3), callQuality: round(closerCallQuality, 1),
+    };
+    const scorecardsPrev = {
+      closeRate: round(prevCloseRate, 3), showRate: round(prevShowRate, 3),
+      avgDealSize: round(prevAvgDealSize, 0), cashPerCall: round(prevCashPerCall, 0),
+      avgDaysToClose: round(prevAvgDays, 1), avgCallsToClose: round(prevAvgCallsToClose, 1),
+      objResRate: round(prevObjResRate, 3), callQuality: round(prevCallQuality, 1),
+    };
+
+    // ── Skills Radar ──
+    const scoredCalls = closerHeld.filter(c => c.scriptAdherenceScore > 0);
+    const radar = {
+      intro: round(avg(scoredCalls, 'introScore') || 0, 1),
+      pain: round(avg(scoredCalls, 'painScore') || 0, 1),
+      goal: round(avg(scoredCalls, 'goalScore') || 0, 1),
+      transition: round(avg(scoredCalls, 'transitionScore') || 0, 1),
+      pitch: round(avg(scoredCalls, 'pitchScore') || 0, 1),
+      close: round(avg(scoredCalls, 'closeAttemptScore') || 0, 1),
+      objection: round(avg(scoredCalls, 'objectionHandlingScore') || 0, 1),
+      overall: round(avg(scoredCalls, 'overallCallScore') || 0, 1),
+    };
+
+    // ── Objections by Type ──
+    const objByType = new Map();
+    for (const o of closerObjs) {
+      const t = o.objectionType || 'Other';
+      if (!objByType.has(t)) objByType.set(t, { total: 0, resolved: 0 });
+      const entry = objByType.get(t);
+      entry.total++;
+      if (o.resolved) entry.resolved++;
+    }
+    const objTableRows = [...objByType.entries()]
+      .map(([type, d]) => ({ type, total: d.total, resolved: d.resolved, resRate: round(sd(d.resolved, d.total), 3) }))
+      .sort((a, b) => b.total - a.total);
+    const objChartData = objTableRows.map(r => ({
+      label: r.type,
+      resolved: r.resolved,
+      unresolved: r.total - r.resolved,
+    }));
+    const closerObjections = {
+      tableRows: objTableRows,
+      chartData: objChartData,
+      chartSeries: [
+        { key: 'resolved', label: 'Resolved', color: 'green' },
+        { key: 'unresolved', label: 'Unresolved', color: 'red' },
+      ],
+      total: closerObjs.length,
+      resolved: closerObjs.filter(o => o.resolved).length,
+      resRate: round(closerObjResRate, 3),
+    };
+
+    // ── Trends ──
+    const trendGranularity = granularity;
+    const closerHeldByTime = groupByTime(closerHeld, 'appointmentDate', trendGranularity);
+    const closerAllByTime = groupByTime(closerAll, 'appointmentDate', trendGranularity);
+
+    const revenueTrend = [];
+    const closeRateTrend = [];
+    const revenueCashTrend = [];
+    const callOutcomesTrend = [];
+    for (const [date, bucket] of closerHeldByTime) {
+      const bucketRevenue = bucket.reduce((s, c) => s + (c.revenueGenerated || 0), 0);
+      const bucketCash = bucket.reduce((s, c) => s + (c.cashCollected || 0), 0);
+      revenueTrend.push({ date, value: bucketRevenue });
+      revenueCashTrend.push({ date, label: date, cash: bucketCash, uncollected: Math.max(bucketRevenue - bucketCash, 0) });
+      const bucketClosed = bucket.filter(isClosed);
+      closeRateTrend.push({ date, value: bucket.length > 0 ? round(sd(bucketClosed.length, bucket.length), 3) : null });
+      // Call outcomes per bucket
+      callOutcomesTrend.push({
+        date,
+        label: date,
+        closed_won: bucket.filter(isClosed).length,
+        deposit: bucket.filter(isDeposit).length,
+        follow_up: bucket.filter(isFollowUpOutcome).length,
+        lost: bucket.filter(isLost).length,
+      });
+    }
+
+    const trends = {
+      revenue: { data: revenueTrend, series: [{ key: 'value', label: 'Revenue', color: 'teal' }] },
+      closeRate: { data: closeRateTrend, series: [{ key: 'value', label: 'Close Rate', color: 'cyan' }] },
+      revenueCash: {
+        data: revenueCashTrend,
+        series: [
+          { key: 'cash', label: 'Cash Collected', color: 'green' },
+          { key: 'uncollected', label: 'Uncollected', color: 'amber' },
+        ],
+      },
+      callOutcomes: {
+        data: callOutcomesTrend,
+        series: [
+          { key: 'closed_won', label: 'Won', color: 'green' },
+          { key: 'deposit', label: 'Deposit', color: 'teal' },
+          { key: 'follow_up', label: 'Follow Up', color: 'cyan' },
+          { key: 'lost', label: 'Lost', color: 'red' },
+        ],
+      },
+    };
+
+    // ── Recent Calls (expanded with objections) ──
+    const recentCalls = [...closerHeld]
+      .sort((a, b) => b.appointmentDate.localeCompare(a.appointmentDate))
+      .slice(0, 50)
+      .map(c => {
+        const callObjs = closerObjs.filter(o => o.callId === c.callId);
+        return {
+          date: c.appointmentDate,
+          prospectName: c.prospectName || 'Unknown',
+          outcome: c.callOutcome || 'Unknown',
+          overallScore: c.overallCallScore || 0,
+          duration: c.durationMinutes || 0,
+          revenue: c.revenueGenerated || 0,
+          objections: callObjs.map(o => o.objectionType || 'Other'),
+          hasObjections: callObjs.length > 0,
+        };
+      });
+
+    closers.push({
+      closerId, name,
+      hero, heroPrev,
+      redZone, pipeline,
+      scorecards, scorecardsPrev,
+      radar, trends,
+      objections: closerObjections,
+      recentCalls,
+    });
+  }
+
+  // Sort closers alphabetically
+  closers.sort((a, b) => a.name.localeCompare(b.name));
+
+  return { closers, teamAverages, deltaLabel: prev.deltaLabel };
 }

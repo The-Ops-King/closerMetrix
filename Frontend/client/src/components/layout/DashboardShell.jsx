@@ -21,7 +21,7 @@ import { COLORS, LAYOUT } from '../../theme/constants';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 
-export default function DashboardShell({ tier, companyName, basePath, mode, children }) {
+export default function DashboardShell({ tier, companyName, basePath, mode, hideSidebar, children }) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -40,8 +40,8 @@ export default function DashboardShell({ tier, companyName, basePath, mode, chil
 
   return (
     <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden', backgroundColor: COLORS.bg.primary }}>
-      {/* Sidebar — fixed on desktop, temporary drawer on mobile */}
-      {isMobile ? (
+      {/* Sidebar — fixed on desktop, temporary drawer on mobile. Hidden for closer-scoped tokens. */}
+      {!hideSidebar && (isMobile ? (
         <Drawer
           variant="temporary"
           open={mobileOpen}
@@ -59,7 +59,7 @@ export default function DashboardShell({ tier, companyName, basePath, mode, chil
         </Drawer>
       ) : (
         <Sidebar tier={tier} basePath={basePath} mode={mode} />
-      )}
+      ))}
 
       {/* Main content area — fills remaining width */}
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
@@ -67,7 +67,7 @@ export default function DashboardShell({ tier, companyName, basePath, mode, chil
         <TopBar
           companyName={companyName}
           tier={tier}
-          onMenuClick={isMobile ? handleDrawerToggle : undefined}
+          onMenuClick={isMobile && !hideSidebar ? handleDrawerToggle : undefined}
         />
 
         {/* Scrollable content */}

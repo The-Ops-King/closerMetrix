@@ -32,6 +32,7 @@ import MarketInsightPage from './pages/client/MarketInsightPage';
 import CloserScoreboardPage from './pages/client/CloserScoreboardPage';
 import DataAnalysisPage from './pages/client/DataAnalysisPage';
 import SettingsPage from './pages/client/SettingsPage';
+import CloserViewPage from './pages/client/CloserViewPage';
 
 // Admin pages
 import AdminLogin from './pages/admin/AdminLogin';
@@ -68,6 +69,7 @@ export default function App() {
             <Route path="projections" element={<ProjectionsPage />} />
             <Route path="market-insight" element={<MarketInsightPage />} />
             <Route path="closer-scoreboard" element={<CloserScoreboardPage />} />
+            <Route path="closer-view" element={<CloserViewPage />} />
 
             {/* Executive pages */}
             <Route path="violations" element={<ViolationsPage />} />
@@ -99,6 +101,7 @@ export default function App() {
             <Route path="projections" element={<ProjectionsPage />} />
             <Route path="market-insight" element={<MarketInsightPage />} />
             <Route path="closer-scoreboard" element={<CloserScoreboardPage />} />
+            <Route path="closer-view" element={<CloserViewPage />} />
             <Route path="violations" element={<ViolationsPage />} />
             <Route path="adherence" element={<AdherencePage />} />
             <Route path="data-analysis" element={<DataAnalysisPage />} />

@@ -16,6 +16,7 @@ export const NAV_EVERYDAY = [
   { key: 'projections', label: 'Projections', icon: 'analytics', path: '/projections', minTier: 'insight' },
   { key: 'marketInsight', label: 'Market Insight', icon: 'campaign', path: '/market-insight', minTier: 'insight' },
   { key: 'dataAnalysis', label: 'Data Analysis', icon: 'query_stats', path: '/data-analysis', minTier: 'basic' },
+  { key: 'closerView', label: 'Closer View', icon: 'person', path: '/closer-view', minTier: 'insight' },
 ];
 
 export const NAV_DEEP_DIVE = [

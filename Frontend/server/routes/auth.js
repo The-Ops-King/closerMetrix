@@ -48,7 +48,7 @@ router.get('/validate', async (req, res) => {
     });
 
     // Return the shape expected by AuthContext
-    return res.json({
+    const response = {
       client_id: clientRecord.client_id,
       company_name: clientRecord.company_name,
       plan_tier: clientRecord.plan_tier,
@@ -56,7 +56,15 @@ router.get('/validate', async (req, res) => {
       kpi_targets: clientRecord.kpi_targets || null,
       ai_provider: clientRecord.ai_provider || 'claude',
       call_sources: clientRecord.call_sources || [],
-    });
+    };
+
+    // Include closer scope if this is a closer-scoped token
+    if (clientRecord.closer_id) {
+      response.closer_id = clientRecord.closer_id;
+      response.token_type = 'closer';
+    }
+
+    return res.json(response);
   } catch (err) {
     logger.error('Token validation endpoint error', { error: err.message });
     return res.status(500).json({

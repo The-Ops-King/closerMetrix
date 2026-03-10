@@ -98,6 +98,7 @@ async function validateToken(tokenId) {
         t.token_id,
         t.client_id,
         t.token_type,
+        t.closer_id,
         t.expires_at,
         t.revoked_at,
         c.company_name,
@@ -169,7 +170,8 @@ async function validateToken(tokenId) {
       }
     }
 
-    return {
+    // Build result — include closer_id if this is a closer-scoped token
+    const result = {
       client_id: token.client_id,
       company_name: token.company_name,
       plan_tier: token.plan_tier,
@@ -178,6 +180,13 @@ async function validateToken(tokenId) {
       ai_provider: aiProvider,
       call_sources: callSources,
     };
+
+    if (token.closer_id) {
+      result.closer_id = token.closer_id;
+      result.token_type = 'closer';
+    }
+
+    return result;
   } catch (err) {
     logger.error('Token validation failed', { error: err.message, token: tokenId.slice(0, 8) });
     return null;
@@ -278,6 +287,72 @@ async function generateToken(clientId, tokenType = 'client', label = '', options
 }
 
 /**
+ * Generate a closer-scoped access token.
+ * Creates a token that grants access only to a single closer's dashboard.
+ *
+ * @param {string} clientId - The client_id
+ * @param {string} closerId - The closer_id to scope to
+ * @param {string} [label] - Human-readable label
+ * @returns {Promise<string>} The generated token_id
+ */
+async function generateCloserToken(clientId, closerId, label = '') {
+  const tokenId = uuidv4();
+
+  if (!bq.isAvailable()) {
+    logger.warn('Closer token generation skipped — BigQuery unavailable');
+    return tokenId;
+  }
+
+  try {
+    const params = { tokenId, clientId, closerId };
+    const hasLabel = !!label;
+    if (hasLabel) params.label = label;
+
+    await bq.runAdminQuery(
+      `INSERT INTO ${bq.table('AccessTokens')}
+       (token_id, client_id, token_type, closer_id, label, created_by)
+       VALUES (@tokenId, @clientId, 'closer', @closerId, ${hasLabel ? '@label' : 'NULL'}, 'admin')`,
+      params
+    );
+
+    logger.info('Closer token generated', { tokenId: tokenId.slice(0, 8), clientId, closerId });
+    return tokenId;
+  } catch (err) {
+    logger.error('Closer token generation failed', { error: err.message, clientId, closerId });
+    throw err;
+  }
+}
+
+/**
+ * Get an existing closer token for a given client + closer, or null.
+ *
+ * @param {string} clientId
+ * @param {string} closerId
+ * @returns {Promise<string|null>} Token ID or null
+ */
+async function getCloserToken(clientId, closerId) {
+  if (!bq.isAvailable()) return null;
+
+  try {
+    const rows = await bq.runAdminQuery(
+      `SELECT token_id
+       FROM ${bq.table('AccessTokens')}
+       WHERE client_id = @clientId
+         AND closer_id = @closerId
+         AND token_type = 'closer'
+         AND revoked_at IS NULL
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      { clientId, closerId }
+    );
+    return rows.length > 0 ? rows[0].token_id : null;
+  } catch (err) {
+    logger.error('getCloserToken failed', { error: err.message });
+    return null;
+  }
+}
+
+/**
  * Revoke an access token (soft delete — sets revoked_at timestamp).
  *
  * @param {string} tokenId - Token to revoke
@@ -314,7 +389,7 @@ async function listTokens() {
   try {
     return await bq.runAdminQuery(
       `SELECT
-        t.token_id, t.client_id, t.token_type, t.label,
+        t.token_id, t.client_id, t.token_type, t.closer_id, t.label,
         t.created_at, t.expires_at, t.last_accessed_at,
         c.company_name
        FROM ${bq.table('AccessTokens')} t
@@ -415,6 +490,8 @@ module.exports = {
   validateToken,
   validatePartnerToken,
   generateToken,
+  generateCloserToken,
+  getCloserToken,
   revokeToken,
   listTokens,
   getClientById,

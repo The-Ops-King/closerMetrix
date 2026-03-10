@@ -11,7 +11,7 @@
  */
 
 import React, { useEffect, useRef } from 'react';
-import { Outlet, useParams } from 'react-router-dom';
+import { Outlet, useParams, Navigate, useLocation } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -23,7 +23,8 @@ import usePageTracking from '../../hooks/usePageTracking';
 
 export default function ClientDashboardLayout() {
   const { token } = useParams();
-  const { isAuthenticated, isLoading, error, tier, companyName, mode, validateClientToken } = useAuth();
+  const location = useLocation();
+  const { isAuthenticated, isLoading, error, tier, companyName, mode, closerScope, validateClientToken } = useAuth();
 
   // Track page views, session starts, and time on page
   usePageTracking();
@@ -86,10 +87,16 @@ export default function ClientDashboardLayout() {
     );
   }
 
+  // Closer-scoped token: redirect to closer-view if not already there
+  if (closerScope && !location.pathname.endsWith('/closer-view')) {
+    return <Navigate to={`/d/${token}/closer-view`} replace />;
+  }
+
   // Authenticated — render the dashboard
+  // Closer-scoped tokens get no sidebar (hideSidebar prop)
   return (
     <FilterProvider>
-      <DashboardShell tier={tier} companyName={companyName} basePath={`/d/${token}`} mode={mode}>
+      <DashboardShell tier={tier} companyName={companyName} basePath={`/d/${token}`} mode={mode} hideSidebar={!!closerScope}>
         <Outlet />
       </DashboardShell>
     </FilterProvider>

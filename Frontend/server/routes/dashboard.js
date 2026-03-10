@@ -27,6 +27,7 @@
 const express = require('express');
 const clientIsolation = require('../middleware/clientIsolation');
 const { requireTier } = require('../middleware/tierGate');
+const tokenManager = require('../utils/tokenManager');
 const bq = require('../db/BigQueryClient');
 const logger = require('../utils/logger');
 const { getOverviewData } = require('../db/queries/overview');
@@ -1042,6 +1043,44 @@ router.post('/closers/:closerId/register-fathom', (req, res) => {
 
 router.put('/client-config', (req, res) => {
   proxyCloserToBackend(req, res, `/admin/clients/${req.clientId}`);
+});
+
+// ── Closer Token Generation (Insight+) ──────────────────────────
+// Generates a closer-scoped link that shows only one closer's data.
+// Uses the authenticated client's client_id from clientIsolation middleware.
+
+router.post('/closer-token', requireTier('insight'), async (req, res) => {
+  const { closerId, closerName } = req.body;
+
+  if (!closerId) {
+    return res.status(400).json({ success: false, error: 'closerId is required' });
+  }
+
+  // Verify the closer belongs to this client
+  const validCloser = (req.closers || []).some(c => c.closer_id === closerId);
+  if (!validCloser) {
+    return res.status(403).json({ success: false, error: 'Closer does not belong to this client' });
+  }
+
+  try {
+    // Reuse existing token or generate new one
+    let tokenId = await tokenManager.getCloserToken(req.clientId, closerId);
+    if (!tokenId) {
+      const label = closerName ? `Closer: ${closerName}` : 'Closer link';
+      tokenId = await tokenManager.generateCloserToken(req.clientId, closerId, label);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        token_id: tokenId,
+        closer_id: closerId,
+        dashboard_url: `/d/${tokenId}/closer-view`,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Failed to generate closer token' });
+  }
 });
 
 module.exports = router;
