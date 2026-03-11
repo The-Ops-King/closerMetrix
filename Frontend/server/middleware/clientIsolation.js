@@ -56,9 +56,11 @@ async function clientIsolation(req, res, next) {
   // bypass the normal token flow and resolve the client directly.
   // This allows the admin panel to render any client's dashboard
   // using the same /api/dashboard/* endpoints.
+  // Allow UUIDs, demo- prefixed, and alphanumeric slugs (1-128 chars, no path traversal)
+  const SAFE_ID_RE = /^[a-zA-Z0-9_-]{1,128}$/;
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   if (adminKey && viewClientId) {
-    if (!UUID_RE.test(viewClientId) && !viewClientId.startsWith('demo')) {
+    if (!UUID_RE.test(viewClientId) && !SAFE_ID_RE.test(viewClientId)) {
       return res.status(400).json({ success: false, error: 'Invalid client ID format' });
     }
     if (!safeCompare(adminKey, config.adminApiKey)) {
