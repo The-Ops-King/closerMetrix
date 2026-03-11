@@ -79,6 +79,8 @@ These are recurring mistakes. Read this section every session.
 
 **Never hardcode hex.** Always use token names from `Frontend/client/src/theme/constants.js`.
 
+**`teal` and `cyan` are the same color.** Both map to `#4DD4E8`. Tyler calls it "teal" in conversation but the canonical token is `cyan`. Use either — they render identically. There is no separate darker teal anymore.
+
 ```js
 // Frontend code — use COLORS object
 COLORS.neon.cyan / green / amber / red / blue / purple / teal / magenta
@@ -228,4 +230,7 @@ Backend/
 | 9 | init | review.md audit | Auto-granularity thresholds: ≤14d=daily, 15-90d=weekly, >90d=monthly |
 | 10 | 2026-03-09 | security audit | Always build with security in mind and run security sweep after every feature |
 | 11 | 2026-03-10 | Tyler correction | Run `cd Backend && npm test` after every significant code change — verify 0 new failures before moving on |
+| 12 | 2026-03-10 | Tyler correction | `teal` and `cyan` are the same color (#4DD4E8). No separate darker teal. Tyler says "teal" but means cyan. |
+| 13 | 2026-03-10 | Tyler correction | Client IDs can be alphanumeric slugs (e.g. "himym"), not just UUIDs. Validate with `/^[a-zA-Z0-9_-]{1,128}$/` |
+| 14 | 2026-03-10 | Tyler correction | Call outcome colors: deposit=amber, follow_up=purple, disqualified=gray(muted), not_pitched=blue |
 
