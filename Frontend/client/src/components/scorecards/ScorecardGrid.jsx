@@ -98,6 +98,7 @@ export default function ScorecardGrid({
               deltaLabel={metric.deltaLabel || null}
               desiredDirection={metric.desiredDirection || 'up'}
               glowColor={metric.glowColor ? resolveColor(metric.glowColor) : glowColor}
+              hoverText={metric.hoverText || null}
               locked={isLocked}
               onClick={isLocked && onLockedClick ? () => onLockedClick(key) : null}
             />

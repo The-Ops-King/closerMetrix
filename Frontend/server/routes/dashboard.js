@@ -1083,4 +1083,25 @@ router.post('/closer-token', requireTier('insight'), async (req, res) => {
   }
 });
 
+// ── Mark Call as Lost ─────────────────────────────────────────
+router.post('/mark-lost', requireTier('insight'), async (req, res) => {
+  const { callId } = req.body;
+  if (!callId || typeof callId !== 'string') {
+    return res.status(400).json({ success: false, error: 'callId is required' });
+  }
+
+  try {
+    await bq.runQuery(
+      `UPDATE ${bq.table('Calls')}
+       SET call_outcome = @outcome
+       WHERE call_id = @callId AND client_id = @clientId`,
+      { clientId: req.clientId, callId, outcome: 'Lost' }
+    );
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('Failed to mark call as lost', { error: err.message, callId, clientId: req.clientId });
+    res.status(500).json({ success: false, error: 'Failed to update call outcome' });
+  }
+});
+
 module.exports = router;

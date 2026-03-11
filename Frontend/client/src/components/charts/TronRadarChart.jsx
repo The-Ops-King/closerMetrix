@@ -79,9 +79,10 @@ export default function TronRadarChart({
   const numAxes = axes.length;
 
   // SVG layout constants — everything is computed from the viewBox dimensions.
-  // We use a fixed viewBox so the chart scales responsively via width="100%".
-  const viewBoxWidth = 500;
-  const viewBoxHeight = height;
+  // We use a square viewBox so the radar scales well on narrow (mobile) screens.
+  const viewBoxSize = 400;
+  const viewBoxWidth = viewBoxSize;
+  const viewBoxHeight = viewBoxSize;
   const cx = viewBoxWidth / 2;
 
   // Reserve space: top for labels, bottom for legend
@@ -201,8 +202,7 @@ export default function TronRadarChart({
       <svg
         viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`}
         width="100%"
-        height={height}
-        style={{ overflow: 'visible' }}
+        style={{ overflow: 'visible', maxHeight: height || 400 }}
       >
         {/* ── SVG DEFS: Glow filter for data points ── */}
         <defs>

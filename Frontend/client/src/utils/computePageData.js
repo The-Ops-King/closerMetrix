@@ -36,6 +36,15 @@ import {
 
 import { COLORS } from '../theme/constants';
 
+// Reverse map: outcome label → snake_case key (e.g. 'Closed - Won' → 'closed_won')
+const OUTCOME_LABEL_TO_KEY = Object.fromEntries(
+  Object.entries(OUTCOMES).map(([key, label]) => [label, key.toLowerCase()])
+);
+/** Convert a BQ outcome label to its snake_case key for filter matching */
+function outcomeToKey(label) {
+  return OUTCOME_LABEL_TO_KEY[label] || null;
+}
+
 // ─────────────────────────────────────────────────────────────
 // SHARED HELPERS
 // ─────────────────────────────────────────────────────────────
@@ -2694,15 +2703,20 @@ function computeCloserView(rawData, calls, objections, closeCycles, granularity,
   const teamAvgCallsToClose = teamCycles.length > 0
     ? teamCycles.reduce((s, c) => s + (c.callsToClose || 0), 0) / teamCycles.length : 0;
 
+  const numClosers = closerBuckets.size || 1;
+  const teamCash = sum(held, 'cashCollected', hasRevenue);
   const teamAverages = {
     closeRate: round(teamCloseRate, 3),
     showRate: round(teamShowRate, 3),
-    revenue: round(teamRevenue, 0),
+    revenue: round(teamRevenue / numClosers, 0),
+    cashCollected: round(teamCash / numClosers, 0),
+    dealsWon: round(teamClosed.length / numClosers, 1),
     callQuality: round(teamCallQuality, 1),
     avgDealSize: round(teamAvgDealSize, 0),
     objResRate: round(teamObjResRate, 3),
     avgDaysToClose: round(teamAvgDaysToClose, 1),
     avgCallsToClose: round(teamAvgCallsToClose, 1),
+    avgCashPerCall: held.length > 0 ? round(teamCash / held.length, 0) : 0,
   };
 
   // Build per-closer data
@@ -2781,6 +2795,7 @@ function computeCloserView(rawData, calls, objections, closeCycles, granularity,
       // Include if high-fit OR stale (7+ days)
       if (fitScore >= 7 || daysSince >= 7) {
         overdueFollowUps.push({
+          callId: fu.callId,
           prospectName: fu.prospectName || 'Unknown',
           prospectEmail: fu.prospectEmail || '',
           daysSince,
@@ -2836,11 +2851,26 @@ function computeCloserView(rawData, calls, objections, closeCycles, granularity,
       }))
       .sort((a, b) => b.lastCallDate.localeCompare(a.lastCallDate));
 
-    const pipelineDeposits = depositCalls
+    // All-time deposits for this closer (ignores date filter so open deposits always show)
+    const allTimeCloserCalls = rawData.calls.filter(c => (c.closerName || c.closerId || 'Unknown') === name);
+    const allTimeDeposits = allTimeCloserCalls.filter(isDeposit);
+    const allProspectCalls = new Map();
+    allTimeCloserCalls.forEach(c => {
+      const pk = (c.prospectEmail || c.prospectName || c.callId).toLowerCase();
+      if (!allProspectCalls.has(pk)) allProspectCalls.set(pk, []);
+      allProspectCalls.get(pk).push(c);
+    });
+    const pipelineDeposits = allTimeDeposits
+      .filter(c => {
+        const pk = (c.prospectEmail || c.prospectName || c.callId).toLowerCase();
+        const all = allProspectCalls.get(pk) || [];
+        return !all.some(x => isClosed(x));
+      })
       .map(c => ({
         prospectName: c.prospectName || 'Unknown',
         email: c.prospectEmail || '',
         depositDate: c.appointmentDate,
+        daysSince: Math.round((now - new Date(c.appointmentDate + 'T12:00:00')) / 86400000),
         amount: c.revenueGenerated || c.cashCollected || 0,
       }))
       .sort((a, b) => b.depositDate.localeCompare(a.depositDate));
@@ -2966,26 +2996,29 @@ function computeCloserView(rawData, calls, objections, closeCycles, granularity,
         deposit: bucket.filter(isDeposit).length,
         follow_up: bucket.filter(isFollowUpOutcome).length,
         lost: bucket.filter(isLost).length,
+        disqualified: bucket.filter(isDQ).length,
+        not_pitched: bucket.filter(isNotPitched).length,
       });
     }
 
     const trends = {
-      revenue: { data: revenueTrend, series: [{ key: 'value', label: 'Revenue', color: 'teal' }] },
-      closeRate: { data: closeRateTrend, series: [{ key: 'value', label: 'Close Rate', color: 'cyan' }] },
+      closeRate: { data: closeRateTrend, series: [{ key: 'value', label: 'Close Rate', color: 'green' }] },
       revenueCash: {
         data: revenueCashTrend,
         series: [
           { key: 'cash', label: 'Cash Collected', color: 'green' },
-          { key: 'uncollected', label: 'Uncollected', color: 'amber' },
+          { key: 'uncollected', label: 'Uncollected', color: 'teal' },
         ],
       },
       callOutcomes: {
         data: callOutcomesTrend,
         series: [
           { key: 'closed_won', label: 'Won', color: 'green' },
-          { key: 'deposit', label: 'Deposit', color: 'teal' },
-          { key: 'follow_up', label: 'Follow Up', color: 'cyan' },
+          { key: 'deposit', label: 'Deposit', color: 'amber' },
+          { key: 'follow_up', label: 'Follow Up', color: 'purple' },
           { key: 'lost', label: 'Lost', color: 'red' },
+          { key: 'disqualified', label: 'DQ', color: 'muted' },
+          { key: 'not_pitched', label: 'Not Pitched', color: 'blue' },
         ],
       },
     };
@@ -2993,16 +3026,17 @@ function computeCloserView(rawData, calls, objections, closeCycles, granularity,
     // ── Recent Calls (expanded with objections) ──
     const recentCalls = [...closerHeld]
       .sort((a, b) => b.appointmentDate.localeCompare(a.appointmentDate))
-      .slice(0, 50)
       .map(c => {
         const callObjs = closerObjs.filter(o => o.callId === c.callId);
         return {
           date: c.appointmentDate,
           prospectName: c.prospectName || 'Unknown',
-          outcome: c.callOutcome || 'Unknown',
+          outcome: outcomeToKey(c.callOutcome) || c.callOutcome || 'Unknown',
           overallScore: c.overallCallScore || 0,
           duration: c.durationMinutes || 0,
           revenue: c.revenueGenerated || 0,
+          cashCollected: c.cashCollected || 0,
+          recordingUrl: c.recordingUrl || '',
           objections: callObjs.map(o => o.objectionType || 'Other'),
           hasObjections: callObjs.length > 0,
         };
@@ -3021,6 +3055,13 @@ function computeCloserView(rawData, calls, objections, closeCycles, granularity,
 
   // Sort closers alphabetically
   closers.sort((a, b) => a.name.localeCompare(b.name));
+
+  // Compute team average power score after all closers are built
+  if (closers.length > 0) {
+    teamAverages.powerScore = round(
+      closers.reduce((s, c) => s + (c.hero.powerScore || 0), 0) / closers.length, 1
+    );
+  }
 
   return { closers, teamAverages, deltaLabel: prev.deltaLabel };
 }

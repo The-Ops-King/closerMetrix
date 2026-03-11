@@ -90,6 +90,7 @@ export default function TopBar({ companyName, tier, onMenuClick }) {
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   const hasFilters = !isMarketInsightPage && !isSettingsPage && !isDataAnalysisPage && !isProjectionsPage && !isCloserViewPage;
+  const hasDateOnly = isCloserViewPage;
 
   const handleDownload = useCallback(async () => {
     setDownloading(true);
@@ -165,6 +166,8 @@ export default function TopBar({ companyName, tier, onMenuClick }) {
 
       {/* Right: Actions row */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        {/* Mobile: Date-only for Closer View */}
+        {isMobile && hasDateOnly && <DateRangeFilter />}
         {/* Mobile: Filters toggle button */}
         {isMobile && hasFilters && (
           <Button
@@ -205,6 +208,8 @@ export default function TopBar({ companyName, tier, onMenuClick }) {
             <DateRangeFilter />
           </>
         )}
+        {/* Desktop: Date-only filter for Closer View */}
+        {!isMobile && hasDateOnly && <DateRangeFilter />}
         {!isMobile && !isSettingsPage && !isDataAnalysisPage && <Tooltip title="Download filtered calls as CSV" arrow>
           <IconButton
             onClick={handleDownload}
