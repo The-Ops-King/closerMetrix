@@ -353,15 +353,15 @@ router.get('/export-calls', async (req, res) => {
 
 router.get('/raw-data', requireTier('insight'), async (req, res) => {
   try {
-    // Validate pagination params
+    // Validate pagination params — default to 10k to load full dataset for client-side filtering
     let page = parseInt(req.query.page, 10) || 1;
-    let pageSize = parseInt(req.query.pageSize, 10) || 500;
+    let pageSize = parseInt(req.query.pageSize, 10) || 10000;
 
     if (page < 1 || !Number.isInteger(page)) {
       return res.status(400).json({ success: false, error: 'page must be a positive integer' });
     }
-    if (pageSize < 1 || pageSize > 1000 || !Number.isInteger(pageSize)) {
-      return res.status(400).json({ success: false, error: 'pageSize must be an integer between 1 and 1000' });
+    if (pageSize < 1 || pageSize > 50000 || !Number.isInteger(pageSize)) {
+      return res.status(400).json({ success: false, error: 'pageSize must be an integer between 1 and 50000' });
     }
 
     const result = await getRawData(req.clientId, { page, pageSize });
@@ -691,7 +691,14 @@ router.get('/data-analysis-insights', async (req, res) => {
 
     // Single tab: overview, team, individual (versioned section key)
     const section = `data-analysis-${tab}-${DATA_ANALYSIS_PROMPT_VERSION}`;
-    const insight = await getLatestInsightForDate(req.clientId, section, today);
+    let insight = await getLatestInsightForDate(req.clientId, section, today);
+    let isFallback = false;
+
+    // If no insight for today, fall back to the most recent one (any date)
+    if (!insight) {
+      insight = await getLatestInsight(req.clientId, section);
+      isFallback = true;
+    }
 
     if (!insight) {
       return res.json({ success: true, data: null });
@@ -704,7 +711,7 @@ router.get('/data-analysis-insights', async (req, res) => {
 
     res.json({
       success: true,
-      data: { ...parsed, generatedAt: insight.generatedAt },
+      data: { ...parsed, generatedAt: insight.generatedAt, isFallback },
     });
   } catch (err) {
     // Degrade gracefully
@@ -805,11 +812,12 @@ router.post('/data-analysis-insights', async (req, res) => {
       });
     }
 
-    // ── Single tab: overview, team, individual (versioned) ──
-    const section = `data-analysis-${tab}-${DATA_ANALYSIS_PROMPT_VERSION}`;
+    // ── Single tab: overview, team, individual (versioned for BQ, unversioned for AI) ──
+    const versionedSection = `data-analysis-${tab}-${DATA_ANALYSIS_PROMPT_VERSION}`;
+    const promptSection = `data-analysis-${tab}`;
 
     // Double-check BQ (race condition guard)
-    const existing = await getLatestInsightForDate(req.clientId, section, today);
+    const existing = await getLatestInsightForDate(req.clientId, versionedSection, today);
     if (existing) {
       let parsed = null;
       try { parsed = JSON.parse(existing.text); }
@@ -882,18 +890,18 @@ router.post('/data-analysis-insights', async (req, res) => {
 
     const result = await insightEngine.generateInsight(
       req.clientId,
-      section,
+      promptSection,
       enrichedMetrics,
       { force: true, aiProvider: req.aiProvider }
     );
 
     const parsed = result.json || JSON.parse(result.text);
 
-    // Store in InsightLog
+    // Store in InsightLog with versioned section key
     await insertInsight({
       insightId: uuidv4(),
       clientId: req.clientId,
-      section,
+      section: versionedSection,
       insightText: JSON.stringify(parsed),
       metricsSnapshot: JSON.stringify(enrichedMetrics),
       modelUsed: result.model,

@@ -40,10 +40,12 @@ export default function ObjectionsTable({ rows, variant = 'type', title, accentC
         border: `1px solid ${COLORS.border.subtle}`,
         borderTop: `2px solid ${hexToRgba(accentColor, 0.3)}`,
         borderRadius: `${LAYOUT.cardBorderRadius}px`,
-        padding: 3,
+        padding: { xs: 1.5, md: 3 },
         transition: 'border-color 0.3s ease, box-shadow 0.3s ease',
         display: 'flex',
         flexDirection: 'column',
+        minWidth: 0,
+        overflow: 'hidden',
         '&:hover': {
           borderColor: 'rgba(255, 255, 255, 0.06)',
           borderTopColor: hexToRgba(accentColor, 0.3),
@@ -68,6 +70,7 @@ export default function ObjectionsTable({ rows, variant = 'type', title, accentC
           sx={{
             width: '100%',
             overflowX: 'auto',
+            WebkitOverflowScrolling: 'touch',
             borderRadius: 1,
             border: `1px solid ${COLORS.border.subtle}`,
             flex: 1,
@@ -77,9 +80,10 @@ export default function ObjectionsTable({ rows, variant = 'type', title, accentC
             component="table"
             sx={{
               width: '100%',
+              minWidth: 420,
               borderCollapse: 'collapse',
               '& th, & td': {
-                padding: '10px 14px',
+                padding: { xs: '8px 8px', md: '10px 14px' },
                 textAlign: 'left',
                 borderBottom: `1px solid ${COLORS.border.subtle}`,
               },

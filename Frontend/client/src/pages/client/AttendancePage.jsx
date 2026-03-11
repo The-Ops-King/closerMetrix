@@ -437,7 +437,7 @@ export default function AttendancePage() {
                 delta={sections.callsNotTaken?.rescheduled?.delta}
                 deltaLabel={sections.callsNotTaken?.rescheduled?.deltaLabel}
                 desiredDirection="down"
-                glowColor={'#FF8C00'}
+                glowColor={COLORS.neon.purple}
               />
             </Box>
 
@@ -484,7 +484,7 @@ export default function AttendancePage() {
                 delta={sections.callsNotTaken?.rescheduledPct?.delta}
                 deltaLabel={sections.callsNotTaken?.rescheduledPct?.deltaLabel}
                 desiredDirection="down"
-                glowColor={'#FF8C00'}
+                glowColor={COLORS.neon.purple}
               />
             </Box>
 

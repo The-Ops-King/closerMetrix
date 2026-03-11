@@ -60,6 +60,8 @@ export default function ChartWrapper({
         padding: { xs: 2, md: 3 },
         display: 'flex',
         flexDirection: 'column',
+        minWidth: 0,
+        overflow: 'hidden',
         transition: 'border-color 0.3s ease, box-shadow 0.3s ease',
         '&:hover': {
           borderColor: 'rgba(255, 255, 255, 0.06)',

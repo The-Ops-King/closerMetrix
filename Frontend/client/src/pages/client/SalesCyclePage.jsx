@@ -144,8 +144,8 @@ export default function SalesCyclePage() {
               <Scorecard label="Avg Days to Close" value={sections.daysToClose?.avgDaysToClose?.value} format="decimal"
                 delta={sections.daysToClose?.avgDaysToClose?.delta} deltaLabel="vs prev period"
                 desiredDirection="down" glowColor={COLORS.neon.purple} />
-              {/* Col 3, Row 1+2: Calls Scheduled per Close — spans both rows */}
-              <Box sx={{ gridRow: { md: '1 / 3' }, gridColumn: { md: '3' } }}>
+              {/* Col 3, Row 1+2: Calls Scheduled per Close — spans both rows on desktop, full-width on mobile */}
+              <Box sx={{ gridRow: { xs: 'auto', md: '1 / 3' }, gridColumn: { xs: '1 / -1', md: '3' } }}>
                 <Scorecard label="Calls Scheduled per Close" value={sections.callsToClose?.callsNeededPerDeal?.value} format="decimal"
                   delta={sections.callsToClose?.callsNeededPerDeal?.delta} deltaLabel="vs prev period"
                   desiredDirection="down" glowColor={COLORS.neon.green} />

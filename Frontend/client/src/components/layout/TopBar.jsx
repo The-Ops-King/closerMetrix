@@ -11,9 +11,14 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Tooltip from '@mui/material/Tooltip';
 import IconButton from '@mui/material/IconButton';
+import Button from '@mui/material/Button';
+import Collapse from '@mui/material/Collapse';
 import CircularProgress from '@mui/material/CircularProgress';
+import useMediaQuery from '@mui/material/useMediaQuery';
+import { useTheme } from '@mui/material/styles';
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import MenuIcon from '@mui/icons-material/Menu';
+import TuneIcon from '@mui/icons-material/Tune';
 import { useLocation } from 'react-router-dom';
 import { COLORS, LAYOUT } from '../../theme/constants';
 import { meetsMinTier } from '../../utils/tierConfig';
@@ -70,6 +75,8 @@ function downloadCsv(csvString, filename) {
 
 export default function TopBar({ companyName, tier, onMenuClick }) {
   const location = useLocation();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isObjectionsPage = location.pathname.includes('/objections');
   const isViolationsPage = location.pathname.includes('/violations');
   const isMarketInsightPage = location.pathname.includes('/market-insight');
@@ -79,6 +86,9 @@ export default function TopBar({ companyName, tier, onMenuClick }) {
   const { token, mode, adminViewClientId } = useAuth();
   const { queryParams, dateRange } = useFilters();
   const [downloading, setDownloading] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
+  const hasFilters = !isMarketInsightPage && !isSettingsPage && !isDataAnalysisPage && !isProjectionsPage;
 
   const handleDownload = useCallback(async () => {
     setDownloading(true);
@@ -127,8 +137,8 @@ export default function TopBar({ companyName, tier, onMenuClick }) {
         zIndex: 10,
       }}
     >
-      {/* Left: Hamburger (mobile) + Company name + tier badge */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, md: 2 } }}>
+      {/* Left: Hamburger (mobile) + Company name + tier badge (desktop only) */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, md: 2 }, flex: 1, minWidth: 0 }}>
         {onMenuClick && (
           <IconButton
             onClick={onMenuClick}
@@ -140,6 +150,7 @@ export default function TopBar({ companyName, tier, onMenuClick }) {
         )}
         <Typography
           variant="h6"
+          noWrap
           sx={{
             fontWeight: 600,
             color: COLORS.text.primary,
@@ -148,13 +159,31 @@ export default function TopBar({ companyName, tier, onMenuClick }) {
         >
           {companyName || 'Dashboard'}
         </Typography>
-        {tier && <TierBadge tier={tier} size="sm" />}
+        {tier && !isMobile && <TierBadge tier={tier} size="sm" />}
       </Box>
 
-      {/* Right: Filter controls + Download button — wraps to full width on mobile */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, md: 2 }, flexWrap: 'wrap', width: { xs: '100%', md: 'auto' } }}>
-        {/* Market Insight uses auto last-30-days; Settings has no data filters */}
-        {!isMarketInsightPage && !isSettingsPage && !isDataAnalysisPage && !isProjectionsPage && (
+      {/* Right: Actions row */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        {/* Mobile: Filters toggle button */}
+        {isMobile && hasFilters && (
+          <Button
+            onClick={() => setFiltersOpen(prev => !prev)}
+            size="small"
+            startIcon={<TuneIcon sx={{ fontSize: 16 }} />}
+            sx={{
+              backgroundColor: filtersOpen ? 'rgba(77, 212, 232, 0.10)' : COLORS.bg.tertiary,
+              border: `1px solid ${filtersOpen ? COLORS.neon.cyan : COLORS.border.subtle}`,
+              borderRadius: '8px', color: filtersOpen ? COLORS.neon.cyan : COLORS.text.secondary,
+              fontSize: '0.8rem', fontWeight: 500, textTransform: 'none',
+              px: 1.5, py: 0.5, minHeight: 34,
+              '&:hover': { backgroundColor: COLORS.bg.elevated, borderColor: COLORS.neon.cyan, color: COLORS.neon.cyan },
+            }}
+          >
+            Filters
+          </Button>
+        )}
+        {/* Desktop: Inline filters */}
+        {!isMobile && hasFilters && (
           <>
             <CallSourceFilter />
             {meetsMinTier(tier, 'insight') ? (
@@ -175,7 +204,7 @@ export default function TopBar({ companyName, tier, onMenuClick }) {
             <DateRangeFilter />
           </>
         )}
-        {!isSettingsPage && !isDataAnalysisPage && <Tooltip title="Download filtered calls as CSV" arrow>
+        {!isMobile && !isSettingsPage && !isDataAnalysisPage && <Tooltip title="Download filtered calls as CSV" arrow>
           <IconButton
             onClick={handleDownload}
             disabled={downloading}
@@ -200,6 +229,31 @@ export default function TopBar({ companyName, tier, onMenuClick }) {
           </IconButton>
         </Tooltip>}
       </Box>
+
+      {/* Mobile: Collapsible filters row */}
+      {isMobile && hasFilters && (
+        <Collapse in={filtersOpen} sx={{ width: '100%' }}>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, pt: 1, pb: 0.5 }}>
+            <CallSourceFilter />
+            {meetsMinTier(tier, 'insight') ? (
+              <CloserFilter />
+            ) : (
+              <Tooltip title="Upgrade to Insight to filter by closer" arrow>
+                <span>
+                  <CloserFilter disabled />
+                </span>
+              </Tooltip>
+            )}
+            {isObjectionsPage && meetsMinTier(tier, 'insight') && (
+              <ObjectionTypeFilter />
+            )}
+            {isViolationsPage && meetsMinTier(tier, 'executive') && (
+              <RiskCategoryFilter />
+            )}
+            <DateRangeFilter />
+          </Box>
+        </Collapse>
+      )}
     </Box>
   );
 }

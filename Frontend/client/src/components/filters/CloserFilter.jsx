@@ -26,18 +26,14 @@ export default function CloserFilter({ disabled = false }) {
   const { rawData } = useData();
   const { closerIds, setCloserIds, dateRange } = useFilters();
 
-  // Derive closer options from calls within the selected date range
+  // Derive closer options from ALL calls (not date-filtered) so the filter
+  // never disappears when the date range has no data
   const closerOptions = useMemo(() => {
     if (!rawData?.calls) return [];
-
-    const start = dateRange.start;
-    const end = dateRange.end;
 
     const map = new Map(); // closerId -> closerName
     for (const call of rawData.calls) {
       if (!call.closerId || !call.closerName) continue;
-      // Filter by date range
-      if (call.appointmentDate < start || call.appointmentDate > end) continue;
       if (!map.has(call.closerId)) {
         map.set(call.closerId, call.closerName);
       }
@@ -47,7 +43,7 @@ export default function CloserFilter({ disabled = false }) {
     return Array.from(map.entries())
       .map(([id, name]) => ({ closer_id: id, name }))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [rawData?.calls, dateRange.start, dateRange.end]);
+  }, [rawData?.calls]);
 
   // Build lookup map for rendering chips
   const closerMap = useMemo(() => {
@@ -87,10 +83,8 @@ export default function CloserFilter({ disabled = false }) {
     );
   }
 
-  // Don't render if no closers in the date range
-  if (closerOptions.length === 0) {
-    return null;
-  }
+  // Still render the filter when no closers found — shows "All Closers" placeholder
+  // (rawData may still be loading, or the client has no closer data yet)
 
   // Clear any selected closerIds that are no longer in the options
   const validIds = closerIds.filter((id) => closerMap[id]);

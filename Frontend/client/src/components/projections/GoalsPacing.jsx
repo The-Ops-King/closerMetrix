@@ -470,10 +470,13 @@ export default function GoalsPacing({ goals, actuals, calendar, onGoalsSaved }) 
             sx={{
               borderColor: COLORS.neon.cyan,
               color: COLORS.neon.cyan,
-              fontSize: '0.75rem',
+              fontSize: { xs: '0.7rem', md: '0.75rem' },
               fontWeight: 600,
               textTransform: 'none',
-              px: 3,
+              px: { xs: 1.5, md: 3 },
+              py: { xs: 0.5, md: 0.75 },
+              minHeight: { xs: 32, md: 36 },
+              whiteSpace: 'nowrap',
               '&:hover': {
                 borderColor: COLORS.neon.cyan,
                 backgroundColor: `${COLORS.neon.cyan}15`,
@@ -485,7 +488,7 @@ export default function GoalsPacing({ goals, actuals, calendar, onGoalsSaved }) 
               },
             }}
           >
-            {saving ? 'Saving...' : savedField === 'all' ? '✓ All Goals Saved' : 'Update All Goals'}
+            {saving ? 'Saving...' : savedField === 'all' ? '✓ Saved' : 'Update All'}
           </Button>
         </Box>
       </Box>

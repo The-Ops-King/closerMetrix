@@ -17,9 +17,10 @@ const router = express.Router();
 const calendarService = require('../../services/calendar/CalendarService');
 const alertService = require('../../utils/AlertService');
 const logger = require('../../utils/logger');
+const webhookAuth = require('../../middleware/webhookAuth');
 
 // POST /webhooks/calendar/:clientId
-router.post('/:clientId', (req, res) => {
+router.post('/:clientId', webhookAuth.calendar, (req, res) => {
   const { clientId } = req.params;
   const resourceState = req.headers['x-goog-resource-state'];
   const channelId = req.headers['x-goog-channel-id'];

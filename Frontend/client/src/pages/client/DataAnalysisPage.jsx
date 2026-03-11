@@ -19,6 +19,10 @@ import Typography from '@mui/material/Typography';
 import ButtonBase from '@mui/material/ButtonBase';
 import Skeleton from '@mui/material/Skeleton';
 import Tooltip from '@mui/material/Tooltip';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import useMediaQuery from '@mui/material/useMediaQuery';
+import { useTheme } from '@mui/material/styles';
 import { COLORS, LAYOUT } from '../../theme/constants';
 import { hexToRgba } from '../../utils/colors';
 import { fmtDollar, fmtPercent, fmtNumber } from '../../utils/formatters';
@@ -646,6 +650,65 @@ function ComparisonTool({ comparisons }) {
 /* ───────────────────────────────────────────────────────────────── */
 
 function TabSwitcher({ tabs, activeTab, onTabChange, lockedTabs }) {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+
+  // Mobile: dropdown select
+  if (isMobile) {
+    return (
+      <Select
+        value={activeTab}
+        onChange={(e) => {
+          const val = e.target.value;
+          if (!lockedTabs?.has(val)) onTabChange(val);
+        }}
+        size="small"
+        sx={{
+          mb: 3, minWidth: 180,
+          background: COLORS.bg.secondary,
+          border: `1px solid ${COLORS.border.subtle}`,
+          borderRadius: 2,
+          color: COLORS.neon.cyan,
+          fontSize: '0.85rem',
+          fontWeight: 600,
+          '.MuiOutlinedInput-notchedOutline': { border: 'none' },
+          '.MuiSvgIcon-root': { color: COLORS.text.secondary },
+        }}
+        MenuProps={{
+          PaperProps: {
+            sx: {
+              background: COLORS.bg.elevated,
+              border: `1px solid ${COLORS.border.subtle}`,
+              borderRadius: 2,
+            },
+          },
+        }}
+      >
+        {tabs.map(tab => {
+          const isLocked = lockedTabs?.has(tab.id);
+          return (
+            <MenuItem
+              key={tab.id}
+              value={tab.id}
+              disabled={isLocked}
+              sx={{
+                display: 'flex', alignItems: 'center', gap: 1,
+                color: isLocked ? COLORS.text.muted : COLORS.text.primary,
+                fontSize: '0.85rem',
+                '&.Mui-selected': { background: hexToRgba(COLORS.neon.cyan, 0.12), color: COLORS.neon.cyan },
+                '&:hover': { background: hexToRgba(COLORS.neon.cyan, 0.06) },
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>{isLocked ? 'lock' : tab.icon}</span>
+              {tab.label}
+            </MenuItem>
+          );
+        })}
+      </Select>
+    );
+  }
+
+  // Desktop: horizontal button tabs
   return (
     <Box sx={{ display: 'flex', gap: 0.5, mb: 3, p: 0.5, borderRadius: 2, background: COLORS.bg.secondary, border: `1px solid ${COLORS.border.subtle}`, width: 'fit-content' }}>
       {tabs.map(tab => {

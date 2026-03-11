@@ -180,11 +180,13 @@ function ProjCol({ title, toggleChecked, onToggle, toggleOn, toggleOff, sub, dat
         </Typography>
       </Box>
 
-      {/* Projection Cards -- 3 across (2 on mobile) + 2 across */}
+      {/* Projection Cards -- 3 across on desktop, 2x1 on mobile (Projected Closes full-width) */}
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)' }, gap: 1, mb: 0.75 }}>
         <Scorecard label="Calls Scheduled" value={data.s} format="number" glowColor={COLORS.neon.cyan} />
         <Scorecard label="Calls Held" value={data.h} format="number" glowColor={COLORS.neon.cyan} />
-        <Scorecard label="Projected Closes" value={data.c} format="number" glowColor={COLORS.neon.green} />
+        <Box sx={{ gridColumn: { xs: '1 / -1', sm: 'auto' } }}>
+          <Scorecard label="Projected Closes" value={data.c} format="number" glowColor={COLORS.neon.green} />
+        </Box>
       </Box>
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1, mb: 0.75 }}>
         <Scorecard label="Projected Revenue" value={data.r} format="currency" glowColor={COLORS.neon.amber} />
@@ -195,7 +197,9 @@ function ProjCol({ title, toggleChecked, onToggle, toggleOn, toggleOff, sub, dat
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)' }, gap: 0.75, mb: 0.5 }}>
         <DeltaIndicator value={delta.s} label={`sched / ${period}`} />
         <DeltaIndicator value={delta.h} label={`held / ${period}`} />
-        <DeltaIndicator value={delta.c} label={`closes / ${period}`} />
+        <Box sx={{ gridColumn: { xs: '1 / -1', sm: 'auto' } }}>
+          <DeltaIndicator value={delta.c} label={`closes / ${period}`} />
+        </Box>
       </Box>
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 0.75 }}>
         <DeltaIndicator value={delta.r} label={`rev / ${period}`} isDollar />
@@ -644,11 +648,13 @@ export default function ProjectionsPage() {
             <Scorecard label="Avg Calls to Close" value={b.avgCallsToClose} format="decimal" glowColor={COLORS.text.primary} />
           </Box>
 
-          {/* Monthly aggregate metrics -- 3 across */}
+          {/* Monthly aggregate metrics -- 3 across, Monthly Closes full-width on mobile */}
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)' }, gap: 1.25 }}>
             <Scorecard label="Monthly Revenue" value={b.currentRevenue} format="currency" glowColor={COLORS.neon.amber} />
             <Scorecard label="Monthly Cash" value={b.currentCash} format="currency" glowColor={COLORS.neon.amber} />
-            <Scorecard label="Monthly Closes" value={b.currentCloses} format="number" glowColor={COLORS.neon.green} />
+            <Box sx={{ gridColumn: { xs: '1 / -1', sm: 'auto' } }}>
+              <Scorecard label="Monthly Closes" value={b.currentCloses} format="number" glowColor={COLORS.neon.green} />
+            </Box>
           </Box>
 
           {/* Date range context -- so user knows what period the baseline is calculated from */}

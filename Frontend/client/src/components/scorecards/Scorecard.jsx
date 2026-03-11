@@ -269,7 +269,12 @@ export default function Scorecard({
           <Typography
             sx={{
               color: locked ? COLORS.text.muted : glowColor,
-              fontSize: { xs: '1.8rem', sm: '2rem', md: '2.5rem' },
+              // Shrink font on mobile when value string is long (e.g. "$10,800,000")
+              fontSize: displayValue && String(displayValue).length > 8
+                ? { xs: '1.2rem', sm: '1.6rem', md: '2.5rem' }
+                : displayValue && String(displayValue).length > 6
+                  ? { xs: '1.5rem', sm: '1.8rem', md: '2.5rem' }
+                  : { xs: '1.8rem', sm: '2rem', md: '2.5rem' },
               fontWeight: 700,
               letterSpacing: '-0.02em',
               lineHeight: 1.1,
@@ -278,6 +283,7 @@ export default function Scorecard({
               opacity: revealed ? 1 : 0,
               transform: revealed ? 'translateY(0)' : 'translateY(8px)',
               transition: 'opacity 0.4s ease-out, transform 0.4s ease-out',
+              whiteSpace: 'nowrap',
             }}
           >
             {displayValue}

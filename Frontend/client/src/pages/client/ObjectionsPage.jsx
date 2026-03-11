@@ -232,6 +232,7 @@ export default function ObjectionsPage() {
                 data={charts.resolutionByCloser?.data || []}
                 series={charts.resolutionByCloser?.series || []}
                 yAxisFormat="percent"
+                height={280}
               />
             </ChartWrapper>
           </Box>

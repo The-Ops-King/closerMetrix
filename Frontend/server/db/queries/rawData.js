@@ -50,10 +50,10 @@ function toDateStr(val) {
  * @param {string} clientId - Client ID for data isolation
  * @returns {Promise<{ calls: Array, objections: Array, closeCycles: Array }>}
  */
-async function getRawData(clientId, { page = 1, pageSize = 500 } = {}) {
-  // Validate and clamp pagination params
+async function getRawData(clientId, { page = 1, pageSize = 10000 } = {}) {
+  // Validate and clamp pagination params — default to 10k to ensure full dataset loads
   page = Math.max(1, Math.floor(Number(page)) || 1);
-  pageSize = Math.min(1000, Math.max(1, Math.floor(Number(pageSize)) || 500));
+  pageSize = Math.min(50000, Math.max(1, Math.floor(Number(pageSize)) || 10000));
 
   if (!bq.isAvailable() || clientId.startsWith('demo_')) {
     logger.debug('Returning demo raw data', { clientId });

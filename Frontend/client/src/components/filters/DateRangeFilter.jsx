@@ -11,7 +11,7 @@
  * Reads/writes to FilterContext via useFilters().
  * dateRange shape: { start: 'YYYY-MM-DD', end: 'YYYY-MM-DD' }
  *
- * Default on initial load: "This Month" (start of current month to today).
+ * Default on initial load: "Last 30 Days" (30 days back from today).
  */
 
 import React, { useState, useCallback } from 'react';
@@ -149,9 +149,9 @@ export default function DateRangeFilter() {
   const open = Boolean(anchorEl);
 
   // Active mode tab: 'this' | 'last' | 'between'
-  const [mode, setMode] = useState('this');
+  const [mode, setMode] = useState('last');
   // Which period button is highlighted (null when in "between" mode)
-  const [activePeriod, setActivePeriod] = useState('Month');
+  const [activePeriod, setActivePeriod] = useState('30 Days');
   // Temporary state for the "Between" custom range inputs
   const [betweenStart, setBetweenStart] = useState('');
   const [betweenEnd, setBetweenEnd] = useState('');

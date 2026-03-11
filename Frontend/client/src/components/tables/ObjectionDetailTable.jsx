@@ -23,9 +23,13 @@ import FormControl from '@mui/material/FormControl';
 import Button from '@mui/material/Button';
 import ButtonGroup from '@mui/material/ButtonGroup';
 import IconButton from '@mui/material/IconButton';
+import Collapse from '@mui/material/Collapse';
+import useMediaQuery from '@mui/material/useMediaQuery';
+import { useTheme } from '@mui/material/styles';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import CloseIcon from '@mui/icons-material/Close';
+import TuneIcon from '@mui/icons-material/Tune';
 import dayjs from 'dayjs';
 import { COLORS, LAYOUT } from '../../theme/constants';
 import { hexToRgba } from '../../utils/colors';
@@ -91,10 +95,14 @@ export default function ObjectionDetailTable({
   outcomeFilter = [],
   setOutcomeFilter,
 }) {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const { objectionType, setObjectionType, closerIds, setCloserIds, dateRange } = useFilters();
 
   // Normalize objectionType from context
   const selectedTypes = objectionType || [];
+  const hasActiveFilters = selectedTypes.length > 0 || resolvedFilter !== null || closerIds.length > 0 || outcomeFilter.length > 0;
 
   // Build closer ID→name lookup and sorted options from row data
   const { closerIdToName, closerOptions } = useMemo(() => {
@@ -214,7 +222,7 @@ export default function ObjectionDetailTable({
         border: `1px solid ${COLORS.border.subtle}`,
         borderTop: `2px solid ${hexToRgba(accentColor, 0.3)}`,
         borderRadius: `${LAYOUT.cardBorderRadius}px`,
-        padding: 3,
+        padding: { xs: 1.5, md: 3 },
         transition: 'border-color 0.3s ease, box-shadow 0.3s ease',
         '&:hover': {
           borderColor: 'rgba(255, 255, 255, 0.06)',
@@ -223,12 +231,31 @@ export default function ObjectionDetailTable({
         },
       }}
     >
-      {/* Section title */}
-      <Box sx={{ mb: 2 }}>
+      {/* Section title + mobile filter toggle */}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
         <SectionHeader title="Objection Detail" color={accentColor} size="sm" />
+        {isMobile && (
+          <Button
+            onClick={() => setFiltersOpen(prev => !prev)}
+            size="small"
+            startIcon={<TuneIcon sx={{ fontSize: 16 }} />}
+            sx={{
+              backgroundColor: filtersOpen ? 'rgba(77, 212, 232, 0.10)' : COLORS.bg.tertiary,
+              border: `1px solid ${filtersOpen ? COLORS.neon.cyan : COLORS.border.subtle}`,
+              borderRadius: '8px',
+              color: filtersOpen ? COLORS.neon.cyan : COLORS.text.secondary,
+              fontSize: '0.8rem', fontWeight: 500, textTransform: 'none',
+              px: 1.5, py: 0.5, minHeight: 34,
+              '&:hover': { backgroundColor: COLORS.bg.elevated, borderColor: COLORS.neon.cyan, color: COLORS.neon.cyan },
+            }}
+          >
+            Filters{hasActiveFilters ? ` (${selectedTypes.length + (resolvedFilter !== null ? 1 : 0) + closerIds.length + outcomeFilter.length})` : ''}
+          </Button>
+        )}
       </Box>
 
       {/* ─── Inline Filter Bar ─────────────────────────────────────────── */}
+      <Collapse in={!isMobile || filtersOpen} timeout={isMobile ? 250 : 0}>
       <Box
         sx={{
           display: 'flex',
@@ -241,7 +268,7 @@ export default function ObjectionDetailTable({
         }}
       >
         {/* Objection Type — linked to FilterContext */}
-        <FormControl size="small" sx={{ minWidth: 180, maxWidth: 320 }}>
+        <FormControl size="small" sx={{ minWidth: { xs: '100%', md: 180 }, maxWidth: { xs: '100%', md: 320 } }}>
           <Select
             multiple
             value={selectedTypes}
@@ -284,11 +311,13 @@ export default function ObjectionDetailTable({
           size="small"
           sx={{
             height: 40,
+            width: { xs: '100%', md: 'auto' },
             '& .MuiButton-root': {
               textTransform: 'none',
               fontSize: '0.85rem',
               fontWeight: 500,
               minWidth: 0,
+              flex: { xs: 1, md: 'unset' },
               px: 2,
               borderColor: COLORS.border.default,
               color: COLORS.text.secondary,
@@ -317,7 +346,7 @@ export default function ObjectionDetailTable({
         </ButtonGroup>
 
         {/* Closer — linked to FilterContext (uses closerId values, displays names) */}
-        <FormControl size="small" sx={{ minWidth: 180, maxWidth: 320 }}>
+        <FormControl size="small" sx={{ minWidth: { xs: '100%', md: 180 }, maxWidth: { xs: '100%', md: 320 } }}>
           <Select
             multiple
             value={closerIds}
@@ -353,7 +382,7 @@ export default function ObjectionDetailTable({
         </FormControl>
 
         {/* Call Outcome — local multi-select */}
-        <FormControl size="small" sx={{ minWidth: 180, maxWidth: 320 }}>
+        <FormControl size="small" sx={{ minWidth: { xs: '100%', md: 180 }, maxWidth: { xs: '100%', md: 320 } }}>
           <Select
             multiple
             value={outcomeFilter}
@@ -392,7 +421,7 @@ export default function ObjectionDetailTable({
         <DateRangeFilter />
 
         {/* Row count + Download */}
-        <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        <Box sx={{ ml: { xs: 0, md: 'auto' }, width: { xs: '100%', md: 'auto' }, display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Typography sx={{ color: COLORS.text.muted, fontSize: '0.8rem' }}>
             {filteredRows.length} of {rows.length} records
           </Typography>
@@ -420,6 +449,7 @@ export default function ObjectionDetailTable({
               URL.revokeObjectURL(url);
             }}
             sx={{
+              display: { xs: 'none', md: 'inline-flex' },
               textTransform: 'none',
               fontSize: '0.78rem',
               fontWeight: 500,
@@ -435,6 +465,7 @@ export default function ObjectionDetailTable({
           </Button>
         </Box>
       </Box>
+      </Collapse>
 
       {/* ─── Data Table ────────────────────────────────────────────────── */}
       <Box ref={tableAreaRef}>
