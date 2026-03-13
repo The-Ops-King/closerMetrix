@@ -47,7 +47,12 @@ router.post('/:provider', webhookAuth.transcript, (req, res) => {
   res.status(200).json({ status: 'ok', processing: true });
 
   // Process asynchronously after response is sent
-  transcriptService.processTranscriptWebhook(provider, req.body)
+  // Pass clientIdHint from webhook auth (set when X-Client-Id header is present)
+  const options = {};
+  if (req.clientId) {
+    options.clientIdHint = req.clientId;
+  }
+  transcriptService.processTranscriptWebhook(provider, req.body, options)
     .then(result => {
       logger.info('Transcript webhook processed', {
         provider,

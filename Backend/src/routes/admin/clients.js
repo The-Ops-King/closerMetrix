@@ -180,7 +180,7 @@ router.put('/:clientId', async (req, res) => {
       'name', 'company_name', 'primary_contact_email', 'primary_contact_phone',
       'phone', 'website', 'plan_tier', 'status', 'settings_json', 'filter_word',
       'ai_provider', 'timezone', 'offer_name', 'offer_price', 'offer_description',
-      'calendar_source', 'transcript_provider', 'script_template',
+      'calendar_source', 'transcript_provider', 'tldv_api_key', 'script_template',
       'ai_prompt_overall', 'ai_prompt_discovery', 'ai_prompt_pitch',
       'ai_prompt_close', 'ai_prompt_objections', 'common_objections',
       'disqualification_criteria',

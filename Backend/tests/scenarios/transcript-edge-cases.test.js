@@ -279,12 +279,35 @@ describe('Transcript pipeline — additional edge cases', () => {
     expect(calls[0].prospect_email).toBe('prospect@generic.com');
   });
 
-  it('should handle tldv provider webhook with meeting data', async () => {
+  it('should acknowledge tldv MeetingReady event without processing', async () => {
+    const meetingReadyPayload = {
+      id: 'tldv_event_000',
+      event: 'MeetingReady',
+      data: {
+        id: 'meeting_tldv_000',
+        name: 'Discovery Call with Jane',
+        happenedAt: '2026-02-20T20:00:00Z',
+        url: 'https://tldv.io/app/meetings/xxx',
+        duration: 2700,
+        organizer: { name: 'Sarah Closer', email: 'sarah@acmecoaching.com' },
+        invitees: [{ name: 'Jane Prospect', email: 'jane@example.com' }],
+      },
+      executedAt: '2026-02-20T20:50:00Z',
+    };
+
+    const ackResult = await transcriptService.processTranscriptWebhook('tldv', meetingReadyPayload);
+    expect(ackResult.action).toBe('meeting_ready_ack');
+    // No call record should be created for MeetingReady
+    const calls = mockBQ._getTable('Calls');
+    expect(calls).toHaveLength(0);
+  });
+
+  it('should handle tldv TranscriptReady webhook with meeting data', async () => {
     mockBQ._seedTable('Closers', [MOCK_CLOSER]);
 
     const tldvPayload = {
       id: 'tldv_event_001',
-      event: 'MeetingReady',
+      event: 'TranscriptReady',
       data: {
         id: 'meeting_tldv_001',
         name: 'Discovery Call with Jane',

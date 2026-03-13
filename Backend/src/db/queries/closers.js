@@ -12,9 +12,9 @@ const CLOSERS_TABLE = bq.table('Closers');
 // Explicit column list for closer records — used instead of SELECT *
 const CLOSER_COLUMNS = [
   'closer_id', 'client_id', 'name', 'work_email', 'personal_email',
-  'personal_phone', 'status', 'calendar_email', 'calendar_source',
+  'phone', 'timezone', 'status',
   'transcript_provider', 'transcript_api_key',
-  'onboarding_status', 'onboarding_start_date',
+  'fathom_webhook_id', 'fathom_webhook_secret',
   'created_at', 'last_modified',
 ].join(', ');
 

@@ -148,6 +148,23 @@ router.post('/clients/:clientId/closers/:closerId/register-fathom', (req, res) =
   proxyToBackend(req, res, `/admin/clients/${req.params.clientId}/closers/${req.params.closerId}/register-fathom`);
 });
 
+// ── tl;dv Routes ──────────────────────────────────────────────
+
+// PATCH /api/backend/admin/tldv/:clientId → PATCH /admin/tldv/:clientId
+router.patch('/admin/tldv/:clientId', (req, res) => {
+  proxyToBackend(req, res, `/admin/tldv/${req.params.clientId}`);
+});
+
+// POST /api/backend/admin/tldv/:clientId/test → POST /admin/tldv/:clientId/test
+router.post('/admin/tldv/:clientId/test', (req, res) => {
+  proxyToBackend(req, res, `/admin/tldv/${req.params.clientId}/test`);
+});
+
+// GET /api/backend/admin/tldv/:clientId/status → GET /admin/tldv/:clientId/status
+router.get('/admin/tldv/:clientId/status', (req, res) => {
+  proxyToBackend(req, res, `/admin/tldv/${req.params.clientId}/status`);
+});
+
 // ── System Routes ──────────────────────────────────────────────
 
 // GET /api/backend/health → GET /admin/health

@@ -175,7 +175,18 @@ const webhookAuth = {
       });
     }
 
-    // If client has a secret, signature MUST be present
+    // tl;dv does NOT support HMAC webhook signing — it uses X-Client-Id for auth.
+    // Allow tl;dv requests through without a signature if the client is identified.
+    if (!signatureHeader && req.params.provider === 'tldv') {
+      logger.info('Transcript webhook: tl;dv provider — skipping HMAC (not supported by tl;dv)', {
+        clientId,
+      });
+      req.client = client;
+      req.clientId = clientId;
+      return next();
+    }
+
+    // For other providers: if client has a secret, signature MUST be present
     if (!signatureHeader) {
       logger.warn('Transcript webhook auth failed: no signature header', {
         clientId,

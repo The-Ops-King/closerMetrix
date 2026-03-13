@@ -50,6 +50,11 @@ import PsychologyIcon from '@mui/icons-material/Psychology';
 import DescriptionIcon from '@mui/icons-material/Description';
 import PaidIcon from '@mui/icons-material/Paid';
 import FilterListIcon from '@mui/icons-material/FilterList';
+import MicIcon from '@mui/icons-material/Mic';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import LinkIcon from '@mui/icons-material/Link';
 import { COLORS, LAYOUT } from '../../theme/constants';
 import { useAuth } from '../../context/AuthContext';
 import { meetsMinTier } from '../../utils/tierConfig';
@@ -71,8 +76,14 @@ const AI_PROVIDERS = [
   { key: 'gemini', label: 'Gemini', subtitle: 'Google', color: COLORS.neon.cyan },
 ];
 
+const TRANSCRIPT_PROVIDERS = [
+  { key: 'fathom', label: 'Fathom', subtitle: 'Per-closer API keys', color: COLORS.neon.cyan },
+  { key: 'tldv', label: 'tl;dv', subtitle: 'Per-client API key', color: COLORS.neon.green },
+];
+
 const DEFAULT_SETTINGS = {
   ai_provider: 'claude',
+  transcript_provider: 'fathom',
   kpi_targets: {
     show_rate: null,
     close_rate: null,
@@ -343,6 +354,223 @@ function AiProviderSection({ settings, setSettings, saveSettingsJson, setAiProvi
   );
 }
 
+// ── Transcript Provider Section ──────────────────────────────
+function TranscriptProviderSection({ settings, client, clientId, authOptions, saveSettingsJson, onRefresh }) {
+  const [pendingProvider, setPendingProvider] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [apiKey, setApiKey] = useState('');
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [savingKey, setSavingKey] = useState(false);
+  const [savedKey, setSavedKey] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState(null);
+  const [copied, setCopied] = useState(false);
+
+  const currentProvider = client?.transcript_provider || settings.transcript_provider || 'fathom';
+  const selectedProvider = pendingProvider || currentProvider;
+  const hasUnsavedChange = pendingProvider !== null && pendingProvider !== currentProvider;
+  const hasStoredKey = !!client?.tldv_api_key;
+
+  const webhookUrl = `https://api.closermetrix.com/webhooks/transcript/tldv`;
+
+  const handleSaveProvider = async () => {
+    if (!hasUnsavedChange) return;
+    setSaving(true);
+    try {
+      await saveSettingsJson({ transcript_provider: pendingProvider });
+      // Also update the client-level field via backend
+      await apiPatch(`/backend/admin/tldv/${clientId}`, { transcript_provider: pendingProvider }, authOptions);
+      setPendingProvider(null);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+      onRefresh();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveApiKey = async () => {
+    if (!apiKey.trim()) return;
+    setSavingKey(true);
+    try {
+      await apiPatch(`/backend/admin/tldv/${clientId}`, { tldv_api_key: apiKey.trim() }, authOptions);
+      setSavedKey(true);
+      setApiKey('');
+      setTimeout(() => setSavedKey(false), 2000);
+      onRefresh();
+    } finally {
+      setSavingKey(false);
+    }
+  };
+
+  const handleTestConnection = async () => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const res = await apiPost(`/backend/admin/tldv/${clientId}/test`, {
+        tldv_api_key: apiKey.trim() || undefined,
+      }, authOptions);
+      setTestResult(res.valid ? 'success' : `Failed: ${res.error || 'Invalid API key'}`);
+    } catch (err) {
+      setTestResult(`Error: ${err.message}`);
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const handleCopyWebhookUrl = () => {
+    navigator.clipboard.writeText(webhookUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <>
+      {/* Provider selector cards */}
+      <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mb: 3 }}>
+        {TRANSCRIPT_PROVIDERS.map((p) => {
+          const selected = selectedProvider === p.key;
+          return (
+            <Box
+              key={p.key}
+              onClick={() => {
+                if (p.key === currentProvider) {
+                  setPendingProvider(null);
+                } else {
+                  setPendingProvider(p.key);
+                }
+                setSaved(false);
+              }}
+              sx={{
+                p: 2,
+                borderRadius: 2,
+                border: `1px solid ${selected ? p.color : COLORS.border.subtle}`,
+                backgroundColor: selected ? `${p.color}10` : 'transparent',
+                cursor: 'pointer',
+                minWidth: 140,
+                textAlign: 'center',
+                transition: 'all 0.2s',
+                '&:hover': { borderColor: p.color, backgroundColor: `${p.color}08` },
+              }}
+            >
+              <Typography sx={{ fontWeight: 600, color: selected ? p.color : COLORS.text.primary }}>
+                {p.label}
+              </Typography>
+              <Typography sx={{ fontSize: '0.75rem', color: COLORS.text.secondary, mt: 0.5 }}>
+                {p.subtitle}
+              </Typography>
+              {selected && (
+                <CheckCircleIcon sx={{ color: p.color, fontSize: 18, mt: 1 }} />
+              )}
+            </Box>
+          );
+        })}
+      </Box>
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 3 }}>
+        <SaveButton onClick={handleSaveProvider} saving={saving} saved={saved} disabled={!hasUnsavedChange} label="Save Provider" />
+      </Box>
+
+      {/* tl;dv-specific settings */}
+      {(selectedProvider === 'tldv' || currentProvider === 'tldv') && (
+        <Box sx={{ borderTop: `1px solid ${COLORS.border.subtle}`, pt: 2 }}>
+          <Typography sx={{ color: COLORS.text.primary, fontWeight: 600, mb: 2, fontSize: '0.95rem' }}>
+            tl;dv Configuration
+          </Typography>
+
+          {/* API Key */}
+          <Box sx={{ mb: 2 }}>
+            <Typography sx={{ color: COLORS.text.secondary, fontSize: '0.85rem', mb: 1 }}>
+              API Key {hasStoredKey && <Chip label="Configured" size="small" sx={{ ml: 1, backgroundColor: `${COLORS.neon.green}20`, color: COLORS.neon.green, height: 20, fontSize: '0.7rem' }} />}
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+              <TronTextField
+                size="small"
+                type={showApiKey ? 'text' : 'password'}
+                placeholder={hasStoredKey ? '••••••••••••••• (key stored)' : 'Paste your tl;dv API key'}
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                sx={{ flex: 1 }}
+              />
+              <IconButton onClick={() => setShowApiKey(!showApiKey)} sx={{ color: COLORS.text.muted }}>
+                {showApiKey ? <VisibilityOffIcon fontSize="small" /> : <VisibilityIcon fontSize="small" />}
+              </IconButton>
+            </Box>
+            <Box sx={{ display: 'flex', gap: 1, mt: 1, justifyContent: 'flex-end' }}>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={handleTestConnection}
+                disabled={testing || (!apiKey.trim() && !hasStoredKey)}
+                sx={{
+                  color: COLORS.neon.cyan,
+                  borderColor: COLORS.neon.cyan,
+                  '&:hover': { borderColor: COLORS.neon.cyan, backgroundColor: `${COLORS.neon.cyan}10` },
+                }}
+              >
+                {testing ? 'Testing...' : 'Test Connection'}
+              </Button>
+              <SaveButton onClick={handleSaveApiKey} saving={savingKey} saved={savedKey} disabled={!apiKey.trim()} label="Save Key" />
+            </Box>
+            {testResult && (
+              <Typography sx={{
+                mt: 1,
+                fontSize: '0.8rem',
+                color: testResult === 'success' ? COLORS.neon.green : COLORS.neon.red,
+              }}>
+                {testResult === 'success' ? 'API key is valid' : testResult}
+              </Typography>
+            )}
+          </Box>
+
+          {/* Webhook URL */}
+          <Box sx={{ mb: 2 }}>
+            <Typography sx={{ color: COLORS.text.secondary, fontSize: '0.85rem', mb: 1 }}>
+              Webhook URL
+            </Typography>
+            <Box sx={{
+              display: 'flex', alignItems: 'center', gap: 1,
+              p: 1.5, borderRadius: 1,
+              backgroundColor: COLORS.bg.secondary,
+              border: `1px solid ${COLORS.border.subtle}`,
+            }}>
+              <LinkIcon sx={{ color: COLORS.text.muted, fontSize: 18 }} />
+              <Typography sx={{ color: COLORS.text.primary, fontSize: '0.85rem', fontFamily: 'monospace', flex: 1, wordBreak: 'break-all' }}>
+                {webhookUrl}
+              </Typography>
+              <IconButton onClick={handleCopyWebhookUrl} size="small" sx={{ color: copied ? COLORS.neon.green : COLORS.text.muted }}>
+                {copied ? <CheckCircleIcon fontSize="small" /> : <ContentCopyIcon fontSize="small" />}
+              </IconButton>
+            </Box>
+          </Box>
+
+          {/* Setup instructions */}
+          <Box sx={{
+            p: 2, borderRadius: 1,
+            backgroundColor: `${COLORS.neon.teal}08`,
+            border: `1px solid ${COLORS.neon.teal}20`,
+          }}>
+            <Typography sx={{ color: COLORS.neon.teal, fontWeight: 600, fontSize: '0.85rem', mb: 1 }}>
+              Setup Instructions
+            </Typography>
+            {[
+              'Go to tl;dv Settings → Webhooks',
+              `Add webhook URL: ${webhookUrl}`,
+              `Add custom header: X-Client-Id: ${clientId}`,
+              'Set scope to Team or Organization',
+              'Enable both MeetingReady and TranscriptReady events',
+            ].map((step, i) => (
+              <Typography key={i} sx={{ color: COLORS.text.secondary, fontSize: '0.8rem', mb: 0.5, pl: 1 }}>
+                {i + 1}. {step}
+              </Typography>
+            ))}
+          </Box>
+        </Box>
+      )}
+    </>
+  );
+}
+
 // ── Main Component ───────────────────────────────────────────
 
 export default function SettingsPage() {
@@ -483,6 +711,18 @@ export default function SettingsPage() {
           <CallSourcesSection
             sources={settings.call_sources || []}
             onSave={(call_sources) => saveSettingsJson({ call_sources })}
+          />
+        </SettingsSection>
+
+        {/* 2b. Transcript Provider — basic */}
+        <SettingsSection title="Transcript Provider" icon={<MicIcon fontSize="small" />} minTier="basic" tier={tier} color={COLORS.neon.teal}>
+          <TranscriptProviderSection
+            settings={settings}
+            client={client}
+            clientId={effectiveClientId}
+            authOptions={authOptions}
+            saveSettingsJson={saveSettingsJson}
+            onRefresh={() => fetchSettings(true)}
           />
         </SettingsSection>
 

@@ -58,6 +58,23 @@ module.exports = {
   },
 
   /**
+   * Finds all active clients using tl;dv with a tldv_api_key set.
+   * Used by TimeoutService to poll tl;dv for recordings when webhooks don't arrive.
+   *
+   * @returns {Array} Array of client records with tldv_api_key
+   */
+  async findTldvClientsWithApiKey() {
+    return bq.queryAdmin(
+      `SELECT client_id, company_name, tldv_api_key FROM ${CLIENTS_TABLE}
+       WHERE LOWER(status) = 'active'
+         AND LOWER(transcript_provider) = 'tldv'
+         AND tldv_api_key IS NOT NULL
+         AND tldv_api_key != ''
+       ORDER BY company_name ASC`
+    );
+  },
+
+  /**
    * Updates fields on an existing client record.
    */
   async update(clientId, updates) {

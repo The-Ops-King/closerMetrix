@@ -43,7 +43,9 @@ async function getSettingsData(clientId) {
         ai_context_notes,
         script_template,
         notification_email,
-        settings_json
+        settings_json,
+        transcript_provider,
+        tldv_api_key
       FROM ${bq.table('Clients')}
       WHERE client_id = @clientId`,
       { clientId }
@@ -67,6 +69,12 @@ async function getSettingsData(clientId) {
   ]);
 
   const client = clientRows[0] || null;
+
+  // Mask tldv_api_key — frontend only needs to know it exists
+  if (client?.tldv_api_key) {
+    const key = String(client.tldv_api_key);
+    client.tldv_api_key = key.length > 4 ? '****' + key.slice(-4) : '****';
+  }
 
   // Parse settings_json if present
   let settingsJson = null;

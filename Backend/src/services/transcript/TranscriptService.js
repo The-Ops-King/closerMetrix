@@ -17,10 +17,12 @@
 const fathomAdapter = require('./adapters/FathomAdapter');
 const tldvAdapter = require('./adapters/TLDVAdapter');
 const genericAdapter = require('./adapters/GenericAdapter');
+const tldvAPI = require('./TldvAPI');
 const callStateManager = require('../CallStateManager');
 const aiProcessor = require('../ai/AIProcessor');
 const callQueries = require('../../db/queries/calls');
 const closerQueries = require('../../db/queries/closers');
+const clientQueries = require('../../db/queries/clients');
 const auditLogger = require('../../utils/AuditLogger');
 const alertService = require('../../utils/AlertService');
 const logger = require('../../utils/logger');
@@ -61,6 +63,21 @@ class TranscriptService {
       throw new Error(`No adapter found for provider: ${provider}`);
     }
 
+    // tl;dv MeetingReady: acknowledge and return early — no transcript yet
+    if (provider === 'tldv' && tldvAdapter.isMeetingReadyEvent(rawPayload)) {
+      const meetingId = tldvAdapter.getMeetingId(rawPayload);
+      logger.info('tl;dv MeetingReady event acknowledged — waiting for TranscriptReady', {
+        meetingId,
+      });
+      return {
+        action: 'meeting_ready_ack',
+        callRecord: null,
+        transcript: null,
+        provider,
+        meetingId,
+      };
+    }
+
     // Step 1: Normalize the payload
     const transcript = adapter.normalizePayload(rawPayload);
 
@@ -83,7 +100,7 @@ class TranscriptService {
     }
 
     // Step 3: Identify the client from the closer's email
-    // When callIdHint + clientIdHint are provided (from Fathom polling),
+    // When callIdHint + clientIdHint are provided (from polling),
     // use the hinted client to avoid ambiguity when a closer has records
     // under multiple clients with the same work_email.
     let clientId, closer;
@@ -93,6 +110,56 @@ class TranscriptService {
       closer = await closerQueries.findByWorkEmail(transcript.closerEmail, options.clientIdHint);
       if (closer) {
         clientId = options.clientIdHint;
+      }
+    }
+
+    // tl;dv TranscriptReady may lack closerEmail — use clientIdHint from webhook auth
+    if (!clientId && options.clientIdHint) {
+      clientId = options.clientIdHint;
+    }
+
+    // If tl;dv transcript lacks organizer metadata, fetch it from the API
+    if (provider === 'tldv' && !transcript.closerEmail && transcript.providerMeetingId && clientId) {
+      try {
+        const client = await clientQueries.findById(clientId);
+        if (client && client.tldv_api_key) {
+          const meetingDetails = await tldvAPI.fetchMeetingDetails(
+            transcript.providerMeetingId,
+            client.tldv_api_key
+          );
+          // Merge metadata into transcript
+          if (meetingDetails.organizer?.email) {
+            transcript.closerEmail = meetingDetails.organizer.email;
+          }
+          if (!transcript.prospectEmail && meetingDetails.invitees?.length > 0) {
+            const prospect = meetingDetails.invitees.find(
+              i => i.email?.toLowerCase() !== transcript.closerEmail?.toLowerCase()
+            );
+            if (prospect) {
+              transcript.prospectEmail = prospect.email;
+              transcript.prospectName = prospect.name || null;
+            }
+          }
+          if (!transcript.scheduledStartTime && meetingDetails.happenedAt) {
+            transcript.scheduledStartTime = meetingDetails.happenedAt;
+            transcript.recordingStartTime = meetingDetails.happenedAt;
+          }
+          if (!transcript.durationSeconds && meetingDetails.duration) {
+            transcript.durationSeconds = meetingDetails.duration;
+          }
+          if (!transcript.title && meetingDetails.name) {
+            transcript.title = meetingDetails.name;
+          }
+          if (!transcript.shareUrl && meetingDetails.url) {
+            transcript.shareUrl = meetingDetails.url;
+            transcript.transcriptUrl = meetingDetails.url;
+          }
+        }
+      } catch (error) {
+        logger.warn('Failed to fetch tl;dv meeting details — continuing without metadata', {
+          meetingId: transcript.providerMeetingId,
+          error: error.message,
+        });
       }
     }
 
@@ -116,6 +183,11 @@ class TranscriptService {
 
       clientId = clientInfo.clientId;
       closer = clientInfo.closer;
+    }
+
+    // If we have clientId but not closer yet, look up by email
+    if (clientId && !closer && transcript.closerEmail) {
+      closer = await closerQueries.findByWorkEmail(transcript.closerEmail, clientId);
     }
 
     // Step 4: Match transcript to an existing call record

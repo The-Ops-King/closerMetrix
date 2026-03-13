@@ -31,9 +31,11 @@
 
 const callQueries = require('../db/queries/calls');
 const closerQueries = require('../db/queries/closers');
+const clientQueries = require('../db/queries/clients');
 const callStateManager = require('./CallStateManager');
 const transcriptService = require('./transcript/TranscriptService');
 const fathomAPI = require('./transcript/FathomAPI');
+const tldvAPI = require('./transcript/TldvAPI');
 const alertService = require('../utils/AlertService');
 const config = require('../config');
 const { toISO } = require('../utils/dateUtils');
@@ -161,6 +163,19 @@ class TimeoutService {
         }
       } catch (error) {
         logger.error('TimeoutService — Phase 1.5 (Fathom polling) failed entirely', {
+          error: error.message,
+        });
+      }
+
+      // ── PHASE 1.6: Poll tl;dv for missing transcripts ──
+      try {
+        const tldvResult = await this._pollTldvForMissingTranscripts();
+        totalPolled += tldvResult.matched;
+        if (tldvResult.errors > 0) {
+          errors += tldvResult.errors;
+        }
+      } catch (error) {
+        logger.error('TimeoutService — Phase 1.6 (tl;dv polling) failed entirely', {
           error: error.message,
         });
       }
@@ -446,6 +461,152 @@ class TimeoutService {
     }
 
     logger.info('TimeoutService — Fathom polling complete', result);
+    return result;
+  }
+
+  /**
+   * PHASE 1.6: Polls tl;dv for recordings that match calls waiting for transcripts.
+   *
+   * tl;dv uses per-client API keys (stored on Clients table), not per-closer keys.
+   * For each client with a tldv_api_key and transcript_provider = 'tldv':
+   * 1. Find their closers' calls in "Waiting for Outcome" with no transcript
+   * 2. Fetch recent meetings from tl;dv
+   * 3. Match by organizer email + scheduled time (±30 min)
+   * 4. Process matched recordings through TranscriptService
+   *
+   * @returns {Object} { clients_checked, meetings_found, matched, errors }
+   */
+  async _pollTldvForMissingTranscripts() {
+    const result = { clients_checked: 0, meetings_found: 0, matched: 0, errors: 0 };
+
+    let clients;
+    try {
+      clients = await clientQueries.findTldvClientsWithApiKey();
+    } catch (error) {
+      logger.error('TimeoutService — failed to fetch tl;dv clients', { error: error.message });
+      return result;
+    }
+
+    if (clients.length === 0) {
+      logger.debug('TimeoutService — no tl;dv clients with API keys, skipping polling');
+      return result;
+    }
+
+    logger.info('TimeoutService — polling tl;dv for missing transcripts', {
+      clientCount: clients.length,
+    });
+
+    for (const client of clients) {
+      result.clients_checked++;
+
+      try {
+        // Find all closers for this client
+        const closers = await closerQueries.listByClient(client.client_id);
+        if (closers.length === 0) continue;
+
+        // Collect all waiting calls across closers
+        const allWaitingCalls = [];
+        for (const closer of closers) {
+          const waitingCalls = await callQueries.findWaitingForTranscript(
+            closer.closer_id,
+            client.client_id
+          );
+          for (const call of waitingCalls) {
+            call._closerEmail = closer.work_email;
+          }
+          allWaitingCalls.push(...waitingCalls);
+        }
+
+        if (allWaitingCalls.length === 0) continue;
+
+        // Poll tl;dv for recent meetings
+        let meetings;
+        try {
+          meetings = await tldvAPI.listRecentMeetings(client.tldv_api_key);
+        } catch (error) {
+          logger.error('TimeoutService — tl;dv API poll failed for client', {
+            clientId: client.client_id,
+            error: error.message,
+          });
+          result.errors++;
+          continue;
+        }
+
+        result.meetings_found += meetings.length;
+        if (meetings.length === 0) continue;
+
+        // Match meetings to waiting calls
+        for (const meeting of meetings) {
+          const meetingTime = new Date(meeting.happenedAt || meeting.created_at);
+          const meetingOrganizerEmail = meeting.organizer?.email?.toLowerCase();
+
+          for (const call of allWaitingCalls) {
+            if (call._matched) continue;
+
+            const callTime = new Date(toISO(call.appointment_date));
+            const timeDiffMinutes = Math.abs(meetingTime - callTime) / (1000 * 60);
+
+            // Match if within 30 minutes and organizer matches closer
+            if (timeDiffMinutes <= 30 &&
+                (!meetingOrganizerEmail || meetingOrganizerEmail === call._closerEmail?.toLowerCase())) {
+              logger.info('TimeoutService — tl;dv poll matched meeting to call', {
+                callId: call.call_id,
+                meetingId: meeting.id,
+                timeDiffMinutes: Math.round(timeDiffMinutes),
+              });
+
+              try {
+                // Fetch transcript for this meeting
+                const transcriptSegments = await tldvAPI.fetchTranscript(meeting.id, client.tldv_api_key);
+
+                if (!transcriptSegments || transcriptSegments.length === 0) {
+                  continue; // No transcript available yet
+                }
+
+                // Build a tl;dv-shaped payload for TranscriptService
+                const syntheticPayload = {
+                  event: 'TranscriptReady',
+                  data: {
+                    id: meeting.id,
+                    name: meeting.name,
+                    happenedAt: meeting.happenedAt,
+                    duration: meeting.duration,
+                    url: meeting.url,
+                    organizer: meeting.organizer,
+                    invitees: meeting.invitees,
+                    transcript: transcriptSegments,
+                  },
+                };
+
+                await transcriptService.processTranscriptWebhook('tldv', syntheticPayload, {
+                  callIdHint: call.call_id,
+                  clientIdHint: client.client_id,
+                });
+                result.matched++;
+                call._matched = true;
+              } catch (error) {
+                logger.error('TimeoutService — failed to process polled tl;dv meeting', {
+                  callId: call.call_id,
+                  meetingId: meeting.id,
+                  error: error.message,
+                });
+                result.errors++;
+              }
+
+              break; // Move to next meeting
+            }
+          }
+        }
+      } catch (error) {
+        logger.error('TimeoutService — tl;dv polling error for client', {
+          clientId: client.client_id,
+          error: error.message,
+        });
+        result.errors++;
+      }
+    }
+
+    logger.info('TimeoutService — tl;dv polling complete', result);
     return result;
   }
 }

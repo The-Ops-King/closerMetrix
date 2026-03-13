@@ -112,6 +112,11 @@ const config = {
     ghostCheckIntervalMinutes: parseInt(process.env.GHOST_CHECK_INTERVAL_MINUTES, 10) || 5,
   },
 
+  /** tl;dv API */
+  tldv: {
+    baseUrl: process.env.TLDV_API_BASE_URL || 'https://pasta.tldv.io/v1alpha1',
+  },
+
   /** Fathom transcript polling — backoff intervals in seconds */
   fathom: {
     pollIntervals: (process.env.FATHOM_POLL_INTERVALS || '30,60,120,300,600,900')

@@ -31,14 +31,33 @@
 const BaseTranscriptAdapter = require('./BaseTranscriptAdapter');
 
 class TLDVAdapter extends BaseTranscriptAdapter {
+  /**
+   * Returns the event type from the tl;dv webhook payload.
+   * @param {Object} payload — Raw webhook body
+   * @returns {string} 'MeetingReady' | 'TranscriptReady' | 'unknown'
+   */
+  getEventType(payload) {
+    return payload.event || 'unknown';
+  }
+
+  /**
+   * Checks if this is a MeetingReady event (metadata only, no transcript).
+   * We acknowledge these but don't process them — we wait for TranscriptReady.
+   */
+  isMeetingReadyEvent(payload) {
+    return this.getEventType(payload) === 'MeetingReady';
+  }
+
   normalizePayload(payload) {
     const data = payload.data || {};
     const closerEmail = data.organizer?.email || null;
     const prospectInfo = this._extractProspect(data.invitees, closerEmail);
 
-    // tl;dv may include transcript in the webhook or require a separate fetch
-    const transcript = this._flattenTranscript(data.transcript);
-    const speakers = this._extractSpeakers(data.transcript);
+    // TranscriptReady: transcript segments may be at data.transcript (array)
+    // or directly in data as an array of segments
+    const transcriptData = this._resolveTranscriptData(data);
+    const transcript = this._flattenTranscript(transcriptData);
+    const speakers = this._extractSpeakers(transcriptData);
 
     return {
       closerEmail,
@@ -54,7 +73,7 @@ class TLDVAdapter extends BaseTranscriptAdapter {
       title: data.name || null,
       summary: null,
       provider: 'tldv',
-      providerMeetingId: data.id || null,
+      providerMeetingId: data.id || data.meetingId || null,
       speakerCount: speakers.length || null,
       speakers,
       rawPayload: payload,
@@ -67,11 +86,28 @@ class TLDVAdapter extends BaseTranscriptAdapter {
 
   hasTranscript(payload) {
     const data = payload.data || {};
-    return Array.isArray(data.transcript) && data.transcript.length > 0;
+    const transcriptData = this._resolveTranscriptData(data);
+    return Array.isArray(transcriptData) && transcriptData.length > 0;
   }
 
   getMeetingId(payload) {
-    return payload.data?.id || null;
+    return payload.data?.id || payload.data?.meetingId || null;
+  }
+
+  /**
+   * Resolves transcript data from the payload.
+   * TranscriptReady events may have transcript segments in different locations:
+   * - data.transcript (array of segments)
+   * - data.segments (alternative key)
+   */
+  _resolveTranscriptData(data) {
+    if (Array.isArray(data.transcript) && data.transcript.length > 0) {
+      return data.transcript;
+    }
+    if (Array.isArray(data.segments) && data.segments.length > 0) {
+      return data.segments;
+    }
+    return null;
   }
 
   _extractProspect(invitees, closerEmail) {

@@ -113,7 +113,8 @@ const CLIENT_FIELDS = [
   { key: 'offer_description', label: 'Offer Description', multiline: true, group: 'Offer' },
   // Config
   { key: 'calendar_source', label: 'Calendar Source', group: 'Config' },
-  { key: 'transcript_provider', label: 'Transcript Provider', group: 'Config' },
+  { key: 'transcript_provider', label: 'Transcript Provider', group: 'Config', type: 'select', options: ['fathom', 'tldv'] },
+  { key: 'tldv_api_key', label: 'tl;dv API Key', group: 'Config' },
   // AI Prompts
   { key: 'ai_prompt_overall', label: 'AI Prompt — Overall', multiline: true, group: 'AI' },
   { key: 'ai_prompt_discovery', label: 'AI Prompt — Discovery', multiline: true, group: 'AI' },
@@ -570,7 +571,13 @@ function ClientsTab({ selectedClientId, executeRequest, onClientCreated }) {
           <TextField size="small" label="Phone" value={createForm.primary_contact_phone} onChange={updateCreateField('primary_contact_phone')} sx={{ minWidth: 140, ...inputSx }} />
           <TextField size="small" label="Offer Description" value={createForm.offer_description} onChange={updateCreateField('offer_description')} sx={{ minWidth: 200, flexGrow: 1, ...inputSx }} />
           <TextField size="small" label="Calendar Source" value={createForm.calendar_source} onChange={updateCreateField('calendar_source')} sx={{ minWidth: 160, ...inputSx }} />
-          <TextField size="small" label="Transcript Provider" value={createForm.transcript_provider} onChange={updateCreateField('transcript_provider')} sx={{ minWidth: 160, ...inputSx }} />
+          <FormControl size="small" sx={{ minWidth: 160 }}>
+            <InputLabel>Transcript Provider</InputLabel>
+            <Select label="Transcript Provider" value={createForm.transcript_provider || 'fathom'} onChange={updateCreateField('transcript_provider')}>
+              <MenuItem value="fathom">Fathom</MenuItem>
+              <MenuItem value="tldv">tl;dv</MenuItem>
+            </Select>
+          </FormControl>
         </Box>
         <Button
           variant="contained"
@@ -689,6 +696,18 @@ function ClientsTab({ selectedClientId, executeRequest, onClientCreated }) {
                             <MenuItem value="basic">Basic</MenuItem>
                             <MenuItem value="insight">Insight</MenuItem>
                             <MenuItem value="executive">Executive</MenuItem>
+                          </Select>
+                        </FormControl>
+                      );
+                    }
+                    if (f.type === 'select' && f.options) {
+                      return (
+                        <FormControl key={f.key} size="small" sx={{ minWidth: 160 }}>
+                          <InputLabel sx={{ color: COLORS.text.secondary }}>{f.label}</InputLabel>
+                          <Select value={editForm[f.key] || ''} onChange={updateEditField(f.key)} label={f.label}>
+                            {f.options.map((opt) => (
+                              <MenuItem key={opt} value={opt}>{opt}</MenuItem>
+                            ))}
                           </Select>
                         </FormControl>
                       );
