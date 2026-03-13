@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@emailjs/browser": "^4.4.1",
+    "@remotion/mcp": "^4.0.435",
     "framer-motion": "^12.29.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",

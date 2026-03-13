@@ -88,6 +88,7 @@ app.get('/api/health', (req, res) => {
 
 // ── Route groups ──────────────────────────────────────────────
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/dashboard/chat', require('./routes/chat'));
 app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/backend', require('./middleware/adminAuth'), require('./routes/backendProxy'));

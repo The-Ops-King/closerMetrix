@@ -42,8 +42,6 @@ const { getAdherenceData } = require('../db/queries/adherence');
 const { getCallExportData } = require('../db/queries/callExport');
 const { getRawData } = require('../db/queries/rawData');
 const { getSettingsData } = require('../db/queries/settings');
-const marketPulse = require('../services/marketPulse');
-const insightEngine = require('../services/insightEngine');
 const { getLatestInsight, getLatestInsightForDate, getCompareInsightsForDate, insertInsight, getInsightForToday, countRecentOnDemand } = require('../db/queries/insightLog');
 const { v4: uuidv4 } = require('uuid');
 
@@ -381,51 +379,84 @@ router.get('/raw-data', requireTier('insight'), async (req, res) => {
 });
 
 // ── Market Pulse (AI Theme Condensing — Insight+) ───────────────
+// AI calls are proxied to the Backend service (which has ANTHROPIC_API_KEY).
+// The dashboard service never holds AI API keys in production.
+
+const { GoogleAuth } = require('google-auth-library');
+const _backendAuth = new GoogleAuth();
+let _backendIdClient = null;
+
+/**
+ * Call a Backend API endpoint (service-to-service).
+ * Used to proxy AI calls so API keys stay on the Backend only.
+ */
+async function _callBackendAPI(path, body) {
+  const url = new URL(path, config.backendApiUrl);
+  const headers = { 'Content-Type': 'application/json', 'X-Admin-Key': config.adminApiKey };
+
+  // Add Cloud Run ID token for production service-to-service auth
+  if (!config.backendApiUrl.includes('localhost')) {
+    try {
+      if (!_backendIdClient) _backendIdClient = await _backendAuth.getIdTokenClient(config.backendApiUrl);
+      const authHeaders = await _backendIdClient.getRequestHeaders();
+      headers['Authorization'] = authHeaders.Authorization;
+    } catch (err) {
+      logger.error('Backend API: failed to get Cloud Run ID token', { error: err.message });
+    }
+  }
+
+  const response = await fetch(url.toString(), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+
+  return response.json();
+}
+
+// Alias for backward compat within this file
+const _callBackendMarketPulse = _callBackendAPI;
+
+/**
+ * Proxy _generateInsightViaBackend() to the Backend.
+ * Returns { text, json, model, tokensUsed } on success.
+ */
+async function _generateInsightViaBackend(clientId, section, metrics, options = {}) {
+  const result = await _callBackendAPI('/admin/insights/generate', {
+    clientId, section, metrics, options,
+  });
+  if (!result.success) {
+    throw new Error(result.error || 'Backend insight generation failed');
+  }
+  return result.data;
+}
 
 router.post('/market-pulse', async (req, res) => {
   try {
-    if (!marketPulse.isAvailable()) {
-      return res.status(503).json({
-        success: false,
-        error: 'Market Pulse AI is not configured',
-      });
-    }
-
     const { texts, type, force } = req.body;
 
     // Validate type
     if (!type || !['pains', 'goals'].includes(type)) {
-      return res.status(400).json({
-        success: false,
-        error: 'type must be "pains" or "goals"',
-      });
+      return res.status(400).json({ success: false, error: 'type must be "pains" or "goals"' });
     }
 
     // Validate texts
     if (!Array.isArray(texts) || texts.length === 0) {
-      return res.json({
-        success: true,
-        data: { themes: [] },
-      });
+      return res.json({ success: true, data: { themes: [] } });
     }
 
-    // Cap at 500
-    const capped = texts.slice(0, 500);
-    const themes = await marketPulse.condenseTexts(req.clientId, type, capped, { force: !!force, aiProvider: req.aiProvider });
-
-    res.json({
-      success: true,
-      data: { themes },
-    });
-  } catch (err) {
-    logger.error('Market Pulse endpoint error', {
-      error: err.message,
+    const result = await _callBackendMarketPulse('/admin/market-pulse/condense', {
       clientId: req.clientId,
+      texts: texts.slice(0, 500),
+      type,
+      force: !!force,
+      aiProvider: req.aiProvider || 'claude',
     });
-    res.status(500).json({
-      success: false,
-      error: 'Failed to generate market pulse themes',
-    });
+
+    res.status(result.success ? 200 : 500).json(result);
+  } catch (err) {
+    logger.error('Market Pulse endpoint error', { error: err.message, clientId: req.clientId });
+    res.status(500).json({ success: false, error: 'Failed to generate market pulse themes' });
   }
 });
 
@@ -433,10 +464,6 @@ router.post('/market-pulse', async (req, res) => {
 
 router.post('/market-pulse/script-comparison', async (req, res) => {
   try {
-    if (!marketPulse.isAvailable()) {
-      return res.status(503).json({ success: false, error: 'Market Pulse AI is not configured' });
-    }
-
     const { themes, type } = req.body;
 
     if (!type || !['pains', 'goals'].includes(type)) {
@@ -447,7 +474,7 @@ router.post('/market-pulse/script-comparison', async (req, res) => {
       return res.json({ success: true, data: { addressed: [], gaps: [], unused: [] } });
     }
 
-    // Fetch the client's script template
+    // Fetch the client's script template (BQ query stays on dashboard side)
     const settings = await getSettingsData(req.clientId);
     const scriptTemplate = settings?.script_template;
 
@@ -455,9 +482,15 @@ router.post('/market-pulse/script-comparison', async (req, res) => {
       return res.json({ success: true, data: null, message: 'No script template configured' });
     }
 
-    const result = await marketPulse.compareWithScript(req.clientId, type, themes, scriptTemplate, req.aiProvider);
+    const result = await _callBackendMarketPulse('/admin/market-pulse/script-comparison', {
+      clientId: req.clientId,
+      themes,
+      type,
+      scriptTemplate,
+      aiProvider: req.aiProvider || 'claude',
+    });
 
-    res.json({ success: true, data: result });
+    res.status(result.success ? 200 : 500).json(result);
   } catch (err) {
     logger.error('Script comparison endpoint error', { error: err.message, clientId: req.clientId });
     res.status(500).json({ success: false, error: 'Failed to generate script comparison' });
@@ -544,7 +577,7 @@ router.get('/insights', async (req, res) => {
 
 router.post('/insights', async (req, res) => {
   try {
-    if (!insightEngine.isAvailable()) {
+    if (!true /* AI availability checked by Backend */) {
       return res.status(503).json({
         success: false,
         error: 'AI Insights not configured',
@@ -607,7 +640,7 @@ router.post('/insights', async (req, res) => {
       // KPI targets are optional — don't fail the insight
     }
 
-    const result = await insightEngine.generateInsight(
+    const result = await _generateInsightViaBackend(
       req.clientId,
       section,
       metrics,
@@ -728,7 +761,7 @@ router.get('/data-analysis-insights', async (req, res) => {
 
 router.post('/data-analysis-insights', async (req, res) => {
   try {
-    if (!insightEngine.isAvailable()) {
+    if (!true /* AI availability checked by Backend */) {
       return res.status(503).json({ success: false, error: 'AI not configured' });
     }
 
@@ -784,7 +817,7 @@ router.post('/data-analysis-insights', async (req, res) => {
           dateRange: dateRange || 'the selected period',
         };
 
-        const result = await insightEngine.generateInsight(
+        const result = await _generateInsightViaBackend(
           req.clientId,
           'data-analysis-compare',
           closerMetrics,
@@ -853,21 +886,22 @@ router.post('/data-analysis-insights', async (req, res) => {
         logger.warn('Failed to fetch pains/goals from BQ', { error: err.message, clientId: req.clientId });
       }
 
-      // Cluster pains and goals in parallel via marketPulse (non-fatal)
-      const [painsThemes, goalsThemes] = await Promise.all([
-        (rawPains.length > 0 && marketPulse.isAvailable())
-          ? marketPulse.condenseTexts(req.clientId, 'pains', rawPains.slice(0, 500), { aiProvider: req.aiProvider }).catch(err => {
-              logger.warn('Market pulse pains clustering failed', { error: err.message, clientId: req.clientId });
-              return null;
-            })
+      // Cluster pains and goals in parallel via Backend market-pulse API (non-fatal)
+      const [painsResult, goalsResult] = await Promise.all([
+        rawPains.length > 0
+          ? _callBackendMarketPulse('/admin/market-pulse/condense', {
+              clientId: req.clientId, texts: rawPains.slice(0, 500), type: 'pains', aiProvider: req.aiProvider || 'claude',
+            }).catch(err => { logger.warn('Market pulse pains clustering failed', { error: err.message, clientId: req.clientId }); return null; })
           : Promise.resolve(null),
-        (rawGoals.length > 0 && marketPulse.isAvailable())
-          ? marketPulse.condenseTexts(req.clientId, 'goals', rawGoals.slice(0, 500), { aiProvider: req.aiProvider }).catch(err => {
-              logger.warn('Market pulse goals clustering failed', { error: err.message, clientId: req.clientId });
-              return null;
-            })
+        rawGoals.length > 0
+          ? _callBackendMarketPulse('/admin/market-pulse/condense', {
+              clientId: req.clientId, texts: rawGoals.slice(0, 500), type: 'goals', aiProvider: req.aiProvider || 'claude',
+            }).catch(err => { logger.warn('Market pulse goals clustering failed', { error: err.message, clientId: req.clientId }); return null; })
           : Promise.resolve(null),
       ]);
+
+      const painsThemes = painsResult?.success ? painsResult.data?.themes : null;
+      const goalsThemes = goalsResult?.success ? goalsResult.data?.themes : null;
 
       if (painsThemes) enrichedMetrics.painsThemes = painsThemes;
       if (goalsThemes) enrichedMetrics.goalsThemes = goalsThemes;
@@ -876,10 +910,18 @@ router.post('/data-analysis-insights', async (req, res) => {
       try {
         const settings = await getSettingsData(req.clientId);
         const scriptTemplate = settings?.script_template;
-        if (scriptTemplate && marketPulse.isAvailable()) {
+        if (scriptTemplate && (painsThemes || goalsThemes)) {
           const [painsAlignment, goalsAlignment] = await Promise.all([
-            painsThemes ? marketPulse.compareWithScript(req.clientId, 'pains', painsThemes, scriptTemplate, req.aiProvider).catch(() => null) : null,
-            goalsThemes ? marketPulse.compareWithScript(req.clientId, 'goals', goalsThemes, scriptTemplate, req.aiProvider).catch(() => null) : null,
+            painsThemes
+              ? _callBackendMarketPulse('/admin/market-pulse/script-comparison', {
+                  clientId: req.clientId, themes: painsThemes, type: 'pains', scriptTemplate, aiProvider: req.aiProvider || 'claude',
+                }).then(r => r?.success ? r.data : null).catch(() => null)
+              : null,
+            goalsThemes
+              ? _callBackendMarketPulse('/admin/market-pulse/script-comparison', {
+                  clientId: req.clientId, themes: goalsThemes, type: 'goals', scriptTemplate, aiProvider: req.aiProvider || 'claude',
+                }).then(r => r?.success ? r.data : null).catch(() => null)
+              : null,
           ]);
           if (painsAlignment) enrichedMetrics.painsScriptAlignment = painsAlignment;
           if (goalsAlignment) enrichedMetrics.goalsScriptAlignment = goalsAlignment;
@@ -889,7 +931,7 @@ router.post('/data-analysis-insights', async (req, res) => {
       }
     }
 
-    const result = await insightEngine.generateInsight(
+    const result = await _generateInsightViaBackend(
       req.clientId,
       promptSection,
       enrichedMetrics,

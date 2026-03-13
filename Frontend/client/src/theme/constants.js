@@ -28,7 +28,7 @@ export const COLORS = {
     red: '#FF4D6D',           // Danger — negative deltas, risk flags
     blue: '#4D7CFF',          // Info — Basic tier, links
     purple: '#B84DFF',        // Special — projections, AI insights
-    teal: '#06b6d4',            // Cash-related metrics
+    teal: '#4DD4E8',            // Alias for cyan — consolidated (was #06b6d4)
   },
 
   // Text hierarchy

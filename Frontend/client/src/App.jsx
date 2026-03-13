@@ -114,7 +114,7 @@ export default function App() {
           {/* ── Catch-all: redirect to admin login ── */}
           <Route path="*" element={<Navigate to="/admin/login" replace />} />
         </Routes>
-        {/* <ChatBubble /> */}
+        <ChatBubble />
         </DataProvider>
       </AuthProvider>
     </BrowserRouter>
