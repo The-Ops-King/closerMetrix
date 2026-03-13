@@ -28,9 +28,6 @@ router.use(webhookAuth.admin);
 const REQUIRED_CREATE_FIELDS = [
   'company_name',
   'primary_contact_email',
-  'offer_name',
-  'offer_price',
-  'filter_word',
   'plan_tier',
   'timezone',
 ];
@@ -82,13 +79,16 @@ router.post('/', async (req, res) => {
     });
   }
 
-  // Validate offer_price is a positive number
-  const offerPrice = Number(req.body.offer_price);
-  if (isNaN(offerPrice) || offerPrice <= 0) {
-    return res.status(400).json({
-      status: 'error',
-      message: 'offer_price must be a positive number',
-    });
+  // Validate offer_price if provided
+  let offerPrice = null;
+  if (req.body.offer_price) {
+    offerPrice = Number(req.body.offer_price);
+    if (isNaN(offerPrice) || offerPrice <= 0) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'offer_price must be a positive number',
+      });
+    }
   }
 
   try {
@@ -103,10 +103,10 @@ router.post('/', async (req, res) => {
       primary_contact_email: req.body.primary_contact_email,
       primary_contact_phone: req.body.primary_contact_phone || null,
       timezone: req.body.timezone,
-      offer_name: req.body.offer_name,
+      offer_name: req.body.offer_name || null,
       offer_price: offerPrice,
       offer_description: req.body.offer_description || null,
-      filter_word: req.body.filter_word,
+      filter_word: req.body.filter_word || null,
       plan_tier: req.body.plan_tier,
       status: 'Active',
       closer_count: 0,
