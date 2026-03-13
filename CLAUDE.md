@@ -233,4 +233,5 @@ Backend/
 | 12 | 2026-03-10 | Tyler correction | `teal` and `cyan` are the same color (#4DD4E8). No separate darker teal. Tyler says "teal" but means cyan. |
 | 13 | 2026-03-10 | Tyler correction | Client IDs can be alphanumeric slugs (e.g. "himym"), not just UUIDs. Validate with `/^[a-zA-Z0-9_-]{1,128}$/` |
 | 14 | 2026-03-10 | Tyler correction | Call outcome colors: deposit=amber, follow_up=purple, disqualified=gray(muted), not_pitched=blue |
+| 15 | 2026-03-10 | Tyler correction | E2E tests must hard-delete all test data from BQ after running. Use `afterAll` to DELETE from: Objections, CostTracking, AuditLog, Prospects, Calls, AccessTokens, Closers, Clients (in that order). Cleanup script: `cd Backend && node scripts/cleanup-e2e.js` |
 
