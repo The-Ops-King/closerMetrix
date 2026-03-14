@@ -302,6 +302,24 @@ class TranscriptService {
    * @returns {Object} Existing or newly created call record
    */
   async _matchToCallRecord(transcript, clientId, closer) {
+    // Dedup check: if this transcript has a providerMeetingId, check if we already
+    // created a call record from a previous webhook for the same meeting.
+    // appointment_id is set to `transcript_{providerMeetingId}` when creating from transcript.
+    if (transcript.providerMeetingId) {
+      const existingByAppointmentId = await callQueries.findByAppointmentId(
+        `transcript_${transcript.providerMeetingId}`,
+        clientId
+      );
+      if (existingByAppointmentId) {
+        logger.info('Transcript dedup: found existing record by providerMeetingId', {
+          callId: existingByAppointmentId.call_id,
+          providerMeetingId: transcript.providerMeetingId,
+          matchType: 'dedup_appointment_id',
+        });
+        return existingByAppointmentId;
+      }
+    }
+
     // Try high-confidence match (closer + prospect + time)
     if (transcript.prospectEmail && transcript.scheduledStartTime) {
       const match = await callQueries.findForTranscriptMatchWithProspect(
