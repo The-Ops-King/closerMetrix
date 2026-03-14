@@ -16,6 +16,25 @@
 const crypto = require('crypto');
 const logger = require('../../utils/logger');
 
+// ── Daily write limit ──
+
+const DAILY_WRITE_LIMIT = 50;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const writeCountMap = new Map(); // clientId → { count, resetAt }
+
+function checkWriteLimit(clientId) {
+  const now = Date.now();
+  let entry = writeCountMap.get(clientId);
+  if (!entry || now > entry.resetAt) {
+    entry = { count: 0, resetAt: now + DAY_MS };
+    writeCountMap.set(clientId, entry);
+  }
+  if (entry.count >= DAILY_WRITE_LIMIT) {
+    throw new Error(`Daily write limit reached (${DAILY_WRITE_LIMIT}/day). Try again tomorrow.`);
+  }
+  entry.count++;
+}
+
 // ── Validation helpers ──
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -124,6 +143,7 @@ const tools = [
       }
 
       const limit = clampLimit(params.limit, 25, 100);
+      queryParams.rowLimit = limit;
 
       const sql = `
         SELECT calls_call_id AS call_id, closers_name AS closer_name,
@@ -135,7 +155,7 @@ const tools = [
         FROM ${bq.table('v_calls_joined_flat_prefixed')}
         WHERE ${conditions.join(' AND ')}
         ORDER BY calls_appointment_date DESC
-        LIMIT ${limit}
+        LIMIT @rowLimit
       `;
 
       const rows = await bq.query(sql, queryParams);
@@ -209,13 +229,14 @@ const tools = [
       }
 
       const limit = clampLimit(params.limit, 25, 50);
+      queryParams.rowLimit = limit;
 
       const sql = `
         SELECT prospect_id, prospect_name AS name, prospect_email AS email, prospect_phone AS phone, status, created_at
         FROM ${bq.table('Prospects')}
         WHERE ${conditions.join(' AND ')}
         ORDER BY created_at DESC
-        LIMIT ${limit}
+        LIMIT @rowLimit
       `;
 
       const rows = await bq.query(sql, queryParams);
@@ -453,13 +474,14 @@ const tools = [
       }
 
       const limit = clampLimit(params.limit, 25, 50);
+      queryParams.rowLimit = limit;
 
       const sql = `
         SELECT audit_id, action, entity_type, entity_id, details, created_at
         FROM ${bq.table('AuditLog')}
         WHERE ${conditions.join(' AND ')}
         ORDER BY created_at DESC
-        LIMIT ${limit}
+        LIMIT @rowLimit
       `;
 
       const rows = await bq.query(sql, queryParams);
@@ -499,6 +521,7 @@ const tools = [
       required: ['closerName', 'prospectName', 'appointmentDate'],
     },
     async execute(params, clientId, bq) {
+      checkWriteLimit(clientId);
       const attendance = params.attendance || 'Show';
 
       // Validate outcome if provided
@@ -561,6 +584,7 @@ const tools = [
       required: ['name', 'email'],
     },
     async execute(params, clientId, bq) {
+      checkWriteLimit(clientId);
       const row = {
         prospect_id: crypto.randomUUID(),
         client_id: clientId,
@@ -597,6 +621,7 @@ const tools = [
       required: ['callId', 'objectionType', 'objectionText'],
     },
     async execute(params, clientId, bq) {
+      checkWriteLimit(clientId);
       // Verify the call exists and belongs to this client
       const callRows = await bq.query(
         `SELECT calls_call_id, calls_closer_id FROM ${bq.table('v_calls_joined_flat_prefixed')} WHERE calls_client_id = @clientId AND calls_call_id = @callId LIMIT 1`,
@@ -643,6 +668,7 @@ const tools = [
       required: ['table', 'recordId'],
     },
     async execute(params, clientId, bq) {
+      checkWriteLimit(clientId);
       validateEnum(params.table, VALID_TABLES, 'table');
       validateUUID(params.recordId, 'recordId');
 
@@ -682,6 +708,7 @@ const tools = [
       required: ['table', 'recordId'],
     },
     async execute(params, clientId, bq) {
+      checkWriteLimit(clientId);
       validateEnum(params.table, VALID_TABLES, 'table');
       validateUUID(params.recordId, 'recordId');
 
@@ -734,6 +761,7 @@ const tools = [
       required: ['callId', 'updates'],
     },
     async execute(params, clientId, bq) {
+      checkWriteLimit(clientId);
       validateUUID(params.callId, 'callId');
 
       if (!params.updates || typeof params.updates !== 'object') {

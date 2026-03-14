@@ -2166,7 +2166,8 @@ function AiPromptsSection({ client, onSave }) {
     ai_prompt_pitch: c?.ai_prompt_pitch || '',
     ai_prompt_close: c?.ai_prompt_close || '',
     ai_prompt_objections: c?.ai_prompt_objections || '',
-    ai_context_notes: c?.ai_context_notes || '',
+    disqualification_criteria: c?.disqualification_criteria || '',
+    common_objections: c?.common_objections || '',
   });
 
   const [local, setLocal] = useState(getClientPrompts(client));
@@ -2193,27 +2194,75 @@ function AiPromptsSection({ client, onSave }) {
   };
 
   const fields = [
-    { key: 'ai_prompt_overall', label: 'Overall AI Prompt', rows: 4 },
-    { key: 'ai_prompt_discovery', label: 'Discovery Prompt', rows: 3 },
-    { key: 'ai_prompt_pitch', label: 'Pitch Prompt', rows: 3 },
-    { key: 'ai_prompt_close', label: 'Close Prompt', rows: 3 },
-    { key: 'ai_prompt_objections', label: 'Objections Prompt', rows: 3 },
-    { key: 'ai_context_notes', label: 'AI Context Notes', rows: 4 },
+    {
+      key: 'ai_prompt_overall',
+      label: 'Business Context',
+      hint: 'What does your company do? What do you sell, at what price point, and how does your sales process work? The AI uses this to understand every call.',
+      placeholder: 'e.g. We sell a $6,000 sales coaching program for B2B sales teams. Our process is a 45-min strategy call where we diagnose their sales problems and pitch our 12-week program.',
+      rows: 4,
+    },
+    {
+      key: 'ai_prompt_discovery',
+      label: 'Ideal Customer Profile (ICP)',
+      hint: 'Who is your perfect customer? What makes someone a great fit? The AI uses this to score prospect fit and evaluate discovery quality.',
+      placeholder: 'e.g. Companies with 3+ closers doing high-ticket sales ($3K+), generating $50K+/mo revenue, using a setter-closer model, and actively looking to scale.',
+      rows: 3,
+    },
+    {
+      key: 'disqualification_criteria',
+      label: 'Disqualification Criteria',
+      hint: 'What makes someone NOT a fit? Be specific. The AI will automatically mark calls as Disqualified when these criteria are met.',
+      placeholder: 'e.g. No existing sales team, solo entrepreneur with no closers, revenue under $10K/mo, not selling high-ticket, just looking for free advice.',
+      rows: 3,
+    },
+    {
+      key: 'ai_prompt_pitch',
+      label: 'Pitch Evaluation Guide',
+      hint: 'What should a good pitch include? What key points must the closer hit? The AI uses this to score pitch adherence.',
+      placeholder: 'e.g. Must cover: ROI projection, case studies, program structure, payment options. Should tie solution to prospect\'s specific pain points from discovery.',
+      rows: 3,
+    },
+    {
+      key: 'ai_prompt_close',
+      label: 'Close Evaluation Guide',
+      hint: 'What does a strong close look like? What techniques should closers use? The AI uses this to score close attempts.',
+      placeholder: 'e.g. Should use assumptive close, handle final objections, present payment options (PIF discount vs payment plan), and get verbal commitment before paperwork.',
+      rows: 3,
+    },
+    {
+      key: 'common_objections',
+      label: 'Common Objections & Ideal Responses',
+      hint: 'List the objections your team faces most often and how they should be handled. The AI uses this to evaluate objection handling quality.',
+      placeholder: 'e.g. "Can\'t afford it" → Reframe as investment, show ROI math, offer payment plan. "Need to talk to spouse" → Get them on a 3-way call or schedule follow-up with both.',
+      rows: 4,
+    },
+    {
+      key: 'ai_prompt_objections',
+      label: 'Additional AI Instructions',
+      hint: 'Any extra context or rules for the AI when analyzing calls. Optional.',
+      placeholder: 'e.g. Pay extra attention to whether the closer asks about budget early in discovery. Flag calls where the closer talks more than 60% of the time.',
+      rows: 3,
+    },
   ];
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mb: 2 }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, mb: 2 }}>
         {fields.map((f) => (
-          <TronTextField
-            key={f.key}
-            label={f.label}
-            value={local[f.key]}
-            onChange={(e) => setLocal((p) => ({ ...p, [f.key]: e.target.value }))}
-            multiline
-            rows={f.rows}
-            fullWidth
-          />
+          <Box key={f.key}>
+            <Typography sx={{ color: COLORS.text.muted, fontSize: 11, mb: 0.5, lineHeight: 1.4 }}>
+              {f.hint}
+            </Typography>
+            <TronTextField
+              label={f.label}
+              value={local[f.key]}
+              onChange={(e) => setLocal((p) => ({ ...p, [f.key]: e.target.value }))}
+              multiline
+              rows={f.rows}
+              fullWidth
+              placeholder={f.placeholder}
+            />
+          </Box>
         ))}
       </Box>
 

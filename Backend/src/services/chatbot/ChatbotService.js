@@ -24,11 +24,34 @@ const MAX_MESSAGES_PER_HOUR = 30;
 const HOUR_MS = 60 * 60 * 1000;
 const chatRateLimitMap = new Map(); // clientId → [timestamp, ...]
 
-function checkChatRateLimit(clientId) {
+async function checkChatRateLimit(clientId, bq) {
   const now = Date.now();
   const cutoff = now - HOUR_MS;
   let timestamps = chatRateLimitMap.get(clientId) || [];
   timestamps = timestamps.filter(t => t > cutoff);
+
+  // Cold start detection: if in-memory map is empty for this client, check BQ
+  if (timestamps.length === 0 && bq) {
+    try {
+      const sql = `SELECT COUNT(*) as cnt FROM ${bq.table('ChatConversations')} WHERE client_id = @clientId AND role = 'user' AND created_at > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 HOUR)`;
+      const rows = await bq.query(sql, { clientId });
+      const bqCount = rows[0]?.cnt || 0;
+      if (bqCount >= MAX_MESSAGES_PER_HOUR) {
+        // Seed the in-memory map so subsequent checks don't hit BQ again
+        chatRateLimitMap.set(clientId, Array(bqCount).fill(now));
+        throw new Error(`Chat rate limit exceeded: ${MAX_MESSAGES_PER_HOUR} messages/hour. Try again later.`);
+      }
+      // Seed with BQ count so we track correctly going forward
+      if (bqCount > 0) {
+        timestamps = Array(bqCount).fill(now);
+      }
+    } catch (err) {
+      // If it's the rate limit error we just threw, re-throw it
+      if (err.message.includes('rate limit')) throw err;
+      // Otherwise log and continue with in-memory only
+      logger.warn('Chatbot: BQ rate limit check failed, using in-memory only', { error: err.message });
+    }
+  }
 
   if (timestamps.length >= MAX_MESSAGES_PER_HOUR) {
     const retryAfterSec = Math.ceil((timestamps[0] + HOUR_MS - now) / 1000);
@@ -48,6 +71,24 @@ setInterval(() => {
     else chatRateLimitMap.set(key, filtered);
   }
 }, 10 * 60 * 1000).unref();
+
+// ── Sanitize internal names from responses ──
+
+function sanitizeResponse(text) {
+  const internals = [
+    'v_calls_joined_flat_prefixed', 'v_objections_joined', 'v_close_cycle_stats_dated',
+    'calls_call_id', 'calls_client_id', 'calls_call_outcome', 'calls_attendance',
+    'calls_appointment_date', 'calls_revenue_generated', 'calls_cash_collected',
+    'calls_prospect_name', 'calls_closer_id', 'closers_name', 'clients_client_id',
+    'closer-automation.CloserAutomation', 'BigQueryClient', 'bq.query', 'bq.table',
+    'client_id', '@clientId',
+  ];
+  let sanitized = text;
+  for (const term of internals) {
+    sanitized = sanitized.replaceAll(term, '[internal]');
+  }
+  return sanitized;
+}
 
 // ── Max result size for tool outputs (prevent token overflow) ──
 const MAX_TOOL_RESULT_BYTES = 10 * 1024; // 10KB
@@ -91,8 +132,8 @@ class ChatbotService {
    * @returns {Promise<{response: string, conversationId: string, toolsUsed: string[]}>}
    */
   async chat({ clientId, conversationId, message, history = [], companyName = 'Your Company' }) {
-    // 1. Rate limit
-    checkChatRateLimit(clientId);
+    // 1. Rate limit (async — may check BQ on cold start)
+    await checkChatRateLimit(clientId, this.bq);
 
     // 2. Build messages array from history + new user message
     const messages = [];
@@ -135,7 +176,7 @@ class ChatbotService {
 
     // 5. Tool use loop — keep going while Claude wants to use tools
     let loopCount = 0;
-    const maxLoops = 10; // Safety cap to prevent infinite loops
+    const maxLoops = 5; // Safety cap to prevent infinite loops
 
     while (response.stop_reason === 'tool_use' && loopCount < maxLoops) {
       loopCount++;
@@ -194,11 +235,14 @@ class ChatbotService {
     }
 
     // 6. Extract final text response
-    const finalText = response.content
+    const rawText = response.content
       .filter(block => block.type === 'text')
       .map(block => block.text)
       .join('')
       .trim() || 'I was unable to generate a response. Please try rephrasing your question.';
+
+    // Sanitize internal names from response
+    const finalText = sanitizeResponse(rawText);
 
     // 7. Store conversation in BQ (fire-and-forget)
     this._storeConversation({

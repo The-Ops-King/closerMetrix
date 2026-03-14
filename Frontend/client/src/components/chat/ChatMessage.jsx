@@ -114,7 +114,15 @@ export default function ChatMessage({ message }) {
             {isUser ? (
               <Typography sx={{ fontSize: 13, lineHeight: 1.6 }}>{message.content}</Typography>
             ) : (
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  a: ({ href, children }) => {
+                    const safe = href && (href.startsWith('https://') || href.startsWith('http://'));
+                    return safe ? <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: COLORS.neon.cyan }}>{children}</a> : <span>{children}</span>;
+                  }
+                }}
+              >{message.content}</ReactMarkdown>
             )}
           </Box>
         )}

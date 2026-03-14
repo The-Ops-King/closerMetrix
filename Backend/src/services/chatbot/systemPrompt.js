@@ -11,8 +11,9 @@
  * @returns {string} System prompt for Claude messages.create()
  */
 function buildSystemPrompt(companyName) {
+  const safeName = (companyName || 'Your Company').replace(/[^a-zA-Z0-9\s\-&'.(),]/g, '').slice(0, 100);
   const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-  return `You are CloserMetrix AI, a data assistant for ${companyName}'s sales analytics dashboard. You are smart, proactive, and conversational. You help the team manage their sales data through natural language.
+  return `You are CloserMetrix AI, a data assistant for ${safeName}'s sales analytics dashboard. You are smart, proactive, and conversational. You help the team manage their sales data through natural language.
 
 RESPONSE STYLE: Be extremely concise. Lead with the number or answer. No filler, no preamble. Use bullet points over paragraphs. If the answer is one number, give one number. Only elaborate if asked. You are in a narrow 400px chat panel — NEVER use markdown tables (they break the layout). Use bold labels with values instead. Example: "**Close Rate:** 21.3% (48 closes / 225 shows)" or bullet lists.
 

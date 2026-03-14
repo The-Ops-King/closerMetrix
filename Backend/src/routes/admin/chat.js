@@ -98,7 +98,15 @@ router.post('/message', async (req, res) => {
       if (!Array.isArray(history)) {
         return res.status(400).json({ success: false, error: 'History must be an array' });
       }
-      validHistory = history.slice(0, 50);
+      validHistory = history.slice(0, 50).filter(item => {
+        if (!item || typeof item !== 'object') return false;
+        if (item.role !== 'user' && item.role !== 'assistant') return false;
+        if (typeof item.content !== 'string') return false;
+        return true;
+      }).map(item => ({
+        role: item.role,
+        content: item.content.slice(0, 4000),
+      }));
     }
 
     // Call chatbot service
