@@ -85,6 +85,7 @@ async function clientIsolation(req, res, next) {
       req.clientId = clientRecord.client_id;
       req.tier = clientRecord.plan_tier;
       req.companyName = clientRecord.company_name;
+      req.timezone = clientRecord.timezone || 'America/New_York';
       req.closers = clientRecord.closers || [];
       req.isAdmin = true;
       req.isDemo = viewClientId.startsWith('demo');
@@ -129,6 +130,7 @@ async function clientIsolation(req, res, next) {
     req.clientId = clientRecord.client_id;
     req.tier = clientRecord.plan_tier;
     req.companyName = clientRecord.company_name;
+    req.timezone = clientRecord.timezone || 'America/New_York';
     req.closers = clientRecord.closers;
     req.isDemo = isDemo;
 

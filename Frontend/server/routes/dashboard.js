@@ -363,7 +363,7 @@ router.get('/raw-data', requireTier('insight'), async (req, res) => {
       return res.status(400).json({ success: false, error: 'pageSize must be an integer between 1 and 50000' });
     }
 
-    const result = await getRawData(req.clientId, { page, pageSize });
+    const result = await getRawData(req.clientId, { page, pageSize, timezone: req.timezone });
     res.json({
       success: true,
       data: result,

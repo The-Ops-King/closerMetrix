@@ -471,24 +471,45 @@ const tools = [
 
   {
     name: 'add_call_record',
-    description: 'Add a manual call record. Use this when a user wants to log a call that was not automatically captured, including pro-bono closes (revenue=0), manual outcomes, or any call that needs to be recorded retroactively.',
+    description: 'Add a manual call record. Use this when a user wants to log a call that was not automatically captured. Supports all attendance types: Show (default), Canceled, Ghosted - No Show, Rescheduled. For calls that showed, provide a callOutcome. For canceled/no-show calls, just set attendance — no outcome needed.',
     input_schema: {
       type: 'object',
       properties: {
         closerName: { type: 'string', description: 'Name of the closer who took the call.' },
         prospectName: { type: 'string', description: 'Name of the prospect.' },
+        prospectEmail: { type: 'string', description: 'Prospect email. If unknown, use firstname.lastname@unknown.com.' },
         appointmentDate: { type: 'string', description: 'Date/time of the call (ISO 8601).' },
+        attendance: {
+          type: 'string',
+          description: 'Attendance status. Default: Show. Use "Canceled" for canceled calls, "Ghosted - No Show" for no-shows, "Rescheduled" for rescheduled.',
+          enum: ['Show', 'Ghosted - No Show', 'Canceled', 'Rescheduled'],
+        },
         callOutcome: {
           type: 'string',
-          description: 'Outcome of the call.',
+          description: 'Outcome of the call. Required for Show attendance, not needed for canceled/no-show/rescheduled.',
           enum: VALID_OUTCOMES,
         },
         revenue: { type: 'number', description: 'Revenue amount if applicable. Optional.' },
+        callType: {
+          type: 'string',
+          description: 'Call type. Default: First Call.',
+          enum: ['First Call', 'Follow Up'],
+        },
       },
-      required: ['closerName', 'prospectName', 'appointmentDate', 'callOutcome'],
+      required: ['closerName', 'prospectName', 'appointmentDate'],
     },
     async execute(params, clientId, bq) {
-      validateEnum(params.callOutcome, VALID_OUTCOMES, 'callOutcome');
+      const attendance = params.attendance || 'Show';
+
+      // Validate outcome if provided
+      if (params.callOutcome) {
+        validateEnum(params.callOutcome, VALID_OUTCOMES, 'callOutcome');
+      }
+
+      // Show calls should have an outcome
+      if (attendance === 'Show' && !params.callOutcome) {
+        return { error: 'Calls with Show attendance need a callOutcome. What was the outcome?' };
+      }
 
       // Look up closer_id from Closers table
       const closerRows = await bq.query(
@@ -499,16 +520,22 @@ const tools = [
         return { error: `Closer "${params.closerName}" not found. Check the name and try again.` };
       }
 
+      const now = new Date().toISOString();
       const row = {
         call_id: crypto.randomUUID(),
         client_id: clientId,
         closer_id: closerRows[0].closer_id,
+        closer: params.closerName,
         prospect_name: params.prospectName,
+        prospect_email: params.prospectEmail || `${(params.prospectName || 'unknown').toLowerCase().replace(/\s+/g, '.')}@unknown.com`,
         appointment_date: params.appointmentDate,
-        call_outcome: params.callOutcome,
-        attendance: 'show',
+        call_outcome: params.callOutcome || null,
+        attendance,
+        call_type: params.callType || 'First Call',
         ingestion_source: 'manually_added',
-        created_at: new Date().toISOString(),
+        processing_status: 'complete',
+        created: now,
+        last_modified: now,
       };
 
       if (params.revenue !== undefined && params.revenue !== null) {
@@ -523,32 +550,80 @@ const tools = [
 
   {
     name: 'add_prospect',
-    description: 'Add a new prospect record. Use this when a user wants to manually log a new prospect.',
+    description: 'Add a new prospect record. Use this when a user wants to manually log a new prospect. Email is required by the system — if the user doesn\'t have one, ask them, and if they don\'t know it, generate a placeholder.',
     input_schema: {
       type: 'object',
       properties: {
         name: { type: 'string', description: 'Prospect full name.' },
-        email: { type: 'string', description: 'Prospect email address. Optional.' },
+        email: { type: 'string', description: 'Prospect email. If unknown, use format: firstname.lastname@unknown.com' },
         phone: { type: 'string', description: 'Prospect phone number. Optional.' },
-        closerName: { type: 'string', description: 'Assigned closer name. Optional.' },
       },
-      required: ['name'],
+      required: ['name', 'email'],
     },
     async execute(params, clientId, bq) {
       const row = {
         prospect_id: crypto.randomUUID(),
         client_id: clientId,
         prospect_name: params.name,
+        prospect_email: params.email,
         status: 'Active',
         created_at: new Date().toISOString(),
       };
 
-      if (params.email) row.prospect_email = params.email;
       if (params.phone) row.prospect_phone = params.phone;
 
       await bq.insert('Prospects', row);
       logger.info('Chatbot added prospect', { prospectId: row.prospect_id, clientId });
       return { success: true, prospect_id: row.prospect_id, message: 'Prospect added successfully.' };
+    },
+  },
+
+  {
+    name: 'add_objection',
+    description: 'Add an objection to an existing call. Use this when a user wants to manually log an objection that came up during a call. Requires a call_id — use query_calls first to find the right call.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        callId: { type: 'string', description: 'The call_id to attach this objection to. Find via query_calls first.' },
+        objectionType: {
+          type: 'string',
+          description: 'Category of the objection.',
+          enum: ['Financial', 'Spouse/Partner', 'Think About It', 'Timing', 'Trust/Credibility', 'Already Tried', 'DIY', 'Not Ready', 'Competitor', 'Authority', 'Value', 'Commitment', 'Program Not a Fit', 'Other'],
+        },
+        objectionText: { type: 'string', description: 'What the prospect actually said.' },
+        wasResolved: { type: 'boolean', description: 'Was the objection resolved/overcome? Default: false.' },
+        resolutionText: { type: 'string', description: 'How the closer resolved it, if applicable. Optional.' },
+      },
+      required: ['callId', 'objectionType', 'objectionText'],
+    },
+    async execute(params, clientId, bq) {
+      // Verify the call exists and belongs to this client
+      const callRows = await bq.query(
+        `SELECT calls_call_id, calls_closer_id FROM ${bq.table('v_calls_joined_flat_prefixed')} WHERE calls_client_id = @clientId AND calls_call_id = @callId LIMIT 1`,
+        { clientId, callId: params.callId }
+      );
+      if (callRows.length === 0) {
+        return { error: 'Call not found. Use query_calls to find the right call_id first.' };
+      }
+
+      const now = new Date().toISOString();
+      const row = {
+        objection_id: crypto.randomUUID(),
+        call_id: params.callId,
+        client_id: clientId,
+        closer_id: callRows[0].calls_closer_id,
+        objection_type: params.objectionType,
+        objection_text: params.objectionText,
+        resolved: params.wasResolved || false,
+        resolution_text: params.resolutionText || null,
+        resolution_method: params.wasResolved ? 'handled' : null,
+        created_at: now,
+        last_modified: now,
+      };
+
+      await bq.insert('Objections', row);
+      logger.info('Chatbot added objection', { objectionId: row.objection_id, callId: params.callId, clientId });
+      return { success: true, objection_id: row.objection_id, message: `Objection (${params.objectionType}) added to call.` };
     },
   },
 

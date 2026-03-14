@@ -23,21 +23,43 @@ const logger = require('../../utils/logger');
 const { normalizeObjectionType } = require('../../../shared/categoryValues');
 
 /**
- * Extract YYYY-MM-DD from any date-like value.
+ * Extract YYYY-MM-DD from any date-like value, converted to the client's timezone.
  * Handles BigQuery TIMESTAMP objects ({ value: '...' }), Date instances, and strings.
+ *
+ * @param {any} val — Date-like value from BigQuery
+ * @param {string} [tz] — IANA timezone (e.g. 'America/Phoenix'). Falls back to UTC if invalid.
  */
-function toDateStr(val) {
+function toDateStr(val, tz) {
   if (!val) return '';
-  // BigQuery TIMESTAMP returns { value: '2026-02-16T15:00:00.000000Z' }
+
+  // Resolve to a Date object
+  let date;
   if (typeof val === 'object' && val !== null && val.value) {
-    return String(val.value).split('T')[0];
+    date = new Date(String(val.value));
+  } else if (val instanceof Date) {
+    date = val;
+  } else {
+    const str = String(val);
+    date = new Date(str);
+    // If not parseable, try splitting
+    if (isNaN(date.getTime())) {
+      if (str.includes('T')) return str.split('T')[0];
+      if (str.includes(' ')) return str.split(' ')[0];
+      return str.length > 10 ? str.substring(0, 10) : str;
+    }
   }
-  if (val instanceof Date) return val.toISOString().split('T')[0];
-  const str = String(val);
-  if (str.includes('T')) return str.split('T')[0];
-  // BigQuery may also return '2026-02-16 15:00:00 UTC'
-  if (str.includes(' ')) return str.split(' ')[0];
-  return str.length > 10 ? str.substring(0, 10) : str;
+
+  // Convert to client timezone
+  if (tz) {
+    try {
+      const parts = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+      return parts; // en-CA formats as YYYY-MM-DD
+    } catch {
+      // Invalid timezone — fall through to UTC
+    }
+  }
+
+  return date.toISOString().split('T')[0];
 }
 
 /**
@@ -50,7 +72,8 @@ function toDateStr(val) {
  * @param {string} clientId - Client ID for data isolation
  * @returns {Promise<{ calls: Array, objections: Array, closeCycles: Array }>}
  */
-async function getRawData(clientId, { page = 1, pageSize = 10000 } = {}) {
+async function getRawData(clientId, { page = 1, pageSize = 10000, timezone } = {}) {
+  const tz = timezone || null;
   // Validate and clamp pagination params — default to 10k to ensure full dataset loads
   page = Math.max(1, Math.floor(Number(page)) || 1);
   pageSize = Math.min(50000, Math.max(1, Math.floor(Number(pageSize)) || 10000));
@@ -61,7 +84,7 @@ async function getRawData(clientId, { page = 1, pageSize = 10000 } = {}) {
   }
 
   try {
-    return await queryBigQuery(clientId, { page, pageSize });
+    return await queryBigQuery(clientId, { page, pageSize, tz });
   } catch (err) {
     logger.error('Raw data BQ query failed, falling back to demo', { error: err.message, clientId });
     return getDemoData();
@@ -75,7 +98,7 @@ async function getRawData(clientId, { page = 1, pageSize = 10000 } = {}) {
  * @param {string} clientId - Client ID for data isolation
  * @returns {Promise<{ calls: Array, objections: Array, closeCycles: Array }>}
  */
-async function queryBigQuery(clientId, { page = 1, pageSize = 500 } = {}) {
+async function queryBigQuery(clientId, { page = 1, pageSize = 500, tz = null } = {}) {
   const { num } = require('./helpers');
   const offset = (page - 1) * pageSize;
   const params = { clientId, pageSize, offset };
@@ -208,7 +231,7 @@ async function queryBigQuery(clientId, { page = 1, pageSize = 500 } = {}) {
   const calls = (callsResult || []).map(row => {
     // Parse appointment_date to clean YYYY-MM-DD string.
     // Handles BigQuery TIMESTAMP objects ({ value: '...' }), Date objects, and plain strings.
-    const appointmentDate = toDateStr(row.calls_appointment_date);
+    const appointmentDate = toDateStr(row.calls_appointment_date, tz);
 
     return {
       callId: row.calls_call_id,
@@ -262,7 +285,7 @@ async function queryBigQuery(clientId, { page = 1, pageSize = 500 } = {}) {
 
   // Parse objections into clean array
   const objections = (objectionsResult || []).map(row => {
-    const appointmentDate = toDateStr(row.calls_appointment_date);
+    const appointmentDate = toDateStr(row.calls_appointment_date, tz);
 
     return {
       objectionId: row.obj_objection_id || '',
@@ -286,7 +309,7 @@ async function queryBigQuery(clientId, { page = 1, pageSize = 500 } = {}) {
     clientId: row.client_id || '',
     closerId: row.closer_id || '',
     closerName: row.closer_name || '',
-    closeDate: toDateStr(row.close_date) || '',
+    closeDate: toDateStr(row.close_date, tz) || '',
     daysToClose: num(row.days_to_close),
     callsToClose: num(row.calls_to_close),
   }));

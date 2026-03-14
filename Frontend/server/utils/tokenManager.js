@@ -103,6 +103,7 @@ async function validateToken(tokenId) {
         t.revoked_at,
         c.company_name,
         c.plan_tier,
+        c.timezone,
         c.status,
         c.settings_json
       FROM ${bq.table('AccessTokens')} t
@@ -175,6 +176,7 @@ async function validateToken(tokenId) {
       client_id: token.client_id,
       company_name: token.company_name,
       plan_tier: token.plan_tier,
+      timezone: token.timezone || 'America/New_York',
       closers: closerRows.map((r) => ({ closer_id: r.closer_id, name: r.name, status: r.status })),
       kpi_targets: kpiTargets,
       ai_provider: aiProvider,

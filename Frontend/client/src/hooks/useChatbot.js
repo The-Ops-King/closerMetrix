@@ -1,8 +1,12 @@
 import { useState, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useData } from '../context/DataContext';
+
+const WRITE_TOOLS = ['add_call_record', 'add_prospect', 'add_objection', 'update_call_record', 'hide_record', 'unhide_record'];
 
 export default function useChatbot() {
   const auth = useAuth();
+  const { refetchData } = useData();
   const [messages, setMessages] = useState([]);
   const [conversationId, setConversationId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -59,6 +63,11 @@ export default function useChatbot() {
         content: data.response,
         toolsUsed: data.toolsUsed || [],
       }]);
+
+      // Auto-refetch dashboard data if a write tool was used
+      if (data.toolsUsed?.some(t => WRITE_TOOLS.includes(t))) {
+        refetchData();
+      }
     } catch (err) {
       setError(err.message);
       setMessages(prev => [...prev, {
