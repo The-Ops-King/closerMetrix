@@ -55,6 +55,8 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import LinkIcon from '@mui/icons-material/Link';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import Popover from '@mui/material/Popover';
 import { COLORS, LAYOUT } from '../../theme/constants';
 import { useAuth } from '../../context/AuthContext';
 import { meetsMinTier } from '../../utils/tierConfig';
@@ -703,6 +705,7 @@ export default function SettingsPage() {
             authOptions={authOptions}
             mode={mode}
             onRefresh={() => fetchSettings(true)}
+            transcriptProvider={client?.transcript_provider || settings.transcript_provider || 'fathom'}
           />
         </SettingsSection>
 
@@ -807,10 +810,11 @@ export default function SettingsPage() {
 
 // ── 1. Team (Closers) ────────────────────────────────────────
 
-function TeamSection({ closers, clientId, authOptions, mode, onRefresh }) {
+function TeamSection({ closers, clientId, authOptions, mode, onRefresh, transcriptProvider }) {
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [helpAnchor, setHelpAnchor] = useState(null);
   const [newCloser, setNewCloser] = useState({
     name: '', work_email: '', personal_email: '', phone: '',
     timezone: '', transcript_provider: 'fathom', transcript_api_key: '',
@@ -919,8 +923,79 @@ function TeamSection({ closers, clientId, authOptions, mode, onRefresh }) {
 
   return (
     <Box>
-      {/* Add button */}
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+      {/* Add button + help */}
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 1, mb: 2 }}>
+        <IconButton
+          onClick={(e) => setHelpAnchor(e.currentTarget)}
+          size="small"
+          sx={{ color: COLORS.text.muted, '&:hover': { color: COLORS.neon.cyan } }}
+        >
+          <HelpOutlineIcon fontSize="small" />
+        </IconButton>
+        <Popover
+          open={Boolean(helpAnchor)}
+          anchorEl={helpAnchor}
+          onClose={() => setHelpAnchor(null)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+          transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+          slotProps={{ paper: {
+            sx: {
+              p: 2.5, maxWidth: 380,
+              backgroundColor: COLORS.bg.elevated,
+              border: `1px solid ${COLORS.border.subtle}`,
+              borderRadius: 2,
+            },
+          }}}
+        >
+          <Typography sx={{ color: COLORS.neon.cyan, fontWeight: 700, fontSize: '0.95rem', mb: 1.5 }}>
+            Closer Onboarding Guide
+          </Typography>
+
+          {/* Step 1 */}
+          <Box sx={{ mb: 1.5 }}>
+            <Typography sx={{ color: COLORS.text.primary, fontWeight: 600, fontSize: '0.85rem' }}>
+              1. Add the closer here
+            </Typography>
+            <Typography sx={{ color: COLORS.text.secondary, fontSize: '0.8rem', pl: 1.5 }}>
+              Click "Add Closer" and enter their name and work email. This is the email they use for meetings.
+            </Typography>
+          </Box>
+
+          {/* Step 2 */}
+          <Box sx={{ mb: 1.5 }}>
+            <Typography sx={{ color: COLORS.text.primary, fontWeight: 600, fontSize: '0.85rem' }}>
+              2. Have them share their Google Calendar
+            </Typography>
+            <Typography sx={{ color: COLORS.text.secondary, fontSize: '0.8rem', pl: 1.5 }}>
+              In Google Calendar → Settings → their calendar → "Share with specific people" → add{' '}
+              <Box component="span" sx={{ color: COLORS.neon.cyan, fontWeight: 600 }}>jt@jtylerray.com</Box>
+              {' '}with "See all event details" permission.
+            </Typography>
+          </Box>
+
+          {/* Step 3 — provider-specific */}
+          <Box sx={{ mb: 0.5 }}>
+            <Typography sx={{ color: COLORS.text.primary, fontWeight: 600, fontSize: '0.85rem' }}>
+              3. Set up transcript recording
+            </Typography>
+            {(transcriptProvider || '').toLowerCase() === 'tldv' ? (
+              <Typography sx={{ color: COLORS.text.secondary, fontSize: '0.8rem', pl: 1.5 }}>
+                You're using <Box component="span" sx={{ color: COLORS.neon.green, fontWeight: 600 }}>tl;dv</Box>.
+                Have each closer install the tl;dv browser extension or desktop app and sign in.
+                tl;dv will automatically join and record their meetings. No per-closer API setup needed — it's handled at the account level.
+              </Typography>
+            ) : (
+              <Typography sx={{ color: COLORS.text.secondary, fontSize: '0.8rem', pl: 1.5 }}>
+                You're using <Box component="span" sx={{ color: COLORS.neon.cyan, fontWeight: 600 }}>Fathom</Box>.
+                Have each closer sign up at{' '}
+                <Box component="span" sx={{ color: COLORS.neon.cyan }}>fathom.video</Box>,
+                install the Fathom Notetaker, then go to Settings → Integrations → API and copy their API key.
+                Paste it into the "Transcript API Key" field when adding or editing the closer here.
+              </Typography>
+            )}
+          </Box>
+        </Popover>
+
         <Button
           onClick={() => setShowAdd(true)}
           startIcon={<PersonAddIcon />}
