@@ -41,24 +41,66 @@ class GoogleCalendarPush {
   /**
    * Initializes the Google Calendar API client.
    *
-   * Uses OAuth2 credentials from GOOGLE_CALENDAR_CREDENTIALS env var.
-   * Falls back to Application Default Credentials for local dev.
+   * Three auth strategies (tried in order):
+   *   1. OAuth2 with Tyler's refresh token (GOOGLE_CALENDAR_CREDENTIALS)
+   *      — Works for calendars shared with Tyler's personal account
+   *   2. Service account with domain-wide delegation (impersonation)
+   *      — Works for Google Workspace domains that granted delegation
+   *      — Requires closerEmail to impersonate
+   *   3. Application Default Credentials (fallback for local dev)
+   *
+   * @param {string} [closerEmail] — If provided and no OAuth creds, uses
+   *   domain-wide delegation to impersonate this user's calendar
    */
-  async _getCalendarApi() {
-    if (this.calendarApi) return this.calendarApi;
-
+  async _getCalendarApi(closerEmail) {
     const creds = config.calendar.credentials;
 
+    // Strategy 1: OAuth2 with Tyler's refresh token (shared calendars)
     if (creds && creds.refresh_token) {
-      // Production: OAuth2 with Tyler's refresh token
-      const oauth2Client = new google.auth.OAuth2(
-        creds.client_id,
-        creds.client_secret
-      );
-      oauth2Client.setCredentials({ refresh_token: creds.refresh_token });
-      this.calendarApi = google.calendar({ version: 'v3', auth: oauth2Client });
-    } else {
-      // Fallback: Application Default Credentials (local dev / service account)
+      if (!this.calendarApi) {
+        const oauth2Client = new google.auth.OAuth2(
+          creds.client_id,
+          creds.client_secret
+        );
+        oauth2Client.setCredentials({ refresh_token: creds.refresh_token });
+        this.calendarApi = google.calendar({ version: 'v3', auth: oauth2Client });
+      }
+      return this.calendarApi;
+    }
+
+    // Strategy 2: Service account with domain-wide delegation
+    // Each closer needs their own client (different impersonation subject)
+    if (closerEmail) {
+      const cacheKey = `dwd_${closerEmail}`;
+      if (!this._dwdClients) this._dwdClients = new Map();
+
+      if (this._dwdClients.has(cacheKey)) {
+        return this._dwdClients.get(cacheKey);
+      }
+
+      try {
+        const auth = new google.auth.GoogleAuth({
+          scopes: [
+            'https://www.googleapis.com/auth/calendar.readonly',
+            'https://www.googleapis.com/auth/calendar.events.readonly',
+          ],
+          clientOptions: { subject: closerEmail },
+        });
+        const authClient = await auth.getClient();
+        const calApi = google.calendar({ version: 'v3', auth: authClient });
+        this._dwdClients.set(cacheKey, calApi);
+        logger.debug('Calendar API: using domain-wide delegation', { closerEmail });
+        return calApi;
+      } catch (err) {
+        logger.warn('Domain-wide delegation failed, falling back to default credentials', {
+          closerEmail,
+          error: err.message,
+        });
+      }
+    }
+
+    // Strategy 3: Application Default Credentials (local dev / basic SA)
+    if (!this.calendarApi) {
       const auth = new google.auth.GoogleAuth({
         scopes: [
           'https://www.googleapis.com/auth/calendar.readonly',
@@ -84,7 +126,7 @@ class GoogleCalendarPush {
    * @throws {Error} If the calendar is not accessible
    */
   async createWatch(closerEmail, clientId) {
-    const calendar = await this._getCalendarApi();
+    const calendar = await this._getCalendarApi(closerEmail);
     const channelId = generateId();
     const webhookUrl = `${config.calendar.webhookUrl}/${clientId}`;
 
@@ -146,8 +188,8 @@ class GoogleCalendarPush {
    * @param {string} channelId — The channel to stop
    * @param {string} resourceId — The resource ID from the original watch
    */
-  async stopWatch(channelId, resourceId) {
-    const calendar = await this._getCalendarApi();
+  async stopWatch(channelId, resourceId, closerEmail) {
+    const calendar = await this._getCalendarApi(closerEmail);
 
     try {
       await calendar.channels.stop({

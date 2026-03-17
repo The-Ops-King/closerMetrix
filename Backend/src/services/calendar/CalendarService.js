@@ -44,26 +44,61 @@ class CalendarService {
    *
    * Uses OAuth2 credentials from GOOGLE_CALENDAR_CREDENTIALS env var.
    * Tyler's Google account has read access to all closer calendars
-   * (closers share their calendar with Tyler during onboarding).
+   * Three auth strategies (tried in order):
+   *   1. OAuth2 with Tyler's refresh token (GOOGLE_CALENDAR_CREDENTIALS)
+   *      — Works for calendars shared with Tyler's personal account
+   *   2. Service account with domain-wide delegation (impersonation)
+   *      — Works for Google Workspace domains that granted delegation
+   *   3. Application Default Credentials (fallback for local dev)
    *
-   * Falls back to Application Default Credentials (ADC) if OAuth2
-   * credentials are not configured (for local dev with service account).
+   * @param {string} [closerEmail] — If provided and no OAuth creds, uses
+   *   domain-wide delegation to impersonate this user's calendar
    */
-  async _getCalendarApi() {
-    if (this.calendarApi) return this.calendarApi;
-
+  async _getCalendarApi(closerEmail) {
     const creds = config.calendar.credentials;
 
+    // Strategy 1: OAuth2 with Tyler's refresh token (shared calendars)
     if (creds && creds.refresh_token) {
-      // Production: OAuth2 with Tyler's refresh token
-      const oauth2Client = new google.auth.OAuth2(
-        creds.client_id,
-        creds.client_secret
-      );
-      oauth2Client.setCredentials({ refresh_token: creds.refresh_token });
-      this.calendarApi = google.calendar({ version: 'v3', auth: oauth2Client });
-    } else {
-      // Fallback: Application Default Credentials (local dev / service account)
+      if (!this.calendarApi) {
+        const oauth2Client = new google.auth.OAuth2(
+          creds.client_id,
+          creds.client_secret
+        );
+        oauth2Client.setCredentials({ refresh_token: creds.refresh_token });
+        this.calendarApi = google.calendar({ version: 'v3', auth: oauth2Client });
+      }
+      return this.calendarApi;
+    }
+
+    // Strategy 2: Service account with domain-wide delegation
+    if (closerEmail) {
+      if (!this._dwdClients) this._dwdClients = new Map();
+      const cacheKey = `dwd_${closerEmail}`;
+
+      if (this._dwdClients.has(cacheKey)) {
+        return this._dwdClients.get(cacheKey);
+      }
+
+      try {
+        const auth = new google.auth.GoogleAuth({
+          scopes: ['https://www.googleapis.com/auth/calendar.readonly'],
+          clientOptions: { subject: closerEmail },
+        });
+        const authClient = await auth.getClient();
+        const calApi = google.calendar({ version: 'v3', auth: authClient });
+        this._dwdClients.set(cacheKey, calApi);
+        logger.debug('Calendar API: using domain-wide delegation', { closerEmail });
+        return calApi;
+      } catch (err) {
+        logger.warn('Domain-wide delegation failed, falling back to default', {
+          closerEmail,
+          error: err.message,
+        });
+      }
+    }
+
+    // Strategy 3: Application Default Credentials (local dev / basic SA)
+    if (!this.calendarApi) {
       const auth = new google.auth.GoogleAuth({
         scopes: ['https://www.googleapis.com/auth/calendar.readonly'],
       });
@@ -267,8 +302,6 @@ class CalendarService {
    */
   async _fetchChangedEvents(channelId, clientId) {
     try {
-      const calendar = await this._getCalendarApi();
-
       // We need to know which calendar this channel watches.
       // For now, we'll use a time-based approach — fetch events updated in the last 5 minutes.
       // In Phase 6, we'll store channel → calendarId mapping for more precision.
@@ -284,6 +317,8 @@ class CalendarService {
         if (!closer.work_email) continue;
 
         try {
+          // Get a calendar client for this closer (may use DWD impersonation)
+          const calendar = await this._getCalendarApi(closer.work_email);
           const response = await calendar.events.list({
             calendarId: closer.work_email,
             updatedMin: fiveMinutesAgo,
