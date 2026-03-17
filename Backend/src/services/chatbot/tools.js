@@ -547,6 +547,7 @@ const tools = [
       const row = {
         call_id: crypto.randomUUID(),
         client_id: clientId,
+        client: clientId,
         closer_id: closerRows[0].closer_id,
         closer: params.closerName,
         prospect_name: params.prospectName,
