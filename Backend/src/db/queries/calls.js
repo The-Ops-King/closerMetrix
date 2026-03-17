@@ -148,6 +148,25 @@ module.exports = {
   },
 
   /**
+   * Counts ALL prior calls for a prospect (any attendance state).
+   * Used to determine call type — if any prior call exists, the new one is a Follow Up.
+   *
+   * @param {string} prospectEmail — Prospect's email address
+   * @param {string} clientId — Client scope
+   * @returns {number} Number of prior calls
+   */
+  async countPriorCalls(prospectEmail, clientId) {
+    const rows = await bq.query(
+      `SELECT COUNT(*) as call_count
+       FROM ${CALLS_TABLE}
+       WHERE prospect_email = @prospectEmail
+         AND client_id = @clientId`,
+      { prospectEmail, clientId }
+    );
+    return rows[0].call_count;
+  },
+
+  /**
    * Finds the most recent call for a prospect that was actually held (Show or any post-Show state).
    * Used by PaymentService to link payments to the originating call.
    *

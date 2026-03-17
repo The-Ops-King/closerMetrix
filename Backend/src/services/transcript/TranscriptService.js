@@ -190,6 +190,23 @@ class TranscriptService {
       closer = await closerQueries.findByWorkEmail(transcript.closerEmail, clientId);
     }
 
+    // Step 3.5: Trigger word filter — if the client has trigger words configured,
+    // only create NEW call records for transcripts whose title matches.
+    // If the transcript matches an existing calendar-created call record, always process it.
+    if (transcript.title && clientId) {
+      const shouldFilter = await this._shouldFilterByTriggerWords(
+        transcript, clientId, closer, options
+      );
+      if (shouldFilter) {
+        logger.info('Transcript filtered — title does not match trigger words and no existing call record', {
+          title: transcript.title,
+          clientId,
+          provider,
+        });
+        return { action: 'filtered', callRecord: null, transcript };
+      }
+    }
+
     // Step 4: Match transcript to an existing call record
     // If a callIdHint was provided (e.g., from Fathom polling), use that call directly
     // instead of doing independent matching that might find a different call or create a duplicate.
@@ -428,13 +445,22 @@ class TranscriptService {
       clientId
     );
 
+    // Resolve prospect name — if it's missing or just an email, try extracting from title
+    let prospectName = transcript.prospectName || null;
+    if ((!prospectName || this._looksLikeEmail(prospectName)) && transcript.title) {
+      const extracted = this._extractNameFromTitle(transcript.title);
+      if (extracted) {
+        prospectName = extracted;
+      }
+    }
+
     const now = nowISO();
     const callRecord = {
       call_id: generateId(),
       appointment_id: `transcript_${transcript.providerMeetingId || generateId()}`,
       client_id: clientId,
       closer_id: closer.closer_id,
-      prospect_name: transcript.prospectName || null,
+      prospect_name: prospectName,
       prospect_email: transcript.prospectEmail || 'unknown',
       appointment_date: transcript.scheduledStartTime || transcript.recordingStartTime || now,
       timezone: 'UTC',
@@ -477,6 +503,154 @@ class TranscriptService {
     });
 
     return callRecord;
+  }
+
+  /**
+   * Checks if a transcript should be filtered out based on trigger words.
+   * Returns true if the transcript should be SKIPPED (filtered out).
+   *
+   * Logic:
+   * - If no trigger words configured (no call_sources and no filter_word), allow all → false
+   * - If trigger words exist and title matches, allow → false
+   * - If trigger words exist and title does NOT match:
+   *     - Check if an existing call record exists (calendar already created it) → false (allow)
+   *     - No existing record → true (filter out)
+   */
+  async _shouldFilterByTriggerWords(transcript, clientId, closer, options) {
+    // If callIdHint is provided, an existing record is already known — don't filter
+    if (options.callIdHint) return false;
+
+    const client = await clientQueries.findById(clientId);
+    if (!client) return false;
+
+    // Parse call_sources from settings_json
+    let callSources = null;
+    if (client.settings_json) {
+      try {
+        const parsed = typeof client.settings_json === 'string'
+          ? JSON.parse(client.settings_json) : client.settings_json;
+        if (parsed.call_sources && parsed.call_sources.length > 0) {
+          callSources = parsed.call_sources;
+        }
+      } catch { /* ignore parse errors */ }
+    }
+
+    // No trigger words configured at all — accept all transcripts
+    if (!callSources && !client.filter_word) return false;
+
+    // Check if title matches trigger words (same logic as CalendarService.isClientSalesCall)
+    const titleMatch = this._titleMatchesTriggerWords(
+      transcript.title, client.filter_word, callSources
+    );
+    if (titleMatch) return false; // Title matches — allow
+
+    // Title doesn't match trigger words — check for existing calendar-created call record
+    if (closer && transcript.scheduledStartTime) {
+      // Try high-confidence match
+      if (transcript.prospectEmail) {
+        const match = await callQueries.findForTranscriptMatchWithProspect(
+          clientId, closer.work_email, transcript.prospectEmail, transcript.scheduledStartTime
+        );
+        if (match) return false; // Existing record found — allow
+      }
+      // Try medium-confidence match
+      const match = await callQueries.findForTranscriptMatch(
+        clientId, closer.work_email, transcript.scheduledStartTime
+      );
+      if (match) return false; // Existing record found — allow
+    }
+
+    // Also check dedup by providerMeetingId
+    if (transcript.providerMeetingId) {
+      const existing = await callQueries.findByAppointmentId(
+        `transcript_${transcript.providerMeetingId}`, clientId
+      );
+      if (existing) return false; // Already have a record — allow
+    }
+
+    // No existing record and title doesn't match trigger words — filter out
+    return true;
+  }
+
+  /**
+   * Checks if a title matches the client's trigger words.
+   * Mirrors CalendarService.isClientSalesCall logic inline.
+   *
+   * @param {string} title — Transcript title
+   * @param {string} filterWords — Legacy comma-separated filter words
+   * @param {Array} callSources — Array of { trigger, name } from settings_json
+   * @returns {boolean} true if title matches
+   */
+  /**
+   * Checks if a string looks like an email address.
+   */
+  _looksLikeEmail(str) {
+    return str && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(str.trim());
+  }
+
+  /**
+   * Extracts a prospect name from common transcript title patterns:
+   * - "Something (Prospect Name)" → extract from parentheses
+   * - "Something With Prospect Name" → extract after "with" (case-insensitive)
+   * - "Something - Prospect Name" → extract after last dash
+   *
+   * @param {string} title — Transcript/meeting title
+   * @returns {string|null} Extracted name or null
+   */
+  _extractNameFromTitle(title) {
+    if (!title) return null;
+
+    // Pattern 1: Parentheses — "Strategy Call (John Smith)"
+    const parenMatch = title.match(/\(([^)]+)\)/);
+    if (parenMatch) {
+      const candidate = parenMatch[1].trim();
+      if (candidate && !this._looksLikeEmail(candidate) && /^[A-Za-z]/.test(candidate)) {
+        return candidate;
+      }
+    }
+
+    // Pattern 2: "With" — "Strategy Call With John Smith" or "Call with John Smith"
+    const withMatch = title.match(/\bwith\s+(.+)$/i);
+    if (withMatch) {
+      const candidate = withMatch[1].trim();
+      if (candidate && !this._looksLikeEmail(candidate) && /^[A-Za-z]/.test(candidate)) {
+        return candidate;
+      }
+    }
+
+    // Pattern 3: Last dash — "Strategy Call - John Smith"
+    const dashIndex = title.lastIndexOf(' - ');
+    if (dashIndex > -1) {
+      const candidate = title.slice(dashIndex + 3).trim();
+      if (candidate && !this._looksLikeEmail(candidate) && /^[A-Za-z]/.test(candidate)) {
+        return candidate;
+      }
+    }
+
+    return null;
+  }
+
+  _titleMatchesTriggerWords(title, filterWords, callSources) {
+    if (!title) return false;
+    const lowerTitle = title.toLowerCase();
+
+    // New system: call_sources
+    if (callSources && callSources.length > 0) {
+      const wildcard = callSources.find(s => s.trigger.trim() === '*');
+      if (wildcard) return true;
+      for (const src of callSources) {
+        const trigger = src.trigger.trim().toLowerCase();
+        if (trigger && lowerTitle.includes(trigger)) return true;
+      }
+      // call_sources configured but none matched — don't fall through to legacy
+      return false;
+    }
+
+    // Legacy: comma-separated filter_word
+    if (!filterWords) return false;
+    const words = filterWords.split(',').map(w => w.trim().toLowerCase());
+    if (words.includes('*')) return true;
+    return words.some(word => word && lowerTitle.includes(word));
   }
 
   /**

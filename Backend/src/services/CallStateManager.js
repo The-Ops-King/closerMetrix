@@ -191,8 +191,11 @@ class CallStateManager {
     }
 
     // Apply the transition
+    // For AI outcome transitions (Show → outcome), keep attendance as "Show".
+    // The outcome value goes into call_outcome (already in additionalUpdates),
+    // NOT into attendance. Attendance tracks whether the call was attended.
     const updates = {
-      attendance: newState,
+      attendance: trigger === 'ai_outcome' ? currentState : newState,
       ...additionalUpdates,
     };
 
@@ -248,6 +251,13 @@ class CallStateManager {
       return 'First Call';
     }
 
+    // Check for any prior call with this prospect (not just shows).
+    // A prospect could have a prior Scheduled/Ghosted/Canceled call that
+    // still means this is a follow-up interaction.
+    const priorCalls = await callQueries.countPriorCalls(prospectEmail, clientId);
+    if (priorCalls > 0) return 'Follow Up';
+
+    // Fall back to legacy check for prior shows (in case countPriorCalls is not available)
     const priorShows = await callQueries.countPriorShows(prospectEmail, clientId);
     return priorShows > 0 ? 'Follow Up' : 'First Call';
   }
