@@ -536,7 +536,11 @@ class TimeoutService {
 
         // Match meetings to waiting calls (if any exist)
         for (const meeting of meetings) {
-          const meetingTime = new Date(meeting.happenedAt || meeting.created_at);
+          // Normalize happenedAt — tl;dv returns JS Date strings like "Sat Mar 14 2026 21:00:00 GMT+0000 ..."
+          const rawTime = meeting.happenedAt || meeting.created_at;
+          const meetingTime = new Date(rawTime);
+          const happenedAtISO = isNaN(meetingTime.getTime()) ? null : meetingTime.toISOString();
+          meeting.happenedAt = happenedAtISO || rawTime;
           const meetingOrganizerEmail = meeting.organizer?.email?.toLowerCase();
           let matched = false;
 

@@ -75,7 +75,20 @@ class TldvAPI {
       throw new Error(`tl;dv transcript fetch failed (${response.status}): ${body}`);
     }
 
-    const data = await response.json();
+    const text = await response.text();
+    if (!text || text.trim().length === 0) {
+      logger.debug('tl;dv transcript empty response', { meetingId });
+      return [];
+    }
+
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      logger.warn('tl;dv transcript response not valid JSON', { meetingId, bodyPreview: text.slice(0, 100) });
+      return [];
+    }
+
     const segments = data.data || data.transcript || [];
 
     logger.info('tl;dv transcript fetched', {
