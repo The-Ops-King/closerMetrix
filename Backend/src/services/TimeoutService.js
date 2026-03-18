@@ -517,9 +517,8 @@ class TimeoutService {
           allWaitingCalls.push(...waitingCalls);
         }
 
-        if (allWaitingCalls.length === 0) continue;
-
-        // Poll tl;dv for recent meetings
+        // Poll tl;dv for recent meetings (even without waiting calls —
+        // meetings can create their own call records via TranscriptService)
         let meetings;
         try {
           meetings = await tldvAPI.listRecentMeetings(client.tldv_api_key);
@@ -535,11 +534,13 @@ class TimeoutService {
         result.meetings_found += meetings.length;
         if (meetings.length === 0) continue;
 
-        // Match meetings to waiting calls
+        // Match meetings to waiting calls (if any exist)
         for (const meeting of meetings) {
           const meetingTime = new Date(meeting.happenedAt || meeting.created_at);
           const meetingOrganizerEmail = meeting.organizer?.email?.toLowerCase();
+          let matched = false;
 
+          // Try to match to a waiting calendar-created call
           for (const call of allWaitingCalls) {
             if (call._matched) continue;
 
@@ -556,14 +557,9 @@ class TimeoutService {
               });
 
               try {
-                // Fetch transcript for this meeting
                 const transcriptSegments = await tldvAPI.fetchTranscript(meeting.id, client.tldv_api_key);
+                if (!transcriptSegments || transcriptSegments.length === 0) break;
 
-                if (!transcriptSegments || transcriptSegments.length === 0) {
-                  continue; // No transcript available yet
-                }
-
-                // Build a tl;dv-shaped payload for TranscriptService
                 const syntheticPayload = {
                   event: 'TranscriptReady',
                   data: {
@@ -584,6 +580,7 @@ class TimeoutService {
                 });
                 result.matched++;
                 call._matched = true;
+                matched = true;
               } catch (error) {
                 logger.error('TimeoutService — failed to process polled tl;dv meeting', {
                   callId: call.call_id,
@@ -593,7 +590,50 @@ class TimeoutService {
                 result.errors++;
               }
 
-              break; // Move to next meeting
+              break;
+            }
+          }
+
+          // No matching calendar call — process as standalone transcript
+          // (TranscriptService will create a new call record if trigger words match)
+          if (!matched) {
+            try {
+              const transcriptSegments = await tldvAPI.fetchTranscript(meeting.id, client.tldv_api_key);
+              if (!transcriptSegments || transcriptSegments.length === 0) continue;
+
+              const syntheticPayload = {
+                event: 'TranscriptReady',
+                data: {
+                  id: meeting.id,
+                  name: meeting.name,
+                  happenedAt: meeting.happenedAt,
+                  duration: meeting.duration,
+                  url: meeting.url,
+                  organizer: meeting.organizer,
+                  invitees: meeting.invitees,
+                  transcript: transcriptSegments,
+                },
+              };
+
+              const processResult = await transcriptService.processTranscriptWebhook('tldv', syntheticPayload, {
+                clientIdHint: client.client_id,
+              });
+
+              if (processResult.action !== 'filtered') {
+                result.matched++;
+                logger.info('TimeoutService — tl;dv poll created standalone call from meeting', {
+                  meetingId: meeting.id,
+                  action: processResult.action,
+                  clientId: client.client_id,
+                });
+              }
+            } catch (error) {
+              logger.error('TimeoutService — failed to process unmatched tl;dv meeting', {
+                meetingId: meeting.id,
+                error: error.message,
+                clientId: client.client_id,
+              });
+              result.errors++;
             }
           }
         }
