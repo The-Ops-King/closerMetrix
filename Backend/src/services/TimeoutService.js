@@ -237,6 +237,16 @@ class TimeoutService {
         });
       }
 
+      // ── Auto-renew calendar watches ──
+      // Re-create watches for all active closers on every sweep.
+      // createWatch is idempotent — Google refreshes existing or creates new.
+      // This ensures watches survive Cloud Run cold starts and 7-day expiry.
+      try {
+        await this._ensureCalendarWatches();
+      } catch (watchError) {
+        logger.warn('TimeoutService — calendar watch renewal failed', { error: watchError.message });
+      }
+
       return { total_checked: totalChecked, total_waiting: totalWaiting, total_polled: totalPolled, total_timed_out: totalTimedOut, errors };
     } catch (error) {
       logger.error('TimeoutService — sweep failed entirely', {
@@ -347,6 +357,51 @@ class TimeoutService {
    *
    * @returns {Object} { closers_checked, meetings_found, matched, errors }
    */
+
+  /**
+   * Ensures calendar watches exist for all active closers across all active clients.
+   * Called on every sweep. createWatch is idempotent — Google refreshes existing
+   * channels or creates new ones. This handles Cloud Run cold starts and 7-day expiry.
+   * Only runs once per hour to avoid hammering the Calendar API.
+   */
+  async _ensureCalendarWatches() {
+    // Throttle: only run once per hour
+    const now = Date.now();
+    if (this._lastWatchCheck && (now - this._lastWatchCheck) < 60 * 60 * 1000) return;
+    this._lastWatchCheck = now;
+
+    const calendarPush = require('./calendar/GoogleCalendarPush');
+    const webhookUrl = config.calendar?.webhookUrl;
+    if (!webhookUrl) return; // No webhook URL configured, skip
+
+    try {
+      const clients = await clientQueries.list('Active');
+      let created = 0;
+      let failed = 0;
+
+      for (const client of clients) {
+        if (client.calendar_source !== 'google_calendar') continue;
+
+        const closers = await closerQueries.listByClient(client.client_id);
+        for (const closer of closers) {
+          if (!closer.work_email) continue;
+          try {
+            await calendarPush.createWatch(closer.work_email, client.client_id);
+            created++;
+          } catch {
+            failed++;
+          }
+        }
+      }
+
+      if (created > 0 || failed > 0) {
+        logger.info('TimeoutService — calendar watches refreshed', { created, failed });
+      }
+    } catch (error) {
+      logger.warn('TimeoutService — calendar watch refresh failed', { error: error.message });
+    }
+  }
+
   async _pollFathomForMissingTranscripts() {
     const result = { closers_checked: 0, meetings_found: 0, matched: 0, errors: 0 };
 
