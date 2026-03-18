@@ -31,7 +31,7 @@ module.exports = {
   async findByWorkEmail(workEmail, clientId) {
     const rows = await bq.query(
       `SELECT ${CLOSER_COLUMNS} FROM ${CLOSERS_TABLE}
-       WHERE work_email = @workEmail
+       WHERE LOWER(work_email) = LOWER(@workEmail)
          AND client_id = @clientId
          AND LOWER(status) = 'active'
        LIMIT 1`,
@@ -51,7 +51,7 @@ module.exports = {
   async findByWorkEmailAnyClient(workEmail) {
     const rows = await bq.queryAdmin(
       `SELECT closer_id, client_id, name, work_email FROM ${CLOSERS_TABLE}
-       WHERE work_email = @workEmail
+       WHERE LOWER(work_email) = LOWER(@workEmail)
          AND LOWER(status) = 'active'
        LIMIT 1`,
       { workEmail }
