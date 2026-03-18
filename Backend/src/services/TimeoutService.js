@@ -521,7 +521,7 @@ class TimeoutService {
         // meetings can create their own call records via TranscriptService)
         let meetings;
         try {
-          meetings = await tldvAPI.listRecentMeetings(client.tldv_api_key);
+          meetings = await tldvAPI.listRecentMeetings(client.tldv_api_key, 50);
         } catch (error) {
           logger.error('TimeoutService — tl;dv API poll failed for client', {
             clientId: client.client_id,
@@ -599,8 +599,29 @@ class TimeoutService {
           }
 
           // No matching calendar call — process as standalone transcript
-          // (TranscriptService will create a new call record if trigger words match)
+          // Pre-filter by trigger words to avoid unnecessary transcript API calls
           if (!matched) {
+            // Quick title check — skip meetings that won't match trigger words
+            const title = (meeting.name || '').toLowerCase();
+            let callSources = [];
+            try {
+              const parsed = JSON.parse(client.settings_json || '{}');
+              callSources = parsed.call_sources || [];
+            } catch {}
+            const filterWord = client.filter_word;
+
+            if (callSources.length > 0) {
+              const hasWildcard = callSources.some(s => s.trigger?.trim() === '*');
+              const hasMatch = callSources.some(s => s.trigger && title.includes(s.trigger.trim().toLowerCase()));
+              if (!hasWildcard && !hasMatch) continue; // Skip — won't match
+            } else if (filterWord) {
+              const words = filterWord.split(',').map(w => w.trim().toLowerCase());
+              const hasWildcard = words.includes('*');
+              const hasMatch = words.some(w => w && title.includes(w));
+              if (!hasWildcard && !hasMatch) continue;
+            }
+            // If no triggers configured at all, process everything
+
             try {
               const transcriptSegments = await tldvAPI.fetchTranscript(meeting.id, client.tldv_api_key);
               if (!transcriptSegments || transcriptSegments.length === 0) continue;
