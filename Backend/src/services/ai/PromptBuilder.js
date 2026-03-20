@@ -76,7 +76,9 @@ class PromptBuilder {
    *   When false, scoring is pure call quality assessment.
    */
   _buildMasterPrompt(hasScript) {
-    const outcomeInstruction = callOutcomes
+    // Only include AI-assignable outcomes in the prompt (excludes Closed-Won, Deposit, Refunded)
+    const aiOutcomes = callOutcomes.filter(o => o.aiAssignable !== false);
+    const outcomeInstruction = aiOutcomes
       .map(o => `- "${o.label}": ${o.description}`)
       .join('\n');
 
@@ -153,8 +155,20 @@ ${scoringInstruction}
 - Use your judgment on what matters most for THIS specific call. A 25-minute first call that nails discovery but never pitches is very different from a follow-up where the close attempt is the whole point.
 
 ## CALL OUTCOMES
-Assign exactly ONE of these outcomes. Think carefully — the outcome determines how this call shows up in reporting:
+Assign exactly ONE of these outcomes based ONLY on what is clearly evidenced in the transcript.
+You CANNOT determine if money changed hands from a conversation alone — do NOT infer financial transactions.
+"Closed - Won", "Deposit", and "Refunded" are NOT available to you — those are set only when payment is confirmed through external systems.
+
+Think carefully — the outcome determines how this call shows up in reporting:
 ${outcomeInstruction}
+
+**CRITICAL RULES:**
+- When in doubt between Follow Up and Lost, default to Follow Up.
+- A prospect verbally agreeing to buy is still Follow Up — until payment is confirmed externally, it's not a close.
+- Objections are normal and do NOT mean the deal is lost. Only mark Lost when the prospect has definitively said no.
+- "Let me think about it" = Follow Up, not Lost.
+- "I need to talk to my spouse" = Follow Up, not Lost.
+- "I can't afford it right now" = Follow Up (unless they explicitly say they're done and not coming back).
 
 ## OBJECTION DETECTION
 You have an elite ability to detect objections — both the obvious ones stated directly and the subtle ones hidden in throwaway comments, deflections, or topic changes.
@@ -181,7 +195,7 @@ Be precise — flag the EXACT phrase, the EXACT timestamp, and explain WHY it's 
 Return ONLY valid JSON (no markdown fences, no explanation text). The JSON must match this schema exactly:
 
 {
-  "call_outcome": "<one of: ${callOutcomes.map(o => o.label).join(', ')}>",
+  "call_outcome": "<one of: ${aiOutcomes.map(o => o.label).join(', ')}>",
   "scores": {
 ${scoreFields}
   },

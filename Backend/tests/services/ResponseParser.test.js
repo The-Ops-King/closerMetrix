@@ -124,10 +124,10 @@ describe('ResponseParser', () => {
   });
 
   describe('_normalizeOutcome', () => {
-    it('should accept exact outcome labels', () => {
+    it('should remap Closed - Won to Follow Up (not AI-assignable)', () => {
       const response = JSON.stringify({ call_outcome: 'Closed - Won', scores: {}, objections: [] });
       const result = responseParser.parse(response);
-      expect(result.data.call_outcome).toBe('Closed - Won');
+      expect(result.data.call_outcome).toBe('Follow Up');
     });
 
     it('should handle case-insensitive matching', () => {
@@ -136,16 +136,16 @@ describe('ResponseParser', () => {
       expect(result.data.call_outcome).toBe('Follow Up');
     });
 
-    it('should match by key (closed_won → Closed - Won)', () => {
+    it('should remap closed_won key to Follow Up (not AI-assignable)', () => {
       const response = JSON.stringify({ call_outcome: 'closed_won', scores: {}, objections: [] });
       const result = responseParser.parse(response);
-      expect(result.data.call_outcome).toBe('Closed - Won');
+      expect(result.data.call_outcome).toBe('Follow Up');
     });
 
-    it('should fuzzy match partial outcomes', () => {
+    it('should remap fuzzy Closed Won to Follow Up (not AI-assignable)', () => {
       const response = JSON.stringify({ call_outcome: 'Closed Won', scores: {}, objections: [] });
       const result = responseParser.parse(response);
-      expect(result.data.call_outcome).toBe('Closed - Won');
+      expect(result.data.call_outcome).toBe('Follow Up');
     });
 
     it('should default to Follow Up for unknown outcome', () => {
@@ -166,16 +166,22 @@ describe('ResponseParser', () => {
       expect(result.data.call_outcome).toBe('Disqualified');
     });
 
-    it('should handle Deposit outcome', () => {
+    it('should remap Deposit to Follow Up (not AI-assignable)', () => {
       const response = JSON.stringify({ call_outcome: 'deposit', scores: {}, objections: [] });
       const result = responseParser.parse(response);
-      expect(result.data.call_outcome).toBe('Deposit');
+      expect(result.data.call_outcome).toBe('Follow Up');
     });
 
     it('should handle Not Pitched outcome', () => {
       const response = JSON.stringify({ call_outcome: 'Not Pitched', scores: {}, objections: [] });
       const result = responseParser.parse(response);
       expect(result.data.call_outcome).toBe('Not Pitched');
+    });
+
+    it('should remap Refunded to Follow Up (not AI-assignable)', () => {
+      const response = JSON.stringify({ call_outcome: 'Refunded', scores: {}, objections: [] });
+      const result = responseParser.parse(response);
+      expect(result.data.call_outcome).toBe('Follow Up');
     });
   });
 

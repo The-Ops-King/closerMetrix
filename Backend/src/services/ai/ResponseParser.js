@@ -150,26 +150,45 @@ class ResponseParser {
     const trimmed = outcome.trim();
 
     // Exact match on label
-    if (OUTCOME_LABELS.includes(trimmed)) return trimmed;
+    if (OUTCOME_LABELS.includes(trimmed)) {
+      return this._enforceAiAssignable(trimmed, outcome);
+    }
 
     // Case-insensitive match on label
     const lowerTrimmed = trimmed.toLowerCase();
     const caseMatch = OUTCOME_LABELS.find(l => l.toLowerCase() === lowerTrimmed);
-    if (caseMatch) return caseMatch;
+    if (caseMatch) return this._enforceAiAssignable(caseMatch, outcome);
 
     // Match on key (e.g., "closed_won" → "Closed - Won")
     const keyMatch = callOutcomes.find(o => o.key === lowerTrimmed.replace(/[\s-]/g, '_'));
-    if (keyMatch) return keyMatch.label;
+    if (keyMatch) return this._enforceAiAssignable(keyMatch.label, outcome);
 
     // Fuzzy: check if any label is contained in the outcome or vice versa
     const fuzzyMatch = callOutcomes.find(o => {
       const oLower = o.label.toLowerCase();
       return lowerTrimmed.includes(oLower) || oLower.includes(lowerTrimmed);
     });
-    if (fuzzyMatch) return fuzzyMatch.label;
+    if (fuzzyMatch) return this._enforceAiAssignable(fuzzyMatch.label, outcome);
 
     logger.warn('Unknown AI outcome, defaulting to Follow Up', { rawOutcome: outcome });
     return 'Follow Up';
+  }
+
+  /**
+   * Safety net: if the AI returns an outcome that's not AI-assignable
+   * (Closed - Won, Deposit, Refunded), remap to Follow Up.
+   * These outcomes can only be set by payment/refund webhooks.
+   */
+  _enforceAiAssignable(label, rawOutcome) {
+    const outcomeConfig = callOutcomes.find(o => o.label === label);
+    if (outcomeConfig && outcomeConfig.aiAssignable === false) {
+      logger.warn('AI returned non-assignable outcome, remapping to Follow Up', {
+        rawOutcome,
+        matched: label,
+      });
+      return 'Follow Up';
+    }
+    return label;
   }
 
   /**
