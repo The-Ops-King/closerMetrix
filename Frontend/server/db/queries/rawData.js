@@ -203,8 +203,15 @@ async function queryBigQuery(clientId, { page = 1, pageSize = 500, tz = null } =
       AND (pains IS NOT NULL OR goals IS NOT NULL)
     LIMIT @pageSize OFFSET @offset`;
 
-  // Run all 5 in parallel, catching individual failures
-  const [callsResult, objectionsResult, closeCycleResult, clientResult, painsGoalsResult] = await Promise.all([
+  // 6) All closers with status — used by CloserFilter to show active/inactive
+  const closersSql = `
+    SELECT closer_id, name, status
+    FROM ${closersTable}
+    WHERE client_id = @clientId
+    ORDER BY name`;
+
+  // Run all 6 in parallel, catching individual failures
+  const [callsResult, objectionsResult, closeCycleResult, clientResult, painsGoalsResult, closersResult] = await Promise.all([
     bq.runQuery(callsSql, params).catch(err => {
       logger.warn('Raw data: calls query failed', { error: err.message, clientId });
       return null;
@@ -223,6 +230,10 @@ async function queryBigQuery(clientId, { page = 1, pageSize = 500, tz = null } =
     }),
     bq.runQuery(painsGoalsSql, params).catch(err => {
       logger.warn('Raw data: pains/goals query failed', { error: err.message, clientId });
+      return null;
+    }),
+    bq.runQuery(closersSql, { clientId }).catch(err => {
+      logger.warn('Raw data: closers query failed', { error: err.message, clientId });
       return null;
     }),
   ]);
@@ -322,7 +333,14 @@ async function queryBigQuery(clientId, { page = 1, pageSize = 500, tz = null } =
     yearlyGoal: num(clientRow.yearly_goal),
   };
 
-  return { calls, objections, closeCycles, client };
+  // Parse closers into clean array
+  const closers = (closersResult || []).map(row => ({
+    closerId: row.closer_id || '',
+    name: row.name || '',
+    status: row.status || 'Active',
+  }));
+
+  return { calls, objections, closeCycles, client, closers };
 }
 
 

@@ -197,7 +197,7 @@ function PipelineColumn({ title, items, color, page, onPageChange, emptyLabel, r
 
 export default function CloserViewPage() {
   const { tier, closerScope, mode, token, adminViewClientId } = useAuth();
-  const { data, isLoading } = useMetrics('closer-view');
+  const { data, isLoading } = useMetrics('closer-view', { filterOverrides: { closerId: null } });
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [dismissedFollowUps, setDismissedFollowUps] = useState(new Set());
   const [linkCopied, setLinkCopied] = useState(null);

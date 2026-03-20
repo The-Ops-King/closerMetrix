@@ -220,7 +220,7 @@ Backend/
 
 | # | Date | Triggered By | Rule |
 |---|------|-------------|------|
-| 1 | init | — | Always restart both dev servers after any frontend change |
+| 1 | init | — | Always restart all 3 dev servers after ANY code change — don't wait for user to ask |
 | 2 | init | — | Never use demo tokens — always use real BQ tokens |
 | 4 | init | — | Never hardcode hex — always use COLORS token names |
 | 5 | init | review.md audit | `discovery_score` BQ column does not exist — use `pain_score` + `goal_score` |

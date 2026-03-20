@@ -10,6 +10,7 @@
  *   - calls: All call records for the client
  *   - objections: All objection records
  *   - closeCycles: Close cycle stats per prospect
+ *   - closers: All closers with status (Active/Inactive)
  *
  * Provides:
  *   rawData: { calls, objections, closeCycles } | null

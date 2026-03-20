@@ -13,6 +13,7 @@ import React, { useMemo } from 'react';
 import FormControl from '@mui/material/FormControl';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
+import ListSubheader from '@mui/material/ListSubheader';
 import Chip from '@mui/material/Chip';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
@@ -26,24 +27,35 @@ export default function CloserFilter({ disabled = false }) {
   const { rawData } = useData();
   const { closerIds, setCloserIds, dateRange } = useFilters();
 
-  // Derive closer options from ALL calls (not date-filtered) so the filter
-  // never disappears when the date range has no data
+  // Derive closer options from rawData.closers (with status) if available,
+  // falling back to calls data. Active closers sort first, inactive at the bottom.
   const closerOptions = useMemo(() => {
-    if (!rawData?.calls) return [];
+    if (rawData?.closers?.length) {
+      // Use the closers list which includes status
+      const active = rawData.closers
+        .filter(c => (c.status || '').toLowerCase() === 'active')
+        .map(c => ({ closer_id: c.closerId, name: c.name, isActive: true }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      const inactive = rawData.closers
+        .filter(c => (c.status || '').toLowerCase() !== 'active')
+        .map(c => ({ closer_id: c.closerId, name: c.name, isActive: false }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      return [...active, ...inactive];
+    }
 
-    const map = new Map(); // closerId -> closerName
+    // Fallback: derive from calls (no status info)
+    if (!rawData?.calls) return [];
+    const map = new Map();
     for (const call of rawData.calls) {
       if (!call.closerId || !call.closerName) continue;
       if (!map.has(call.closerId)) {
         map.set(call.closerId, call.closerName);
       }
     }
-
-    // Sort alphabetically by name
     return Array.from(map.entries())
-      .map(([id, name]) => ({ closer_id: id, name }))
+      .map(([id, name]) => ({ closer_id: id, name, isActive: true }))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [rawData?.calls]);
+  }, [rawData?.closers, rawData?.calls]);
 
   // Build lookup map for rendering chips
   const closerMap = useMemo(() => {
@@ -173,23 +185,51 @@ export default function CloserFilter({ disabled = false }) {
           },
         }}
       >
-        {closerOptions.map((closer) => (
-          <MenuItem
-            key={closer.closer_id}
-            value={closer.closer_id}
-            sx={{
-              color: COLORS.text.primary,
-              '&.Mui-selected': {
-                backgroundColor: 'rgba(77, 212, 232, 0.08)',
-              },
-              '&.Mui-selected:hover': {
-                backgroundColor: 'rgba(77, 212, 232, 0.12)',
-              },
-            }}
-          >
-            {closer.name}
-          </MenuItem>
-        ))}
+        {(() => {
+          const items = [];
+          const hasInactive = closerOptions.some(c => !c.isActive);
+          let dividerAdded = false;
+          for (const closer of closerOptions) {
+            if (!closer.isActive && !dividerAdded && hasInactive) {
+              dividerAdded = true;
+              items.push(
+                <ListSubheader
+                  key="__inactive_divider"
+                  sx={{
+                    backgroundColor: COLORS.bg.secondary,
+                    borderTop: `1px solid ${COLORS.border.default}`,
+                    fontSize: '0.7rem',
+                    color: COLORS.text.muted,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    lineHeight: '28px',
+                  }}
+                >
+                  Inactive
+                </ListSubheader>
+              );
+            }
+            items.push(
+              <MenuItem
+                key={closer.closer_id}
+                value={closer.closer_id}
+                sx={{
+                  color: closer.isActive ? COLORS.text.primary : COLORS.text.muted,
+                  opacity: closer.isActive ? 1 : 0.5,
+                  '&.Mui-selected': {
+                    backgroundColor: 'rgba(77, 212, 232, 0.08)',
+                  },
+                  '&.Mui-selected:hover': {
+                    backgroundColor: 'rgba(77, 212, 232, 0.12)',
+                  },
+                }}
+              >
+                {closer.name}
+              </MenuItem>
+            );
+          }
+          return items;
+        })()}
       </Select>
     </FormControl>
   );

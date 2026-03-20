@@ -57,6 +57,7 @@ export function useMetrics(section, options = {}) {
       objectionType: queryParams.objectionType || null,
       riskCategory: queryParams.riskCategory || null,
       callSource: queryParams.callSource || null,
+      ...options.filterOverrides,
     };
 
     return computePageData(section, rawData, filters, kpiTargets);
