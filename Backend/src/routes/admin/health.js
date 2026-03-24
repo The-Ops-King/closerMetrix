@@ -98,7 +98,7 @@ router.post('/jobs/check-timeouts', webhookAuth.admin, async (req, res, next) =>
  * Returns active push notification channels and their expiry dates.
  */
 router.get('/calendar/channels', webhookAuth.admin, async (req, res) => {
-  const stats = calendarPush.getChannelStats();
+  const stats = await calendarPush.getChannelStats();
   const channels = [];
   for (const [channelId, data] of calendarPush.channels) {
     channels.push({
@@ -141,7 +141,7 @@ router.post('/calendar/watch/:clientId/:closerId', webhookAuth.admin, async (req
  */
 router.post('/calendar/renew', webhookAuth.admin, async (req, res, next) => {
   try {
-    const expiring = calendarPush.getExpiringChannels(48);
+    const expiring = await calendarPush.getExpiringChannels(48);
     const results = [];
     for (const ch of expiring) {
       try {

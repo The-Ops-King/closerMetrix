@@ -24,18 +24,91 @@ const { google } = require('googleapis');
 const { generateId } = require('../../utils/idGenerator');
 const logger = require('../../utils/logger');
 const config = require('../../config');
+const bq = require('../../db/BigQueryClient');
 
 class GoogleCalendarPush {
   constructor() {
     this.calendarApi = null;
 
     /**
-     * In-memory channel registry.
-     * Key: channelId, Value: { closerEmail, clientId, resourceId, expiration }
-     *
-     * TODO (Phase 6): Persist to BigQuery for durability across restarts.
+     * In-memory channel cache, backed by BigQuery CalendarChannels table.
+     * On startup, loadChannelsFromBQ() hydrates from BQ.
+     * On create/stop, both the Map and BQ are updated.
      */
     this.channels = new Map();
+    this._loaded = false;
+  }
+
+  /**
+   * Load persisted channels from BigQuery into the in-memory Map.
+   * Called once on first access or explicitly on startup.
+   * Silently skips if BQ is unavailable (e.g., demo mode).
+   */
+  async loadChannelsFromBQ() {
+    if (this._loaded) return;
+    try {
+      const sql = `SELECT channel_id, closer_email, client_id, resource_id, expiration
+        FROM ${bq.table('CalendarChannels')}
+        WHERE expiration > CURRENT_TIMESTAMP()`;
+      const rows = await bq.queryAdmin(sql);
+      for (const row of rows) {
+        this.channels.set(row.channel_id, {
+          channelId: row.channel_id,
+          closerEmail: row.closer_email,
+          clientId: row.client_id,
+          resourceId: row.resource_id,
+          expiration: new Date(row.expiration.value || row.expiration),
+        });
+      }
+      this._loaded = true;
+      if (rows.length > 0) {
+        logger.info('Loaded calendar channels from BQ', { count: rows.length });
+      }
+    } catch (err) {
+      // Table may not exist yet — that's ok, it'll be created on first watch
+      if (err.message && err.message.includes('Not found')) {
+        logger.debug('CalendarChannels table not found, will create on first watch');
+        this._loaded = true;
+      } else {
+        logger.warn('Failed to load calendar channels from BQ', { error: err.message });
+      }
+    }
+  }
+
+  /**
+   * Persist a channel to BigQuery.
+   */
+  async _persistChannel(channelData) {
+    try {
+      await bq.insert('CalendarChannels', {
+        channel_id: channelData.channelId,
+        closer_email: channelData.closerEmail,
+        client_id: channelData.clientId,
+        resource_id: channelData.resourceId,
+        expiration: channelData.expiration.toISOString(),
+        created: new Date().toISOString(),
+      });
+    } catch (err) {
+      logger.warn('Failed to persist calendar channel to BQ', {
+        channelId: channelData.channelId,
+        error: err.message,
+      });
+    }
+  }
+
+  /**
+   * Remove a channel from BigQuery.
+   */
+  async _removeChannelFromBQ(channelId) {
+    try {
+      const sql = `DELETE FROM ${bq.table('CalendarChannels')} WHERE channel_id = @channelId`;
+      await bq.queryAdmin(sql, { channelId });
+    } catch (err) {
+      logger.warn('Failed to remove calendar channel from BQ', {
+        channelId,
+        error: err.message,
+      });
+    }
   }
 
   /**
@@ -154,6 +227,7 @@ class GoogleCalendarPush {
       };
 
       this.channels.set(channelId, channelData);
+      await this._persistChannel(channelData);
 
       logger.info('Calendar watch created', {
         channelId,
@@ -200,6 +274,7 @@ class GoogleCalendarPush {
       });
 
       this.channels.delete(channelId);
+      await this._removeChannelFromBQ(channelId);
 
       logger.info('Calendar watch stopped', { channelId });
     } catch (error) {
@@ -207,6 +282,7 @@ class GoogleCalendarPush {
       if (error.code === 404) {
         logger.debug('Calendar watch already expired', { channelId });
         this.channels.delete(channelId);
+        await this._removeChannelFromBQ(channelId);
         return;
       }
       logger.error('Failed to stop calendar watch', {
@@ -225,6 +301,7 @@ class GoogleCalendarPush {
    * @returns {Object} New channel info
    */
   async renewWatch(channelId) {
+    await this.loadChannelsFromBQ();
     const existing = this.channels.get(channelId);
     if (!existing) {
       logger.warn('Cannot renew unknown channel', { channelId });
@@ -274,7 +351,8 @@ class GoogleCalendarPush {
    * @param {number} withinHours — Expiration window (default 24)
    * @returns {Array} Channels expiring soon
    */
-  getExpiringChannels(withinHours = 24) {
+  async getExpiringChannels(withinHours = 24) {
+    await this.loadChannelsFromBQ();
     const cutoff = new Date(Date.now() + withinHours * 60 * 60 * 1000);
     const expiring = [];
 
@@ -293,7 +371,8 @@ class GoogleCalendarPush {
    *
    * @returns {Object} { total, expiringIn24h }
    */
-  getChannelStats() {
+  async getChannelStats() {
+    await this.loadChannelsFromBQ();
     const total = this.channels.size;
     const expiringIn24h = this.getExpiringChannels(24).length;
     return { total, expiringIn24h };
