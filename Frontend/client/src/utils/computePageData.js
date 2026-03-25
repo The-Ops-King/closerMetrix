@@ -110,12 +110,30 @@ function parseCallSources(callSource) {
   return callSource.split(',').map(s => s.trim());
 }
 
-/** Filter calls by date range, optional closer(s), and optional call source(s) */
+/**
+ * Effective date for a call — uses dateClosed for closed/deposit deals
+ * (when revenue should be attributed to the close date), falls back to appointmentDate.
+ */
+function effectiveDate(c) {
+  if (c.dateClosed && (c.callOutcome === 'Closed - Won' || c.callOutcome === 'Deposit')) {
+    return c.dateClosed;
+  }
+  return c.appointmentDate;
+}
+
+/**
+ * Filter calls by date range, optional closer(s), and optional call source(s).
+ * Uses effectiveDate (dateClosed for closed/deposit deals, appointmentDate otherwise)
+ * for date filtering — so revenue is attributed to close date, not appointment date.
+ * Stamps each call with `_effectiveDate` for downstream bucketing.
+ */
 function filterCalls(calls, dateStart, dateEnd, closerId, callSource) {
   const ids = parseCloserIds(closerId);
   const sources = parseCallSources(callSource);
   return calls.filter(c => {
-    if (c.appointmentDate < dateStart || c.appointmentDate > dateEnd) return false;
+    const date = effectiveDate(c);
+    c._effectiveDate = date;
+    if (date < dateStart || date > dateEnd) return false;
     if (ids && !ids.includes(c.closerId)) return false;
     if (sources && !sources.includes(c.callSource)) return false;
     return true;
@@ -526,8 +544,8 @@ function computeOverview(calls, granularity, rawData, prev) {
     s.disqualified = withDelta(s.disqualified, dqCount, pDqCount, dl, 'down');
   }
 
-  // Time-series charts
-  const timeBuckets = groupByTime(calls, 'appointmentDate', granularity);
+  // Time-series charts — use _effectiveDate so revenue/closes bucket by close date
+  const timeBuckets = groupByTime(calls, '_effectiveDate', granularity);
   const revenueOverTime = [];
   const closesOverTime = [];
   const showCloseRateOverTime = [];
@@ -680,8 +698,8 @@ function computeFinancial(calls, granularity, prev) {
     s.collectedPct = withDelta(s.collectedPct, sd(totalCash, totalRevenue), sd(pCash, pRevenue), dl, 'up');
   }
 
-  // Time-series
-  const timeBuckets = groupByTime(calls, 'appointmentDate', granularity);
+  // Time-series — use _effectiveDate so revenue is bucketed by close date
+  const timeBuckets = groupByTime(calls, '_effectiveDate', granularity);
   const revenueOverTime = [];
   const perCallOverTime = [];
   for (const [date, bucket] of timeBuckets) {

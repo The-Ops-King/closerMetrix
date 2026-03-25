@@ -140,7 +140,8 @@ async function queryBigQuery(clientId, { page = 1, pageSize = 500, tz = null } =
       calls_product_purchased,
       calls_prospect_email,
       calls_prospect_name,
-      calls_call_source
+      calls_call_source,
+      calls_date_closed
     FROM ${callsView}
     WHERE clients_client_id = @clientId
     ORDER BY calls_appointment_date DESC
@@ -276,6 +277,7 @@ async function queryBigQuery(clientId, { page = 1, pageSize = 500, tz = null } =
       prospectEmail: row.calls_prospect_email || '',
       prospectName: row.calls_prospect_name || '',
       callSource: row.calls_call_source || '',
+      dateClosed: toDateStr(row.calls_date_closed, tz) || '',
     };
   });
 
