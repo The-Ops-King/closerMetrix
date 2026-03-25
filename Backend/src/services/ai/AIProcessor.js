@@ -219,6 +219,7 @@ class AIProcessor {
   async _updateCallWithAIResults(call, aiData, clientId) {
     const updates = {
       call_outcome: aiData.call_outcome,
+      attendance: 'Show', // If AI processed a transcript, the prospect was on the call
       processing_status: 'complete',
       processing_error: null,
       ai_summary: aiData.summary,
