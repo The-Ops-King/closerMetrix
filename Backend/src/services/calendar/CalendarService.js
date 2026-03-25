@@ -315,12 +315,13 @@ class CalendarService {
       for (const closer of closers) {
         // Skip closers without work_email — can't fetch their calendar
         if (!closer.work_email) continue;
+        const closerEmailLower = closer.work_email.toLowerCase().trim();
 
         try {
           // Get a calendar client for this closer (may use DWD impersonation)
-          const calendar = await this._getCalendarApi(closer.work_email);
+          const calendar = await this._getCalendarApi(closerEmailLower);
           const response = await calendar.events.list({
-            calendarId: closer.work_email,
+            calendarId: closerEmailLower,
             updatedMin: fiveMinutesAgo,
             singleEvents: true,
             orderBy: 'updated',

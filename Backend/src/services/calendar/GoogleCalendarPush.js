@@ -199,6 +199,7 @@ class GoogleCalendarPush {
    * @throws {Error} If the calendar is not accessible
    */
   async createWatch(closerEmail, clientId) {
+    closerEmail = (closerEmail || '').toLowerCase().trim();
     const calendar = await this._getCalendarApi(closerEmail);
     const channelId = generateId();
     const webhookUrl = `${config.calendar.webhookUrl}/${clientId}`;
@@ -263,6 +264,7 @@ class GoogleCalendarPush {
    * @param {string} resourceId — The resource ID from the original watch
    */
   async stopWatch(channelId, resourceId, closerEmail) {
+    closerEmail = (closerEmail || '').toLowerCase().trim();
     const calendar = await this._getCalendarApi(closerEmail);
 
     try {

@@ -64,8 +64,9 @@ Tokens are stored in `.env` (gitignored). Never commit raw tokens to tracked fil
 
 ```bash
 export PATH="/Users/user/google-cloud-sdk/bin:$PATH"
-gcloud builds submit --config cloudbuild.yaml \
-  --substitutions=COMMIT_SHA=$(git rev-parse --short HEAD) \
+# Backend deploy (run from Backend/)
+cd Backend && gcloud builds submit --config cloudbuild.yaml \
+  --substitutions=SHORT_SHA=$(git rev-parse --short HEAD) \
   --project=closer-automation
 ```
 
