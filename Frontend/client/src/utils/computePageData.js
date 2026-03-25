@@ -183,8 +183,8 @@ function monthStart(dateStr) {
 /**
  * Auto-select chart granularity based on the date range span.
  * Keeps charts readable: daily for short ranges, monthly for long ones.
- *   ≤31 days  → daily  (covers "This Month" and "Last 30 Days")
- *   32-90 days → weekly
+ *   ≤14 days  → daily
+ *   15-90 days → weekly
  *   >90 days  → monthly
  */
 function autoGranularity(explicit, dateStart, dateEnd) {
@@ -192,7 +192,7 @@ function autoGranularity(explicit, dateStart, dateEnd) {
   if (!dateStart || !dateEnd) return 'weekly';
   const ms = new Date(dateEnd) - new Date(dateStart);
   const days = Math.round(ms / 86400000);
-  if (days <= 31) return 'daily';
+  if (days <= 14) return 'daily';
   if (days <= 90) return 'weekly';
   return 'monthly';
 }

@@ -118,11 +118,42 @@ const OBJECTION_TYPE_ALIASES = {
 };
 
 /**
- * Normalize an objection type string using the alias map.
- * Returns the canonical name, or the original if no alias exists.
+ * Map from snake_case keys to display labels.
+ * Built from OBJECTION_TYPES_ALL cross-referenced with the key format
+ * that ResponseParser stores in BigQuery (e.g., 'financial' → 'Financial').
+ */
+const OBJECTION_KEY_TO_LABEL = {
+  'financial': 'Financial',
+  'spouse': 'Spouse/Partner',
+  'think_about': 'Think About It',
+  'timing': 'Timing',
+  'trust': 'Trust/Credibility',
+  'already_tried': 'Already Tried',
+  'diy': 'DIY',
+  'not_ready': 'Not Ready',
+  'competitor': 'Competitor',
+  'authority': 'Authority',
+  'value': 'Value',
+  'commitment': 'Commitment',
+  'program_fit': 'Program Not a Fit',
+  'other': 'Other',
+};
+
+/**
+ * Normalize an objection type string using the alias map and key→label map.
+ * Handles: alias names, snake_case keys from BQ, and already-correct labels.
+ * Returns the canonical display label.
  */
 function normalizeObjectionType(type) {
-  return OBJECTION_TYPE_ALIASES[type] || type;
+  if (!type) return 'Other';
+  // First check alias map
+  const aliased = OBJECTION_TYPE_ALIASES[type] || type;
+  // Then check if it's a snake_case key from BQ
+  if (OBJECTION_KEY_TO_LABEL[aliased]) return OBJECTION_KEY_TO_LABEL[aliased];
+  // Check lowercase version too (e.g., 'Financial' won't match but 'financial' will)
+  if (OBJECTION_KEY_TO_LABEL[aliased.toLowerCase()]) return OBJECTION_KEY_TO_LABEL[aliased.toLowerCase()];
+  // Already a display label or unknown — return as-is
+  return aliased;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -205,6 +236,7 @@ if (typeof module !== 'undefined' && module.exports) {
     OBJECTION_TYPES_ALL,
     OBJECTION_TYPE_COLORS,
     OBJECTION_TYPE_ALIASES,
+    OBJECTION_KEY_TO_LABEL,
     normalizeObjectionType,
     RISK_CATEGORIES,
     RISK_CATEGORY_LABELS,
@@ -222,6 +254,7 @@ export {
   OBJECTION_TYPES_ALL,
   OBJECTION_TYPE_COLORS,
   OBJECTION_TYPE_ALIASES,
+  OBJECTION_KEY_TO_LABEL,
   normalizeObjectionType,
   RISK_CATEGORIES,
   RISK_CATEGORY_LABELS,

@@ -60,7 +60,7 @@ const DUMMY_SCOREBOARD = {
 export default function CloserScoreboardPage() {
   const { tier } = useAuth();
   const hasAccess = meetsMinTier(tier, 'insight');
-  const { data: realData, isLoading, error } = useMetrics('closer-scoreboard', { enabled: hasAccess });
+  const { data: realData, isLoading, error } = useMetrics('closer-scoreboard', { enabled: hasAccess, filterOverrides: { closerId: null } });
   const data = hasAccess ? realData : DUMMY_SCOREBOARD;
   const { text: insightText, generatedAt: insightGeneratedAt, isLoading: insightLoading, isOnDemandLoading, generateWithFilters, remainingAnalyses } = useInsight('closer-scoreboard', data);
 
