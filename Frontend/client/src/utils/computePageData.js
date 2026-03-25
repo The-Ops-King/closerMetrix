@@ -111,29 +111,31 @@ function parseCallSources(callSource) {
 }
 
 /**
- * Effective date for a call — uses dateClosed for closed/deposit deals
- * (when revenue should be attributed to the close date), falls back to appointmentDate.
- */
-function effectiveDate(c) {
-  if (c.dateClosed && (c.callOutcome === 'Closed - Won' || c.callOutcome === 'Deposit')) {
-    return c.dateClosed;
-  }
-  return c.appointmentDate;
-}
-
-/**
  * Filter calls by date range, optional closer(s), and optional call source(s).
- * Uses effectiveDate (dateClosed for closed/deposit deals, appointmentDate otherwise)
- * for date filtering — so revenue is attributed to close date, not appointment date.
- * Stamps each call with `_effectiveDate` for downstream bucketing.
+ *
+ * A call is included if EITHER:
+ *   - Its appointmentDate falls within the date range (for activity metrics: shows, ghosts, etc.)
+ *   - Its dateClosed falls within the date range (for revenue/close metrics — even if appointment was outside range)
+ *
+ * Each call is stamped with:
+ *   _inRangeByAppointment: true if appointmentDate is in range
+ *   _inRangeByClose: true if dateClosed is in range (and call is Closed-Won or Deposit)
+ *   _effectiveDate: dateClosed for closed/deposit deals, appointmentDate otherwise (for time-series bucketing)
  */
 function filterCalls(calls, dateStart, dateEnd, closerId, callSource) {
   const ids = parseCloserIds(closerId);
   const sources = parseCallSources(callSource);
   return calls.filter(c => {
-    const date = effectiveDate(c);
-    c._effectiveDate = date;
-    if (date < dateStart || date > dateEnd) return false;
+    const apptInRange = c.appointmentDate >= dateStart && c.appointmentDate <= dateEnd;
+    const hasCloseDate = c.dateClosed && (c.callOutcome === 'Closed - Won' || c.callOutcome === 'Deposit');
+    const closeInRange = hasCloseDate && c.dateClosed >= dateStart && c.dateClosed <= dateEnd;
+
+    c._inRangeByAppointment = apptInRange;
+    c._inRangeByClose = closeInRange;
+    c._effectiveDate = hasCloseDate ? c.dateClosed : c.appointmentDate;
+
+    // Include if either date is in range
+    if (!apptInRange && !closeInRange) return false;
     if (ids && !ids.includes(c.closerId)) return false;
     if (sources && !sources.includes(c.callSource)) return false;
     return true;
@@ -414,14 +416,17 @@ export function computePageData(section, rawData, filters, kpiTargets) {
 // ─────────────────────────────────────────────────────────────
 
 function computeOverview(calls, granularity, rawData, prev) {
-  const held = calls.filter(isShow);
-  const closed = calls.filter(c => isShow(c) && isClosed(c));
-  const deposits = calls.filter(c => isShow(c) && isDeposit(c));
-  const lost = calls.filter(c => isShow(c) && isLost(c));
-  const firstCalls = calls.filter(isFirstCall);
+  // Activity metrics: only calls with appointments in the date range
+  const apptCalls = calls.filter(c => c._inRangeByAppointment);
+  const held = apptCalls.filter(isShow);
+  const lost = apptCalls.filter(c => isShow(c) && isLost(c));
+  const firstCalls = apptCalls.filter(isFirstCall);
   const firstHeld = firstCalls.filter(isShow);
 
-  const revenueDeals = held.filter(hasRevenue);
+  // Close/revenue metrics: calls that closed in the date range (regardless of appointment date)
+  const closed = calls.filter(c => c._inRangeByClose && isShow(c) && isClosed(c));
+  const deposits = calls.filter(c => c._inRangeByClose && isShow(c) && isDeposit(c));
+  const revenueDeals = calls.filter(c => c._inRangeByClose && isShow(c) && hasRevenue(c));
   const revenue = sum(revenueDeals, 'revenueGenerated');
   const cash = sum(revenueDeals, 'cashCollected');
 
@@ -466,13 +471,13 @@ function computeOverview(calls, granularity, rawData, prev) {
       prospectsHeld: m('Unique Appointments Held',
         new Set(firstHeld.filter(c => c.prospectEmail).map(c => c.prospectEmail)).size || firstHeld.length,
         'number', 'cyan'),
-      showRate: m('Show Rate', round(sd(held.length, calls.length), 3), 'percent', 'green'),
+      showRate: m('Show Rate', round(sd(held.length, apptCalls.length), 3), 'percent', 'green'),
       closeRate: m('Show \u2192 Close Rate', round(sd(closed.length, held.length), 3), 'percent', 'cyan'),
-      scheduledCloseRate: m('Scheduled \u2192 Close Rate', round(sd(closed.length, calls.length), 3), 'percent', 'blue'),
+      scheduledCloseRate: m('Scheduled \u2192 Close Rate', round(sd(closed.length, apptCalls.length), 3), 'percent', 'blue'),
       callsLost: m('Calls Lost', lost.length, 'number', 'red'),
       lostPct: m('Lost %', round(sd(lost.length, held.length), 3), 'percent', 'red'),
       avgCallDuration: m('Average Call Duration', round(sd(held.reduce((acc, c) => acc + (c.durationMinutes || 0), 0), held.length), 1), 'duration', 'amber'),
-      activeFollowUp: m('Active Follow Up', calls.filter(c => isShow(c) && isFollowUpOutcome(c)).length, 'number', 'purple'),
+      activeFollowUp: m('Active Follow Up', apptCalls.filter(c => isShow(c) && isFollowUpOutcome(c)).length, 'number', 'purple'),
       disqualified: m('# Disqualified', held.filter(isDQ).length, 'number', 'muted'),
     },
   };
@@ -633,10 +638,14 @@ function computeOverview(calls, granularity, rawData, prev) {
 // ─────────────────────────────────────────────────────────────
 
 function computeFinancial(calls, granularity, prev) {
-  const held = calls.filter(isShow);
-  const closed = held.filter(isClosed);
-  const deposits = held.filter(isDeposit);
-  const revenueDeals = held.filter(hasRevenue);
+  // Activity metrics: only calls with appointments in range
+  const apptCalls = calls.filter(c => c._inRangeByAppointment);
+  const held = apptCalls.filter(isShow);
+
+  // Close/revenue metrics: calls that closed in the date range
+  const closed = calls.filter(c => c._inRangeByClose && isShow(c) && isClosed(c));
+  const deposits = calls.filter(c => c._inRangeByClose && isShow(c) && isDeposit(c));
+  const revenueDeals = calls.filter(c => c._inRangeByClose && isShow(c) && hasRevenue(c));
 
   const totalRevenue = sum(revenueDeals, 'revenueGenerated');
   const totalCash = sum(revenueDeals, 'cashCollected');
@@ -680,9 +689,10 @@ function computeFinancial(calls, granularity, prev) {
   if (prev && prev.calls.length > 0) {
     const dl = prev.deltaLabel;
     const pc = prev.calls;
-    const pHeld = pc.filter(isShow);
-    const pClosed = pHeld.filter(isClosed);
-    const pRevDeals = pHeld.filter(hasRevenue);
+    const pApptCalls = pc.filter(c => c._inRangeByAppointment);
+    const pHeld = pApptCalls.filter(isShow);
+    const pClosed = pc.filter(c => c._inRangeByClose && isShow(c) && isClosed(c));
+    const pRevDeals = pc.filter(c => c._inRangeByClose && isShow(c) && hasRevenue(c));
     const pRevenue = sum(pRevDeals, 'revenueGenerated');
     const pCash = sum(pRevDeals, 'cashCollected');
     const pClosedRev = sum(pClosed, 'revenueGenerated');
@@ -715,20 +725,24 @@ function computeFinancial(calls, granularity, prev) {
     });
   }
 
-  // Per-closer
-  const closerBuckets = groupByCloser(held);
+  // Per-closer — revenue charts use close-range deals, per-call uses activity-range held
+  const closerRevBuckets = groupByCloser(revenueDeals);
+  const closerHeldBuckets = groupByCloser(held);
   const revenueByCloserBar = [];
   const avgPerDealByCloser = [];
   const perCallByCloser = [];
   const revenueByCloserPie = [];
 
-  for (const [name, closerCalls] of closerBuckets) {
-    const cRevDeals = closerCalls.filter(hasRevenue);
-    const cClosed = closerCalls.filter(isClosed);
+  // Collect all closer names from both buckets
+  const allCloserNames = new Set([...closerRevBuckets.keys(), ...closerHeldBuckets.keys()]);
+  for (const name of allCloserNames) {
+    const cRevDeals = closerRevBuckets.get(name) || [];
+    const cClosed = cRevDeals.filter(isClosed);
     const cRev = sum(cRevDeals, 'revenueGenerated');
     const cCash = sum(cRevDeals, 'cashCollected');
     const cClosedRev = sum(cClosed, 'revenueGenerated');
     const cClosedCash = sum(cClosed, 'cashCollected');
+    const cHeld = closerHeldBuckets.get(name) || [];
 
     revenueByCloserBar.push({
       date: name,
@@ -742,10 +756,12 @@ function computeFinancial(calls, granularity, prev) {
     });
     perCallByCloser.push({
       date: name,
-      revPerCall: round(sd(cRev, closerCalls.length)),
-      cashPerCall: round(sd(cCash, closerCalls.length)),
+      revPerCall: round(sd(cRev, cHeld.length)),
+      cashPerCall: round(sd(cCash, cHeld.length)),
     });
-    revenueByCloserPie.push({ label: name, value: cRev, color: PIE_COLORS[revenueByCloserPie.length % PIE_COLORS.length] });
+    if (cRev > 0) {
+      revenueByCloserPie.push({ label: name, value: cRev, color: PIE_COLORS[revenueByCloserPie.length % PIE_COLORS.length] });
+    }
   }
   revenueByCloserBar.sort((a, b) => (b.cash + b.uncollected) - (a.cash + a.uncollected));
   avgPerDealByCloser.sort((a, b) => (b.avgCash + b.avgUncollected) - (a.avgCash + a.avgUncollected));
@@ -1118,21 +1134,28 @@ function computeDepositLifecycle(allCalls, depositCalls) {
 // ─────────────────────────────────────────────────────────────
 
 function computeCallOutcomes(calls, granularity, prev) {
-  const held = calls.filter(isShow);
-  const firstCalls = calls.filter(isFirstCall);
-  const followUps = calls.filter(isFollowUp);
+  // Activity metrics: only calls with appointments in range
+  const apptCalls = calls.filter(c => c._inRangeByAppointment);
+  const held = apptCalls.filter(isShow);
+  const firstCalls = apptCalls.filter(isFirstCall);
+  const followUps = apptCalls.filter(isFollowUp);
   const firstHeld = firstCalls.filter(isShow);
   const followUpHeld = followUps.filter(isShow);
 
-  const closed = held.filter(isClosed);
-  const deposits = held.filter(isDeposit);
+  // Close/revenue metrics: calls that closed in the date range
+  const closed = calls.filter(c => c._inRangeByClose && isShow(c) && isClosed(c));
+  const deposits = calls.filter(c => c._inRangeByClose && isShow(c) && isDeposit(c));
+
+  // Activity-based outcomes (derived from appointment range)
   const lost = held.filter(isLost);
   const dq = held.filter(isDQ);
   const notPitched = held.filter(isNotPitched);
   const followUpOutcome = held.filter(isFollowUpOutcome);
 
-  const firstClosed = firstHeld.filter(isClosed);
-  const followUpClosed = followUpHeld.filter(isClosed);
+  // Close splits by call type — from close-range data
+  const firstClosed = closed.filter(isFirstCall);
+  const followUpClosed = closed.filter(isFollowUp);
+  // Activity-based loss/DQ splits
   const firstLost = firstHeld.filter(isLost);
   const followUpLost = followUpHeld.filter(isLost);
   const firstDQ = firstHeld.filter(isDQ);
@@ -1213,16 +1236,19 @@ function computeCallOutcomes(calls, granularity, prev) {
   if (prev && prev.calls.length > 0) {
     const dl = prev.deltaLabel;
     const pc = prev.calls;
-    const pHeld = pc.filter(isShow);
-    const pClosed = pHeld.filter(isClosed);
-    const pDeposits = pHeld.filter(isDeposit);
+    const pApptCalls = pc.filter(c => c._inRangeByAppointment);
+    const pHeld = pApptCalls.filter(isShow);
+    const pClosed = pc.filter(c => c._inRangeByClose && isShow(c) && isClosed(c));
+    const pDeposits = pc.filter(c => c._inRangeByClose && isShow(c) && isDeposit(c));
     const pLost = pHeld.filter(isLost);
 
     // Compute previous period sub-groups
-    const pFirstHeld = pc.filter(c => isFirstCall(c) && isShow(c));
-    const pFirstClosed = pFirstHeld.filter(isClosed);
-    const pFUHeld = pc.filter(c => isFollowUp(c) && isShow(c));
-    const pFUClosed = pFUHeld.filter(isClosed);
+    const pFirstCalls = pApptCalls.filter(isFirstCall);
+    const pFirstHeld = pFirstCalls.filter(isShow);
+    const pFirstClosed = pClosed.filter(isFirstCall);
+    const pFUAppt = pApptCalls.filter(isFollowUp);
+    const pFUHeld = pFUAppt.filter(isShow);
+    const pFUClosed = pClosed.filter(isFollowUp);
     const pFollowUpOutcome = pHeld.filter(isFollowUpOutcome);
     const pDQ = pHeld.filter(isDQ);
     const pNotPitched = pHeld.filter(isNotPitched);
@@ -1258,7 +1284,7 @@ function computeCallOutcomes(calls, granularity, prev) {
     sections.closedWon.followUpCloseRate = withDelta(sections.closedWon.followUpCloseRate, sd(followUpClosed.length, followUpHeld.length), sd(pFUClosed.length, pFUHeld.length), dl, 'up');
 
     // Follow-Up section
-    const pFU = pc.filter(isFollowUp);
+    const pFU = pApptCalls.filter(isFollowUp);
     sections.followUp.scheduled = withDelta(sections.followUp.scheduled, followUps.length, pFU.length, dl, 'up');
     sections.followUp.held = withDelta(sections.followUp.held, followUpHeld.length, pFUHeld.length, dl, 'up');
     sections.followUp.showRate = withDelta(sections.followUp.showRate, sd(followUpHeld.length, followUps.length), sd(pFUHeld.length, pFU.length), dl, 'up');
@@ -1338,37 +1364,43 @@ function computeCallOutcomes(calls, granularity, prev) {
     });
   }
 
-  // Per-closer charts
-  const closerBuckets = groupByCloser(held);
+  // Per-closer charts — activity metrics from held (appointment range), closes from close range
+  const closerHeldBuckets = groupByCloser(held);
+  const closerClosedBuckets = groupByCloser([...closed, ...deposits]);
   const outcomeByCloser = [];
   const closesByCloser = [];
   const lostRateByCloser = [];
   const dqByCloser = [];
   const notPitchedByCloser = [];
 
-  for (const [name, closerCalls] of closerBuckets) {
+  const allCloserNamesForOutcomes = new Set([...closerHeldBuckets.keys(), ...closerClosedBuckets.keys()]);
+  for (const name of allCloserNamesForOutcomes) {
+    const heldCalls = closerHeldBuckets.get(name) || [];
+    const closedCalls = closerClosedBuckets.get(name) || [];
+    const closerClosed = closedCalls.filter(isClosed);
+    const closerDeposits = closedCalls.filter(isDeposit);
     outcomeByCloser.push({
       date: name,
-      closed: closerCalls.filter(isClosed).length,
-      deposit: closerCalls.filter(isDeposit).length,
-      followUp: closerCalls.filter(isFollowUpOutcome).length,
-      lost: closerCalls.filter(isLost).length,
-      disqualified: closerCalls.filter(isDQ).length,
-      notPitched: closerCalls.filter(isNotPitched).length,
+      closed: closerClosed.length,
+      deposit: closerDeposits.length,
+      followUp: heldCalls.filter(isFollowUpOutcome).length,
+      lost: heldCalls.filter(isLost).length,
+      disqualified: heldCalls.filter(isDQ).length,
+      notPitched: heldCalls.filter(isNotPitched).length,
     });
     closesByCloser.push({
       date: name,
-      firstCall: closerCalls.filter(c => isFirstCall(c) && isClosed(c)).length,
-      followUp: closerCalls.filter(c => isFollowUp(c) && isClosed(c)).length,
+      firstCall: closerClosed.filter(isFirstCall).length,
+      followUp: closerClosed.filter(isFollowUp).length,
     });
     lostRateByCloser.push({
-      date: name, lostRate: round(sd(closerCalls.filter(isLost).length, closerCalls.length), 3),
+      date: name, lostRate: round(sd(heldCalls.filter(isLost).length, heldCalls.length), 3),
     });
     dqByCloser.push({
-      date: name, dqRate: round(sd(closerCalls.filter(isDQ).length, closerCalls.length), 3),
+      date: name, dqRate: round(sd(heldCalls.filter(isDQ).length, heldCalls.length), 3),
     });
     notPitchedByCloser.push({
-      date: name, notPitchedRate: round(sd(closerCalls.filter(isNotPitched).length, closerCalls.length), 3),
+      date: name, notPitchedRate: round(sd(heldCalls.filter(isNotPitched).length, heldCalls.length), 3),
     });
   }
 
@@ -1380,10 +1412,11 @@ function computeCallOutcomes(calls, granularity, prev) {
 
   const closesByProductData = [];
   if (productList.length > 0) {
-    for (const [name, closerCalls] of closerBuckets) {
+    for (const name of allCloserNamesForOutcomes) {
+      const closedCalls = closerClosedBuckets.get(name) || [];
       const row = { date: name };
       for (const p of productList) {
-        row[p] = closerCalls.filter(c => (isClosed(c) || isDeposit(c)) && c.productPurchased === p).length;
+        row[p] = closedCalls.filter(c => c.productPurchased === p).length;
       }
       closesByProductData.push(row);
     }
@@ -1435,36 +1468,41 @@ function computeCallOutcomes(calls, granularity, prev) {
     { label: 'Still Open', value: sections.deposits._openCount, color: 'amber' },
   ].filter(d => d.value > 0);
 
-  // Deposit rate by closer (bar chart)
+  // Deposit rate by closer (bar chart) — deposits from close range, denominator from held
   const depositByCloserData = [];
-  for (const [name, closerCalls] of closerBuckets) {
-    const depCount = closerCalls.filter(isDeposit).length;
-    if (depCount > 0 || closerCalls.length > 0) {
+  for (const name of allCloserNamesForOutcomes) {
+    const closedCalls = closerClosedBuckets.get(name) || [];
+    const heldCalls = closerHeldBuckets.get(name) || [];
+    const depCount = closedCalls.filter(isDeposit).length;
+    if (depCount > 0 || heldCalls.length > 0) {
       depositByCloserData.push({
         date: name,
         deposits: depCount,
-        depositRate: round(sd(depCount, closerCalls.length), 3),
+        depositRate: round(sd(depCount, heldCalls.length), 3),
       });
     }
   }
 
-  // Follow-up outcome by closer (stacked bar)
+  // Follow-up outcome by closer (stacked bar) — closes from close range, activity from held
   const followUpOutcomeByCloserData = [];
-  for (const [name, closerCalls] of closerBuckets) {
+  for (const name of allCloserNamesForOutcomes) {
+    const closedCalls = closerClosedBuckets.get(name) || [];
+    const heldCalls = closerHeldBuckets.get(name) || [];
     followUpOutcomeByCloserData.push({
       date: name,
-      closed: closerCalls.filter(c => isFollowUp(c) && isClosed(c)).length,
-      followUp: closerCalls.filter(isFollowUpOutcome).length,
-      lost: closerCalls.filter(c => isFollowUp(c) && isLost(c)).length,
+      closed: closedCalls.filter(c => isFollowUp(c) && isClosed(c)).length,
+      followUp: heldCalls.filter(isFollowUpOutcome).length,
+      lost: heldCalls.filter(c => isFollowUp(c) && isLost(c)).length,
     });
   }
 
-  // Lost reasons by closer (stacked bar)
+  // Lost reasons by closer (stacked bar) — activity-based (lost is from appointment range)
   const allLostReasonKeys = [...new Set(lost.map(c => c.lostReason || 'Unknown'))].sort();
   const lostReasonsByCloserData = [];
-  for (const [name, closerCalls] of closerBuckets) {
+  for (const name of allCloserNamesForOutcomes) {
+    const heldCalls = closerHeldBuckets.get(name) || [];
     const row = { date: name };
-    const closerLost = closerCalls.filter(isLost);
+    const closerLost = heldCalls.filter(isLost);
     for (const reason of allLostReasonKeys) {
       row[reason] = closerLost.filter(c => (c.lostReason || 'Unknown') === reason).length;
     }
@@ -2304,22 +2342,32 @@ function computeAdherence(calls, granularity, prev) {
  * Returns champion data, comparison table, bar charts, radar, and trends.
  */
 function computeCloserScoreboard(calls, objections, closeCycles, granularity, prev, kpiTargets) {
-  const held = calls.filter(isShow);
+  // Activity metrics: only calls with appointments in range
+  const apptCalls = calls.filter(c => c._inRangeByAppointment);
+  const held = apptCalls.filter(isShow);
+
+  // Close/revenue metrics: calls that closed in the date range
+  const closedAll = calls.filter(c => c._inRangeByClose && isShow(c) && isClosed(c));
+  const revenueDealsAll = calls.filter(c => c._inRangeByClose && isShow(c) && hasRevenue(c));
 
   // Group by closer — exclude closers with < 3 held calls
   const closerBuckets = groupByCloser(held);
   const closerNames = [];
   const closerStats = [];
 
+  // Group close-range deals by closer for revenue/close metrics
+  const closerRevDealBuckets = groupByCloser(revenueDealsAll);
+
   for (const [name, closerCalls] of closerBuckets) {
     if (closerCalls.length < 3) continue;
 
-    const allCalls = calls.filter(c => (c.closerName || c.closerId || 'Unknown') === name);
+    const closerApptCalls = apptCalls.filter(c => (c.closerName || c.closerId || 'Unknown') === name);
     const closerHeld = closerCalls;
-    const closerClosed = closerHeld.filter(isClosed);
-    const closerRevenue = closerHeld.reduce((s, c) => s + (c.revenueGenerated || 0), 0);
-    const closerCash = closerHeld.reduce((s, c) => s + (c.cashCollected || 0), 0);
-    const closerScheduled = allCalls.length;
+    const closerRevDeals = closerRevDealBuckets.get(name) || [];
+    const closerClosed = closerRevDeals.filter(isClosed);
+    const closerRevenue = closerRevDeals.reduce((s, c) => s + (c.revenueGenerated || 0), 0);
+    const closerCash = closerRevDeals.reduce((s, c) => s + (c.cashCollected || 0), 0);
+    const closerScheduled = closerApptCalls.length;
     const showRate = sd(closerHeld.length, closerScheduled);
     const closeRate = sd(closerClosed.length, closerHeld.length);
     const avgDealSize = closerClosed.length > 0 ? closerRevenue / closerClosed.length : 0;
@@ -2699,19 +2747,26 @@ function computeMarketInsight(rawData) {
 
 function computeCloserView(rawData, calls, objections, closeCycles, granularity, prev) {
   const allCalls = rawData.calls || [];
-  const held = calls.filter(isShow);
-  const prevHeld = prev.calls.filter(isShow);
+  // Activity metrics: only calls with appointments in range
+  const apptCalls = calls.filter(c => c._inRangeByAppointment);
+  const held = apptCalls.filter(isShow);
+  const pApptCalls = prev.calls.filter(c => c._inRangeByAppointment);
+  const prevHeld = pApptCalls.filter(isShow);
+
+  // Close/revenue metrics: calls that closed in the date range
+  const teamClosedDeals = calls.filter(c => c._inRangeByClose && isShow(c) && isClosed(c));
+  const teamRevenueDeals = calls.filter(c => c._inRangeByClose && isShow(c) && hasRevenue(c));
 
   // Group by closer — include ALL closers (even with few calls)
   const closerBuckets = groupByCloser(held);
   const prevBuckets = groupByCloser(prevHeld);
-  const allCallsBuckets = groupByCloser(calls); // includes no-shows for show rate
+  const allCallsBuckets = groupByCloser(apptCalls); // includes no-shows for show rate
 
   // Team-level aggregates for comparison
-  const teamClosed = held.filter(isClosed);
-  const teamRevenue = sum(held, 'revenueGenerated', hasRevenue);
+  const teamClosed = teamClosedDeals;
+  const teamRevenue = sum(teamRevenueDeals, 'revenueGenerated');
   const teamCloseRate = sd(teamClosed.length, held.length);
-  const teamShowRate = sd(held.length, calls.length);
+  const teamShowRate = sd(held.length, apptCalls.length);
   const teamCallQuality = avg(held, 'overallCallScore') || 0;
   const teamAvgDealSize = teamClosed.length > 0 ? teamRevenue / teamClosed.length : 0;
   const teamObjResolved = objections.filter(o => o.resolved).length;
@@ -2723,7 +2778,7 @@ function computeCloserView(rawData, calls, objections, closeCycles, granularity,
     ? teamCycles.reduce((s, c) => s + (c.callsToClose || 0), 0) / teamCycles.length : 0;
 
   const numClosers = closerBuckets.size || 1;
-  const teamCash = sum(held, 'cashCollected', hasRevenue);
+  const teamCash = sum(teamRevenueDeals, 'cashCollected');
   const teamAverages = {
     closeRate: round(teamCloseRate, 3),
     showRate: round(teamShowRate, 3),
@@ -2739,14 +2794,17 @@ function computeCloserView(rawData, calls, objections, closeCycles, granularity,
   };
 
   // Build per-closer data
+  // Group close-range deals by closer
+  const closerRevDealBuckets = groupByCloser(teamRevenueDeals);
   const closers = [];
   for (const [name, closerHeld] of closerBuckets) {
     const closerId = closerHeld[0]?.closerId;
     const closerAll = allCallsBuckets.get(name) || [];
-    const closerClosed = closerHeld.filter(isClosed);
-    const closerDeposits = closerHeld.filter(isDeposit);
-    const closerRevenue = closerHeld.reduce((s, c) => s + (c.revenueGenerated || 0), 0);
-    const closerCash = closerHeld.reduce((s, c) => s + (c.cashCollected || 0), 0);
+    const closerRevDeals = closerRevDealBuckets.get(name) || [];
+    const closerClosed = closerRevDeals.filter(isClosed);
+    const closerDeposits = closerRevDeals.filter(isDeposit);
+    const closerRevenue = closerRevDeals.reduce((s, c) => s + (c.revenueGenerated || 0), 0);
+    const closerCash = closerRevDeals.reduce((s, c) => s + (c.cashCollected || 0), 0);
     const closeRate = sd(closerClosed.length, closerHeld.length);
     const showRate = sd(closerHeld.length, closerAll.length);
 
@@ -2765,10 +2823,11 @@ function computeCloserView(rawData, calls, objections, closeCycles, granularity,
 
     // Previous period stats
     const prevCloserHeld = prevBuckets.get(name) || [];
-    const prevCloserAll = prev.calls.filter(c => (c.closerName || c.closerId || 'Unknown') === name);
-    const prevCloserClosed = prevCloserHeld.filter(isClosed);
-    const prevRevenue = prevCloserHeld.reduce((s, c) => s + (c.revenueGenerated || 0), 0);
-    const prevCash = prevCloserHeld.reduce((s, c) => s + (c.cashCollected || 0), 0);
+    const prevCloserAll = pApptCalls.filter(c => (c.closerName || c.closerId || 'Unknown') === name);
+    const prevCloserRevDeals = prev.calls.filter(c => c._inRangeByClose && isShow(c) && hasRevenue(c) && (c.closerName || c.closerId || 'Unknown') === name);
+    const prevCloserClosed = prevCloserRevDeals.filter(isClosed);
+    const prevRevenue = prevCloserRevDeals.reduce((s, c) => s + (c.revenueGenerated || 0), 0);
+    const prevCash = prevCloserRevDeals.reduce((s, c) => s + (c.cashCollected || 0), 0);
     const prevCloseRate = sd(prevCloserClosed.length, prevCloserHeld.length);
     const prevShowRate = sd(prevCloserHeld.length, prevCloserAll.length);
 
@@ -2933,7 +2992,7 @@ function computeCloserView(rawData, calls, objections, closeCycles, granularity,
       ? prevCycles.reduce((s, c) => s + (c.callsToClose || 0), 0) / prevCycles.length : 0;
     const prevCallQuality = avg(prevCloserHeld, 'overallCallScore') || 0;
     const prevAvgDealSize = prevCloserClosed.length > 0
-      ? prevCloserHeld.reduce((s, c) => s + (c.revenueGenerated || 0), 0) / prevCloserClosed.length : 0;
+      ? prevCloserRevDeals.reduce((s, c) => s + (c.revenueGenerated || 0), 0) / prevCloserClosed.length : 0;
     const prevCashPerCall = sd(prevCash, prevCloserHeld.length);
 
     const scorecards = {
