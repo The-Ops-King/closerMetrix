@@ -1290,8 +1290,8 @@ function computeCallOutcomes(calls, granularity, prev) {
     sections.health.deposits.closeRate = withDelta(sections.health.deposits.closeRate, depositLifecycle.depositClosedPct.value, prevDepositLifecycle.depositClosedPct.value, dl, 'up');
   }
 
-  // Time-series
-  const timeBuckets = groupByTime(calls, 'appointmentDate', granularity);
+  // Time-series — use _effectiveDate so closes/revenue bucket by close date
+  const timeBuckets = groupByTime(calls, '_effectiveDate', granularity);
   const closesOverTime = [];
   const closeRateOverTime = [];
   const outcomesOverTime = [];
@@ -2552,8 +2552,9 @@ function computeCloserScoreboard(calls, objections, closeCycles, granularity, pr
   const rankColors = ['green', 'cyan', 'blue', 'purple', 'amber', 'red', 'teal', 'muted', 'green', 'cyan'];
 
   // Pre-group ALL calls (not just held) by time bucket for close rate denominator
-  const allCallBuckets = groupByTime(calls, 'appointmentDate', trendGranularity);
-  const heldBuckets = groupByTime(held, 'appointmentDate', trendGranularity);
+  // Use _effectiveDate so closes/revenue bucket by close date
+  const allCallBuckets = groupByTime(calls, '_effectiveDate', trendGranularity);
+  const heldBuckets = groupByTime(held, '_effectiveDate', trendGranularity);
 
   // Close Rate over time per closer (held / all scheduled per week)
   const closeRateTrendData = [];
@@ -2990,10 +2991,10 @@ function computeCloserView(rawData, calls, objections, closeCycles, granularity,
       resRate: round(closerObjResRate, 3),
     };
 
-    // ── Trends ──
+    // ── Trends — use _effectiveDate so closes/revenue bucket by close date ──
     const trendGranularity = granularity;
-    const closerHeldByTime = groupByTime(closerHeld, 'appointmentDate', trendGranularity);
-    const closerAllByTime = groupByTime(closerAll, 'appointmentDate', trendGranularity);
+    const closerHeldByTime = groupByTime(closerHeld, '_effectiveDate', trendGranularity);
+    const closerAllByTime = groupByTime(closerAll, '_effectiveDate', trendGranularity);
 
     const revenueTrend = [];
     const closeRateTrend = [];
