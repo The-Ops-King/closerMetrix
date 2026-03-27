@@ -125,21 +125,22 @@ function parseCallSources(callSource) {
 function filterCalls(calls, dateStart, dateEnd, closerId, callSource) {
   const ids = parseCloserIds(closerId);
   const sources = parseCallSources(callSource);
-  return calls.filter(c => {
+  const result = [];
+  for (const c of calls) {
     const apptInRange = c.appointmentDate >= dateStart && c.appointmentDate <= dateEnd;
     const hasCloseDate = c.dateClosed && (c.callOutcome === 'Closed - Won' || c.callOutcome === 'Deposit');
     const closeInRange = hasCloseDate && c.dateClosed >= dateStart && c.dateClosed <= dateEnd;
 
-    c._inRangeByAppointment = apptInRange;
-    c._inRangeByClose = closeInRange;
-    c._effectiveDate = hasCloseDate ? c.dateClosed : c.appointmentDate;
-
     // Include if either date is in range
-    if (!apptInRange && !closeInRange) return false;
-    if (ids && !ids.includes(c.closerId)) return false;
-    if (sources && !sources.includes(c.callSource)) return false;
-    return true;
-  });
+    if (!apptInRange && !closeInRange) continue;
+    if (ids && !ids.includes(c.closerId)) continue;
+    if (sources && !sources.includes(c.callSource)) continue;
+
+    // Shallow-clone so period-specific flags don't leak between current/prev calls
+    const clone = { ...c, _inRangeByAppointment: apptInRange, _inRangeByClose: closeInRange, _effectiveDate: hasCloseDate ? c.dateClosed : c.appointmentDate };
+    result.push(clone);
+  }
+  return result;
 }
 
 /** Filter objections by date range, optional closer(s), optional objection type(s), and optional call source(s) */
