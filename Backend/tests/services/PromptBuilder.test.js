@@ -64,8 +64,8 @@ describe('PromptBuilder', () => {
 
     it('should include all objection types from config', () => {
       for (const type of objectionTypes) {
+        // Objection keys appear as markdown headings (### key) in the .md prompt
         expect(systemPrompt).toContain(type.key);
-        expect(systemPrompt).toContain(type.label);
       }
     });
 
@@ -118,26 +118,24 @@ describe('PromptBuilder', () => {
       expect(systemPrompt).toContain('Intro and rapport');
     });
 
-    it('should include discovery scoring instructions', () => {
+    it('should include discovery client override', () => {
       const { systemPrompt } = promptBuilder.buildPrompt(MOCK_CLIENT, MOCK_CALL_METADATA, MOCK_TRANSCRIPT);
-      expect(systemPrompt).toContain('DISCOVERY SCORING INSTRUCTIONS');
+      expect(systemPrompt).toContain('CLIENT-SPECIFIC OVERRIDE');
       expect(systemPrompt).toContain('revenue, team size');
     });
 
-    it('should include pitch scoring instructions', () => {
+    it('should include pitch client override', () => {
       const { systemPrompt } = promptBuilder.buildPrompt(MOCK_CLIENT, MOCK_CALL_METADATA, MOCK_TRANSCRIPT);
-      expect(systemPrompt).toContain('PITCH SCORING INSTRUCTIONS');
       expect(systemPrompt).toContain('money-back guarantee');
     });
 
-    it('should include close scoring instructions', () => {
+    it('should include close client override', () => {
       const { systemPrompt } = promptBuilder.buildPrompt(MOCK_CLIENT, MOCK_CALL_METADATA, MOCK_TRANSCRIPT);
-      expect(systemPrompt).toContain('CLOSE SCORING INSTRUCTIONS');
+      expect(systemPrompt).toContain('Ask for the sale directly');
     });
 
-    it('should include objection handling instructions', () => {
+    it('should include objection handling client override', () => {
       const { systemPrompt } = promptBuilder.buildPrompt(MOCK_CLIENT, MOCK_CALL_METADATA, MOCK_TRANSCRIPT);
-      expect(systemPrompt).toContain('OBJECTION HANDLING INSTRUCTIONS');
       expect(systemPrompt).toContain('payment plan first');
     });
 
