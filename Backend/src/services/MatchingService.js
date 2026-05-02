@@ -6,7 +6,7 @@
  *
  * Tier 1: Email match — prospect_email against Calls table (existing behavior)
  * Tier 2: Exact name match — case-insensitive, trimmed comparison
- * Tier 3: Fuzzy name match — Jaro-Winkler against payers only (cash_collected > 0 OR total_payment_amount > 0)
+ * Tier 3: Fuzzy name match — Jaro-Winkler against payers only (cash_collected > 0)
  *
  * Returns the matched call and which tier matched, or null if no match found.
  */

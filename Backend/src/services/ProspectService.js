@@ -92,18 +92,41 @@ class ProspectService {
    * @returns {Object} Updated prospect
    */
   async updateWithPayment(prospect, paymentData, clientId) {
-    const { amount, paymentType, paymentDate, productName } = paymentData;
+    const {
+      amount,
+      paymentType,
+      paymentDate,
+      productName,
+      // Optional call context — passed by PaymentService once a matching call is known.
+      // Lets us bump/decrement Prospects.total_revenue_generated correctly per deal.
+      isFirstPaymentForCall = false,
+      callRevenue = 0,
+      isFullRefundOfCall = false,
+    } = paymentData;
     const isRefund = paymentType === 'refund' || paymentType === 'chargeback';
 
     const updates = {};
 
     if (isRefund) {
       updates.total_cash_collected = Math.max(0, (prospect.total_cash_collected || 0) - Math.abs(amount));
+      // Decrement payment_count, floor at 0
+      updates.payment_count = Math.max(0, (prospect.payment_count || 0) - 1);
+      // If this refund wiped the deal entirely, also remove its contract value
+      // from the prospect's lifetime revenue.
+      if (isFullRefundOfCall && callRevenue > 0) {
+        updates.total_revenue_generated = Math.max(0, (prospect.total_revenue_generated || 0) - callRevenue);
+      }
     } else {
       updates.total_cash_collected = (prospect.total_cash_collected || 0) + amount;
       updates.payment_count = (prospect.payment_count || 0) + 1;
       updates.last_payment_date = paymentDate || new Date().toISOString().split('T')[0];
 
+      // First payment for a NEW call → bump lifetime contract value
+      if (isFirstPaymentForCall && callRevenue > 0) {
+        updates.total_revenue_generated = (prospect.total_revenue_generated || 0) + callRevenue;
+      }
+
+      // Latest-wins on product_purchased — last sale's product is what's currently active
       if (productName) {
         updates.product_purchased = productName;
       }

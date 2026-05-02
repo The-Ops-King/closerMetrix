@@ -104,32 +104,24 @@ class PaymentService {
     // Update prospect name if provided and not already set
     const updatedProspect = await prospectService.updateName(prospect, prospect_name, clientId);
 
-    // Step 2: Update prospect with payment data
-    const finalProspect = await prospectService.updateWithPayment(
-      updatedProspect,
-      {
-        amount,
-        paymentType: normalizedType,
-        paymentDate: resolvedPaymentDate,
-        productName: product_name,
-      },
-      clientId
-    );
-
-    // Step 3: Find matching call using three-tier matching
+    // Step 2: Find matching call BEFORE updating the prospect — we need call
+    // context (first-payment-for-call?, contract value, full-refund?) to keep
+    // Prospects.payment_count and Prospects.total_revenue_generated honest.
     const matchResult = await matchingService.findMatchingCall(clientId, prospect_email, prospect_name);
     const matchedCall = matchResult ? matchResult.call : null;
 
-    // Step 5: Process based on payment type
+    // Step 3: Process based on payment type. The handler updates the call AND
+    // the prospect (so the prospect update can include call context).
     let result;
 
     if (isRefund) {
       result = await this._processRefund(
-        matchedCall, finalProspect, amount, normalizedType, clientId, notes
+        matchedCall, updatedProspect, amount, normalizedType, clientId,
+        resolvedPaymentDate, product_name, notes
       );
     } else {
       result = await this._processPayment(
-        matchedCall, finalProspect, amount, normalizedType, clientId,
+        matchedCall, updatedProspect, amount, normalizedType, clientId,
         resolvedPaymentDate, product_name, notes, attributionMode, payload
       );
     }
@@ -157,13 +149,16 @@ class PaymentService {
   /**
    * Processes a regular payment (full, deposit, payment_plan).
    *
-   * Dual-column semantics (PYMT-01, PYMT-02):
-   * - First payment for a call: sets cash_collected AND adds to total_payment_amount
-   * - Subsequent payments: adds to total_payment_amount only (cash_collected unchanged)
+   * Accounting model:
+   * - `Calls.cash_collected` = running total of net cash on this deal (accumulator)
+   * - `Calls.initial_cash_collected` = first payment amount (set once, never updated)
+   * - `Calls.revenue_generated` = contract value (set once on first payment, never overwritten)
+   * - `Calls.product_purchased` = latest payment's product wins
+   * - `Calls.total_payment_amount` = DEPRECATED, no longer written
    *
    * Attribution (PYMT-06):
    * - first_only: closer gets credit only on first payment (call outcome transitions)
-   * - all_installments: closer gets credit on every payment
+   * - all_installments: closer gets credit on every payment (no longer mutates revenue_generated)
    */
   async _processPayment(call, prospect, amount, paymentType, clientId, paymentDate, productName, notes, attributionMode, originalPayload) {
     if (!call) {
@@ -202,45 +197,52 @@ class PaymentService {
         },
       });
 
+      // Still update the prospect — even without a call, lifetime totals advance
+      const finalProspect = await prospectService.updateWithPayment(prospect, {
+        amount, paymentType, paymentDate, productName,
+        isFirstPaymentForCall: false,
+        callRevenue: 0,
+      }, clientId);
+
       return {
         status: 'ok',
         action: 'payment_recorded',
         prospect_id: prospect.prospect_id,
-        total_cash_collected: prospect.total_cash_collected,
+        total_cash_collected: finalProspect.total_cash_collected,
         note: 'No matching call found — payment recorded on prospect only, admin alerted',
       };
     }
 
-    const isFirstPayment = !call.cash_collected || call.cash_collected === 0;
+    const oldCash = call.cash_collected || 0;
+    const isFirstPayment = oldCash === 0;
     const currentOutcome = call.call_outcome || call.attendance;
 
-    // Build updates based on first vs subsequent payment
+    // cash_collected is now an accumulator — always grows by the payment amount
     const callUpdates = {
-      // total_payment_amount always accumulates (PYMT-01, PYMT-02)
-      total_payment_amount: (call.total_payment_amount || 0) + amount,
+      cash_collected: oldCash + amount,
     };
 
     if (isFirstPayment) {
-      // First payment: set cash_collected (PYMT-01)
-      callUpdates.cash_collected = amount;
+      // First payment for this deal: capture the initial deposit/PIF amount,
+      // set the contract value (revenue_generated is immutable after this),
+      // and snapshot the close date / payment plan / product.
+      callUpdates.initial_cash_collected = amount;
       callUpdates.revenue_generated = amount;
       callUpdates.date_closed = paymentDate;
       callUpdates.payment_plan = this._mapPaymentTypeToPaymentPlan(paymentType);
       if (productName) callUpdates.product_purchased = productName;
 
-      // First payment always transitions to Closed - Won
       if (currentOutcome !== 'Closed - Won') {
         callUpdates.call_outcome = 'Closed - Won';
         callUpdates.processing_status = 'complete';
       }
     } else {
-      // Subsequent payment (PYMT-02): cash_collected stays the same
-      // Attribution check (PYMT-06)
-      if (attributionMode === 'all_installments') {
-        // Closer gets credit — update revenue_generated to reflect total
-        callUpdates.revenue_generated = (call.total_payment_amount || 0) + amount;
-      }
-      // If first_only: no revenue update, closer doesn't get credit for installments
+      // Subsequent payment: do NOT touch revenue_generated (contract value is
+      // set once at deal close). Latest-wins product overwrite.
+      if (productName) callUpdates.product_purchased = productName;
+      // attributionMode is now informational only — stored on the audit row
+      // below so reports can still distinguish first_only vs all_installments
+      // closers without us mutating call.revenue_generated.
     }
 
     // Attempt state transition for first payment
@@ -285,6 +287,14 @@ class PaymentService {
         previousOutcome,
       });
 
+      // Update prospect lifetime totals — first payment for this call bumps
+      // total_revenue_generated by the contract value.
+      await prospectService.updateWithPayment(prospect, {
+        amount, paymentType, paymentDate, productName,
+        isFirstPaymentForCall: true,
+        callRevenue: callUpdates.revenue_generated || amount,
+      }, clientId);
+
       return {
         status: 'ok',
         action: 'new_close',
@@ -293,7 +303,7 @@ class PaymentService {
         previous_outcome: previousOutcome,
         new_outcome: 'Closed - Won',
         cash_collected: callUpdates.cash_collected,
-        total_payment_amount: callUpdates.total_payment_amount,
+        revenue_generated: callUpdates.revenue_generated,
       };
     }
 
@@ -305,9 +315,9 @@ class PaymentService {
       entityType: 'call',
       entityId: call.call_id,
       action: 'additional_payment',
-      fieldChanged: 'total_payment_amount',
-      oldValue: String(call.total_payment_amount || 0),
-      newValue: String(callUpdates.total_payment_amount),
+      fieldChanged: 'cash_collected',
+      oldValue: String(oldCash),
+      newValue: String(callUpdates.cash_collected),
       triggerSource: 'payment_webhook',
       triggerDetail: paymentType,
       metadata: {
@@ -318,13 +328,21 @@ class PaymentService {
       },
     });
 
+    // Subsequent payment for an existing closed call — do NOT bump
+    // total_revenue_generated (contract was already counted on first payment).
+    await prospectService.updateWithPayment(prospect, {
+      amount, paymentType, paymentDate, productName,
+      isFirstPaymentForCall: false,
+      callRevenue: 0,
+    }, clientId);
+
     return {
       status: 'ok',
       action: 'additional_payment',
       prospect_id: prospect.prospect_id,
       call_id: call.call_id,
-      cash_collected: call.cash_collected || 0,
-      total_payment_amount: callUpdates.total_payment_amount,
+      cash_collected: callUpdates.cash_collected,
+      revenue_generated: call.revenue_generated || 0,
       attribution_mode: attributionMode,
     };
   }
@@ -332,13 +350,19 @@ class PaymentService {
   /**
    * Processes a refund or chargeback.
    *
-   * PYMT-03: Refunds reduce cash_collected (if refunding first payment)
-   * and always reduce total_payment_amount.
+   * Accounting model:
+   * - `Calls.cash_collected` always decrements by the refund amount (floor 0)
+   * - `call_outcome` only flips to `Refunded` when cash_collected reaches 0
+   *   (i.e., the deal is fully unwound). A $1 refund of a $2997 deal stays
+   *   `Closed - Won` — partial refunds don't kill the deal.
+   * - `revenue_generated` (contract value) is preserved through partial
+   *   refunds, and only zeroed on full refund.
+   * - `Prospects.total_cash_collected` decrements via ProspectService.
    *
    * PYMT-04: Smart refund dedupe — same person cannot be refunded more than
    * once for the same payment (uses dedupe cache).
    */
-  async _processRefund(call, prospect, amount, paymentType, clientId, notes) {
+  async _processRefund(call, prospect, amount, paymentType, clientId, paymentDate, productName, notes) {
     if (!call) {
       logger.warn('Refund received but no matching call found', {
         prospectEmail: prospect.prospect_email,
@@ -367,18 +391,25 @@ class PaymentService {
         metadata: { prospect_email: prospect.prospect_email, amount },
       });
 
+      // Still update prospect lifetime totals
+      const finalProspect = await prospectService.updateWithPayment(prospect, {
+        amount, paymentType, paymentDate, productName,
+        isFirstPaymentForCall: false,
+        callRevenue: 0,
+        isFullRefundOfCall: false,
+      }, clientId);
+
       return {
         status: 'ok',
         action: 'refund',
         prospect_id: prospect.prospect_id,
         refund_amount: amount,
-        remaining_cash: prospect.total_cash_collected,
+        remaining_cash: finalProspect.total_cash_collected,
         note: 'No matching call found — refund applied to prospect record only, admin alerted',
       };
     }
 
-    // PYMT-04: Refund dedupe — check if same refund amount already processed
-    const refundDedupeKey = `refund:${clientId}:${prospect.prospect_email}:${amount}`;
+    // PYMT-04: Refund dedupe
     if (this._isDuplicate(clientId, `refund:${prospect.prospect_email}`, amount)) {
       logger.warn('Duplicate refund detected, skipping', {
         clientId,
@@ -393,30 +424,20 @@ class PaymentService {
     }
 
     const oldCash = call.cash_collected || 0;
-    const oldTotal = call.total_payment_amount || 0;
-
-    // PYMT-03: Determine if this refund hits cash_collected
-    // If the refund amount equals or exceeds the first payment (cash_collected),
-    // it's refunding the first payment
-    const refundHitsFirstPayment = amount >= oldCash && oldCash > 0;
+    const newCash = Math.max(0, oldCash - amount);
+    const isFullRefund = newCash === 0 && oldCash > 0;
+    const callRevenue = call.revenue_generated || 0;
 
     const callUpdates = {
-      // total_payment_amount always reduced
-      total_payment_amount: Math.max(0, oldTotal - amount),
+      cash_collected: newCash,
     };
 
-    // Check if this is a full refund BEFORE modifying cash_collected
-    const isFullRefund = callUpdates.total_payment_amount === 0 && call.call_outcome === 'Closed - Won';
-
-    // For full refunds → Refunded outcome: preserve cash_collected for reporting
-    // For partial refunds: reduce cash_collected if it hits the first payment
-    if (!isFullRefund && refundHitsFirstPayment) {
-      callUpdates.cash_collected = Math.max(0, oldCash - amount);
-    }
-
-    // If total goes to 0, transition to Refunded (preserves cash_collected for reporting)
     if (isFullRefund) {
-      // Attempt state machine transition Closed - Won → Refunded
+      // Full refund — flip outcome to Refunded and zero out the contract value.
+      // The state machine handles the transition; if it rejects, fall back to
+      // a direct update so the row still reflects reality.
+      callUpdates.revenue_generated = 0;
+
       const transitioned = await callStateManager.transitionState(
         call.call_id,
         clientId,
@@ -426,12 +447,9 @@ class PaymentService {
       );
 
       if (!transitioned) {
-        // Fallback: apply directly if state machine rejects
         callUpdates.call_outcome = 'Refunded';
+        await callQueries.update(call.call_id, clientId, callUpdates);
       }
-
-      // Update prospect deal_status to 'refunded'
-      await prospectService.updateDealStatus(prospect, 'refunded', clientId);
 
       await auditLogger.log({
         clientId,
@@ -439,25 +457,31 @@ class PaymentService {
         entityId: call.call_id,
         action: paymentType,
         fieldChanged: 'call_outcome',
-        oldValue: 'Closed - Won',
+        oldValue: call.call_outcome || 'Closed - Won',
         newValue: 'Refunded',
         triggerSource: 'payment_webhook',
         triggerDetail: paymentType,
         metadata: {
           refund_amount: amount,
-          cash_collected_preserved: oldCash,
-          total_payment_amount_after: 0,
+          cash_collected_before: oldCash,
+          cash_collected_after: 0,
           notes,
         },
       });
 
-      logger.info(`${paymentType} processed — outcome changed to Refunded`, {
-        callId: call.call_id,
-        clientId,
-        amount,
-        oldCash,
-        cashPreserved: true,
+      logger.info(`${paymentType} processed — full refund, outcome → Refunded`, {
+        callId: call.call_id, clientId, amount, oldCash,
       });
+
+      // Prospect: decrement payment_count + decrement total_revenue_generated
+      // by the contract value (this deal is no longer counted toward lifetime
+      // contracts).
+      await prospectService.updateWithPayment(prospect, {
+        amount, paymentType, paymentDate, productName,
+        isFirstPaymentForCall: false,
+        callRevenue,
+        isFullRefundOfCall: true,
+      }, clientId);
 
       return {
         status: 'ok',
@@ -465,12 +489,13 @@ class PaymentService {
         prospect_id: prospect.prospect_id,
         call_id: call.call_id,
         refund_amount: amount,
-        remaining_cash: oldCash,
-        remaining_total: 0,
+        remaining_cash: 0,
         outcome: 'Refunded',
       };
     }
 
+    // Partial refund — decrement cash_collected, leave outcome alone
+    // (a $1 refund of a $2997 deal still leaves it Closed - Won).
     await callQueries.update(call.call_id, clientId, callUpdates);
 
     await auditLogger.log({
@@ -478,28 +503,31 @@ class PaymentService {
       entityType: 'call',
       entityId: call.call_id,
       action: paymentType,
-      fieldChanged: 'total_payment_amount',
-      oldValue: String(oldTotal),
-      newValue: String(callUpdates.total_payment_amount),
+      fieldChanged: 'cash_collected',
+      oldValue: String(oldCash),
+      newValue: String(newCash),
       triggerSource: 'payment_webhook',
       triggerDetail: paymentType,
       metadata: {
         refund_amount: amount,
         cash_collected_before: oldCash,
-        cash_collected_after: callUpdates.cash_collected ?? oldCash,
-        refund_hits_first_payment: refundHitsFirstPayment,
+        cash_collected_after: newCash,
         notes,
       },
     });
 
-    logger.info(`${paymentType} processed`, {
-      callId: call.call_id,
-      clientId,
-      amount,
-      oldCash,
-      oldTotal,
-      newTotal: callUpdates.total_payment_amount,
+    logger.info(`${paymentType} processed — partial refund`, {
+      callId: call.call_id, clientId, amount, oldCash, newCash,
     });
+
+    // Prospect: decrement cash and payment_count (contract value untouched —
+    // the deal is still active).
+    await prospectService.updateWithPayment(prospect, {
+      amount, paymentType, paymentDate, productName,
+      isFirstPaymentForCall: false,
+      callRevenue,
+      isFullRefundOfCall: false,
+    }, clientId);
 
     return {
       status: 'ok',
@@ -507,8 +535,8 @@ class PaymentService {
       prospect_id: prospect.prospect_id,
       call_id: call.call_id,
       refund_amount: amount,
-      remaining_cash: callUpdates.cash_collected ?? oldCash,
-      remaining_total: callUpdates.total_payment_amount,
+      remaining_cash: newCash,
+      outcome: call.call_outcome || 'Closed - Won',
     };
   }
 

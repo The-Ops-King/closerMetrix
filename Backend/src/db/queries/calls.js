@@ -391,9 +391,8 @@ module.exports = {
    * Finds calls where the prospect has already made a payment.
    * Used by MatchingService as the pool for Tier 3 fuzzy name matching.
    *
-   * Only returns calls where cash_collected > 0 OR total_payment_amount > 0,
-   * enforced in SQL (not application code). This prevents fuzzy matching
-   * against prospects who have never paid — reducing false matches.
+   * Only returns calls where cash_collected > 0 — the accumulator now reflects
+   * net cash for the deal, so it's the single source of truth for "has paid".
    *
    * @param {string} clientId — Client scope
    * @returns {Array} Array of call records with existing payments
@@ -402,7 +401,7 @@ module.exports = {
     return bq.query(
       `SELECT ${CALL_COLUMNS} FROM ${CALLS_TABLE}
        WHERE client_id = @clientId
-         AND (cash_collected > 0 OR total_payment_amount > 0)
+         AND cash_collected > 0
          AND attendance IN ('Show', 'Follow Up', 'Lost', 'Closed - Won', 'Deposit', 'Disqualified', 'Not Pitched')
        ORDER BY appointment_date DESC`,
       { clientId }
