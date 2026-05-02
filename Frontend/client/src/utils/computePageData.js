@@ -272,6 +272,25 @@ function groupByCloser(items) {
   return map;
 }
 
+/**
+ * Filter helper for per-closer chart arrays: drops the "Unknown" bucket and
+ * any row whose numeric values are all zero (closer with no activity in the
+ * range). The `date` field holds the closer name; every other numeric field
+ * is summed to test "any signal at all". Use on count/sum AND rate charts —
+ * a 0% rate renders as an invisible bar anyway.
+ */
+function dropEmptyClosers(rows) {
+  return rows.filter(r => {
+    if (!r || r.date === 'Unknown') return false;
+    let total = 0;
+    for (const [k, v] of Object.entries(r)) {
+      if (k === 'date') continue;
+      if (typeof v === 'number') total += Math.abs(v);
+    }
+    return total > 0;
+  });
+}
+
 /** Count calls matching a predicate */
 function count(calls, pred) { return calls.filter(pred).length; }
 
@@ -584,7 +603,8 @@ function computeOverview(calls, granularity, rawData, prev) {
       deposits: closerCalls.filter(isDeposit).length,
     });
   }
-  dealsClosedByCloser.sort((a, b) => (b.closed + b.deposits) - (a.closed + a.deposits));
+  const dealsClosedByCloserClean = dropEmptyClosers(dealsClosedByCloser);
+  dealsClosedByCloserClean.sort((a, b) => (b.closed + b.deposits) - (a.closed + a.deposits));
 
   // Funnel — explicit colors so Closed is always green
   const funnelData = [
@@ -623,7 +643,7 @@ function computeOverview(calls, granularity, rawData, prev) {
         { key: 'showRate', label: 'Show Rate', color: 'green' },
         { key: 'closeRate', label: 'Close Rate', color: 'cyan' },
       ]},
-      dealsClosedByCloser: { data: dealsClosedByCloser, series: [
+      dealsClosedByCloser: { data: dealsClosedByCloserClean, series: [
         { key: 'closed', label: 'Closed', color: 'green' },
         { key: 'deposits', label: 'Deposits', color: 'amber' },
       ]},
@@ -760,12 +780,16 @@ function computeFinancial(calls, granularity, prev) {
       revPerCall: round(sd(cRev, cHeld.length)),
       cashPerCall: round(sd(cCash, cHeld.length)),
     });
-    if (cRev > 0) {
+    if (cRev > 0 && name !== 'Unknown') {
       revenueByCloserPie.push({ label: name, value: cRev, color: PIE_COLORS[revenueByCloserPie.length % PIE_COLORS.length] });
     }
   }
-  revenueByCloserBar.sort((a, b) => (b.cash + b.uncollected) - (a.cash + a.uncollected));
-  avgPerDealByCloser.sort((a, b) => (b.avgCash + b.avgUncollected) - (a.avgCash + a.avgUncollected));
+  // Drop "Unknown" + closers with no activity in the range
+  const revenueByCloserBarClean = dropEmptyClosers(revenueByCloserBar);
+  const avgPerDealByCloserClean = dropEmptyClosers(avgPerDealByCloser);
+  const perCallByCloserClean = dropEmptyClosers(perCallByCloser);
+  revenueByCloserBarClean.sort((a, b) => (b.cash + b.uncollected) - (a.cash + a.uncollected));
+  avgPerDealByCloserClean.sort((a, b) => (b.avgCash + b.avgUncollected) - (a.avgCash + a.avgUncollected));
 
   return {
     sections,
@@ -778,9 +802,9 @@ function computeFinancial(calls, granularity, prev) {
         { key: 'revPerCall', label: 'Revenue / Call Held', color: 'purple' },
         { key: 'cashPerCall', label: 'Cash / Call Held', color: 'blue' },
       ]},
-      revenueByCloserBar: { data: revenueByCloserBar },
-      avgPerDealByCloser: { data: avgPerDealByCloser },
-      perCallByCloser: { data: perCallByCloser },
+      revenueByCloserBar: { data: revenueByCloserBarClean },
+      avgPerDealByCloser: { data: avgPerDealByCloserClean },
+      perCallByCloser: { data: perCallByCloserClean },
       revenueByCloserPie: { data: revenueByCloserPie },
       paymentPlanBreakdown: { data: (() => {
         // Color map covers all known BigQuery payment_plan values (raw + AI-generated)
@@ -1016,8 +1040,10 @@ function computeAttendance(calls, granularity, prev) {
       noShow: closerCalls.length - cHeld.length,
     });
   }
-  showRatePerCloser.sort((a, b) => b.showRate - a.showRate);
-  attendancePerCloser.sort((a, b) => (b.show + b.noShow) - (a.show + a.noShow));
+  const showRatePerCloserClean = dropEmptyClosers(showRatePerCloser);
+  const attendancePerCloserClean = dropEmptyClosers(attendancePerCloser);
+  showRatePerCloserClean.sort((a, b) => b.showRate - a.showRate);
+  attendancePerCloserClean.sort((a, b) => (b.show + b.noShow) - (a.show + a.noShow));
 
   return {
     sections,
@@ -1035,10 +1061,10 @@ function computeAttendance(calls, granularity, prev) {
         { key: 'firstHeld', label: 'First Call Held', color: 'green' },
         { key: 'followUpHeld', label: 'Follow-Up Held', color: 'purple' },
       ]},
-      showRatePerCloser: { data: showRatePerCloser, series: [
+      showRatePerCloser: { data: showRatePerCloserClean, series: [
         { key: 'showRate', label: 'Show Rate', color: 'cyan' },
       ]},
-      attendancePerCloser: { data: attendancePerCloser, series: [
+      attendancePerCloser: { data: attendancePerCloserClean, series: [
         { key: 'show', label: 'Show', color: 'green' },
         { key: 'noShow', label: 'No Show', color: 'red' },
       ]},
@@ -1528,14 +1554,14 @@ function computeCallOutcomes(calls, granularity, prev) {
     sections,
     charts: {
       outcomeBreakdown: { data: outcomeBreakdown },
-      outcomeByCloser: { data: sortDesc(outcomeByCloser, OUTCOME_CHART_CONFIG.map(c => c.key)), series:
+      outcomeByCloser: { data: sortDesc(dropEmptyClosers(outcomeByCloser), OUTCOME_CHART_CONFIG.map(c => c.key)), series:
         OUTCOME_CHART_CONFIG.map(c => ({ key: c.key, label: c.label, color: c.color })),
       },
       outcomesOverTime: { data: outcomesOverTime, series:
         OUTCOME_CHART_CONFIG.filter(c => c.key !== 'disqualified' && c.key !== 'notPitched')
           .map(c => ({ key: c.key, label: c.label, color: c.color })),
       },
-      closesByProduct: { data: sortDesc(closesByProductData, productList), series: closesByProductSeries },
+      closesByProduct: { data: sortDesc(dropEmptyClosers(closesByProductData), productList), series: closesByProductSeries },
       closesOverTime: { data: closesOverTime, series: [
         { key: 'firstCall', label: 'First Call', color: 'green' },
         { key: 'followUp', label: 'Follow-Up', color: 'purple' },
@@ -1544,12 +1570,12 @@ function computeCallOutcomes(calls, granularity, prev) {
         { key: 'totalCloseRate', label: 'Total Close Rate', color: 'green' },
         { key: 'firstCloseRate', label: 'First Call Close Rate', color: 'cyan' },
       ]},
-      closesByCloser: { data: sortDesc(closesByCloser, ['firstCall', 'followUp']), series: [
+      closesByCloser: { data: sortDesc(dropEmptyClosers(closesByCloser), ['firstCall', 'followUp']), series: [
         { key: 'firstCall', label: 'First Call', color: 'green' },
         { key: 'followUp', label: 'Follow-Up', color: 'purple' },
       ]},
       depositOutcomes: { data: depositOutcomesData },
-      depositCloseByCloser: { data: sortDesc(depositByCloserData, ['depositRate']), series: [
+      depositCloseByCloser: { data: sortDesc(dropEmptyClosers(depositByCloserData), ['depositRate']), series: [
         { key: 'depositRate', label: 'Deposit Rate', color: 'amber' },
       ]},
       followUpVolume: { data: followUpVolume, series: [
@@ -1557,7 +1583,7 @@ function computeCallOutcomes(calls, granularity, prev) {
         { key: 'held', label: 'Held', color: 'purple' },
       ]},
       followUpOutcomes: { data: followUpOutcomes },
-      followUpOutcomeByCloser: { data: sortDesc(followUpOutcomeByCloserData, ['closed', 'followUp', 'lost']), series: [
+      followUpOutcomeByCloser: { data: sortDesc(dropEmptyClosers(followUpOutcomeByCloserData), ['closed', 'followUp', 'lost']), series: [
         { key: 'closed', label: 'Closed', color: 'green' },
         { key: 'followUp', label: 'Follow-Up', color: 'purple' },
         { key: 'lost', label: 'Lost', color: 'red' },
@@ -1567,20 +1593,20 @@ function computeCallOutcomes(calls, granularity, prev) {
         { key: 'followUp', label: 'Follow-Up', color: 'amber' },
       ]},
       lostReasons: { data: lostReasonsPie },
-      lostRateByCloser: { data: sortAsc(lostRateByCloser, 'lostRate'), series: [
+      lostRateByCloser: { data: sortAsc(dropEmptyClosers(lostRateByCloser), 'lostRate'), series: [
         { key: 'lostRate', label: 'Lost Rate', color: 'red' },
       ]},
-      lostReasonsByCloser: { data: sortDesc(lostReasonsByCloserData, allLostReasonKeys), series: lostReasonsByCloserSeries },
+      lostReasonsByCloser: { data: sortDesc(dropEmptyClosers(lostReasonsByCloserData), allLostReasonKeys), series: lostReasonsByCloserSeries },
       dqOverTime: { data: dqOverTime, series: [
         { key: 'dq', label: 'Disqualified', color: 'muted' },
       ]},
-      dqByCloser: { data: sortDesc(dqByCloser, ['dqRate']), series: [
+      dqByCloser: { data: sortDesc(dropEmptyClosers(dqByCloser), ['dqRate']), series: [
         { key: 'dqRate', label: 'DQ Rate', color: 'muted' },
       ]},
       notPitchedOverTime: { data: notPitchedOverTime, series: [
         { key: 'notPitched', label: 'Not Pitched', color: 'blue' },
       ]},
-      notPitchedByCloser: { data: sortDesc(notPitchedByCloser, ['notPitchedRate']), series: [
+      notPitchedByCloser: { data: sortDesc(dropEmptyClosers(notPitchedByCloser), ['notPitchedRate']), series: [
         { key: 'notPitchedRate', label: 'Not Pitched Rate', color: 'blue' },
       ]},
     },
@@ -1694,9 +1720,11 @@ function computeSalesCycle(calls, closeCycles, prev) {
     });
   }
 
-  // Sort per-closer charts by total count descending (most at top)
-  callsToCloseByCloser.sort((a, b) => (b.oneCall + b.twoCalls + b.threePlus) - (a.oneCall + a.twoCalls + a.threePlus));
-  daysToCloseByCloser.sort((a, b) => (b.sameDay + b.oneToThree + b.fourToSeven + b.eightPlus) - (a.sameDay + a.oneToThree + a.fourToSeven + a.eightPlus));
+  // Drop "Unknown" + closers with no closes in the range, then sort by total count desc
+  const callsToCloseByCloserClean = dropEmptyClosers(callsToCloseByCloser);
+  const daysToCloseByCloserClean = dropEmptyClosers(daysToCloseByCloser);
+  callsToCloseByCloserClean.sort((a, b) => (b.oneCall + b.twoCalls + b.threePlus) - (a.oneCall + a.twoCalls + a.threePlus));
+  daysToCloseByCloserClean.sort((a, b) => (b.sameDay + b.oneToThree + b.fourToSeven + b.eightPlus) - (a.sameDay + a.oneToThree + a.fourToSeven + a.eightPlus));
 
   return {
     sections,
@@ -1709,12 +1737,12 @@ function computeSalesCycle(calls, closeCycles, prev) {
       daysToCloseBar: { data: daysDistribution.map(d => ({ date: d.label, count: d.value })), series: [
         { key: 'count', label: 'Closes', color: 'amber' },
       ]},
-      callsToCloseByCloser: { data: callsToCloseByCloser, series: [
+      callsToCloseByCloser: { data: callsToCloseByCloserClean, series: [
         { key: 'oneCall', label: '1 Call', color: 'green' },
         { key: 'twoCalls', label: '2 Calls', color: 'cyan' },
         { key: 'threePlus', label: '3+', color: 'amber' },
       ]},
-      daysToCloseByCloser: { data: daysToCloseByCloser, series: [
+      daysToCloseByCloser: { data: daysToCloseByCloserClean, series: [
         { key: 'sameDay', label: 'Same Day', color: 'green' },
         { key: 'oneToThree', label: '1-3', color: 'cyan' },
         { key: 'fourToSeven', label: '4-7', color: 'amber' },
@@ -2361,6 +2389,7 @@ function computeCloserScoreboard(calls, objections, closeCycles, granularity, pr
 
   for (const [name, closerCalls] of closerBuckets) {
     if (closerCalls.length < 3) continue;
+    if (name === 'Unknown') continue;
 
     const closerApptCalls = apptCalls.filter(c => (c.closerName || c.closerId || 'Unknown') === name);
     const closerHeld = closerCalls;
@@ -3132,15 +3161,29 @@ function computeCloserView(rawData, calls, objections, closeCycles, granularity,
     });
   }
 
+  // Filter to active closers only — drop inactive and the "Unknown" bucket
+  // (calls with no closerId/closerName). Active status comes from the
+  // Closers table (rawData.closers); fall back to including everyone if the
+  // roster wasn't loaded for any reason.
+  const activeIds = new Set(
+    (rawData.closers || [])
+      .filter(c => String(c.status || '').toLowerCase() === 'active')
+      .map(c => c.closerId)
+      .filter(Boolean)
+  );
+  const filteredClosers = (rawData.closers || []).length > 0
+    ? closers.filter(c => c.name !== 'Unknown' && activeIds.has(c.closerId))
+    : closers.filter(c => c.name !== 'Unknown');
+
   // Sort closers alphabetically
-  closers.sort((a, b) => a.name.localeCompare(b.name));
+  filteredClosers.sort((a, b) => a.name.localeCompare(b.name));
 
   // Compute team average power score after all closers are built
-  if (closers.length > 0) {
+  if (filteredClosers.length > 0) {
     teamAverages.powerScore = round(
-      closers.reduce((s, c) => s + (c.hero.powerScore || 0), 0) / closers.length, 1
+      filteredClosers.reduce((s, c) => s + (c.hero.powerScore || 0), 0) / filteredClosers.length, 1
     );
   }
 
-  return { closers, teamAverages, deltaLabel: prev.deltaLabel };
+  return { closers: filteredClosers, teamAverages, deltaLabel: prev.deltaLabel };
 }
