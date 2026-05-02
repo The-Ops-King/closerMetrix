@@ -10,9 +10,12 @@ const bq = require('../BigQueryClient');
 const PROSPECTS_TABLE = bq.table('Prospects');
 
 // Explicit column list for prospect records — used instead of SELECT *
+// NOTE: `prospect_phone` is referenced by the chatbot tool layer but the column
+// does not currently exist on the BQ Prospects table. Omit it here to avoid
+// failing every payment lookup. Add it back after the column is provisioned.
 const PROSPECT_COLUMNS = [
   'prospect_id', 'client_id', 'prospect_name', 'prospect_email',
-  'prospect_phone', 'status', 'created_at', 'last_modified',
+  'status', 'created_at', 'last_modified',
 ].join(', ');
 
 module.exports = {
