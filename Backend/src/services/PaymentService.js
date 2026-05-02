@@ -21,6 +21,7 @@ const callStateManager = require('./CallStateManager');
 const auditLogger = require('../utils/AuditLogger');
 const alertService = require('../utils/AlertService');
 const logger = require('../utils/logger');
+const { dateInTimezone } = require('../utils/dateUtils');
 
 const VALID_PAYMENT_TYPES = ['full', 'deposit', 'payment_plan', 'refund', 'chargeback'];
 
@@ -78,6 +79,18 @@ class PaymentService {
       };
     }
 
+    // Fetch client config up front — needed for timezone-correct payment_date
+    // and attribution mode.
+    const client = await clientQueries.findById(clientId);
+    const attributionMode = client?.attribution_mode || 'all_installments';
+
+    // Resolve the payment date in the client's local timezone. If the webhook
+    // sent a `YYYY-MM-DD` string, it's used as-is. If it sent a full ISO
+    // timestamp, it's coerced to the client's local calendar day. If omitted,
+    // we use "now" in the client's timezone — so a payment that lands at
+    // 11pm PT for an LA-based client lands on the right day in their reports.
+    const resolvedPaymentDate = dateInTimezone(client?.timezone, payment_date);
+
     // Step 1: Find or create prospect
     const { prospect } = await prospectService.findOrCreate(
       prospect_email,
@@ -97,7 +110,7 @@ class PaymentService {
       {
         amount,
         paymentType: normalizedType,
-        paymentDate: payment_date || new Date().toISOString().split('T')[0],
+        paymentDate: resolvedPaymentDate,
         productName: product_name,
       },
       clientId
@@ -106,10 +119,6 @@ class PaymentService {
     // Step 3: Find matching call using three-tier matching
     const matchResult = await matchingService.findMatchingCall(clientId, prospect_email, prospect_name);
     const matchedCall = matchResult ? matchResult.call : null;
-
-    // Step 4: Fetch client config for attribution mode
-    const client = await clientQueries.findById(clientId);
-    const attributionMode = client?.attribution_mode || 'all_installments';
 
     // Step 5: Process based on payment type
     let result;
@@ -121,7 +130,7 @@ class PaymentService {
     } else {
       result = await this._processPayment(
         matchedCall, finalProspect, amount, normalizedType, clientId,
-        payment_date, product_name, notes, attributionMode, payload
+        resolvedPaymentDate, product_name, notes, attributionMode, payload
       );
     }
 
@@ -215,7 +224,7 @@ class PaymentService {
       // First payment: set cash_collected (PYMT-01)
       callUpdates.cash_collected = amount;
       callUpdates.revenue_generated = amount;
-      callUpdates.date_closed = paymentDate || new Date().toISOString().split('T')[0];
+      callUpdates.date_closed = paymentDate;
       callUpdates.payment_plan = this._mapPaymentTypeToPaymentPlan(paymentType);
       if (productName) callUpdates.product_purchased = productName;
 

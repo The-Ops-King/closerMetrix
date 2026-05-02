@@ -83,6 +83,38 @@ function toISO(val) {
   return String(val);
 }
 
+/**
+ * Returns a `YYYY-MM-DD` date string for the given moment in the given IANA
+ * timezone. Used when persisting calendar-day fields (e.g. `date_closed`,
+ * `last_payment_date`) that should reflect the *client's* local day, not UTC.
+ *
+ * If `val` is omitted, uses now. If `val` is already a plain `YYYY-MM-DD`
+ * string, it's returned unchanged (no timezone interpretation possible).
+ * Falls back to UTC if `timezone` is missing or invalid.
+ *
+ * @param {string} timezone — IANA tz like 'America/New_York' (default: 'UTC')
+ * @param {Date|string} [val] — Date, ISO string, or omit for now
+ * @returns {string} Date in `YYYY-MM-DD` form
+ */
+function dateInTimezone(timezone, val) {
+  if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
+  const date = val ? new Date(val) : new Date();
+  if (isNaN(date.getTime())) return new Date().toISOString().split('T')[0];
+  const tz = timezone || 'UTC';
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(date);
+    const get = (t) => parts.find((p) => p.type === t)?.value;
+    return `${get('year')}-${get('month')}-${get('day')}`;
+  } catch {
+    return date.toISOString().split('T')[0];
+  }
+}
+
 module.exports = {
   nowISO,
   nowTimestamp,
@@ -90,4 +122,5 @@ module.exports = {
   isPast,
   durationMinutes,
   toISO,
+  dateInTimezone,
 };
