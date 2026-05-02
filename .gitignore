@@ -22,6 +22,10 @@ client_secret.json
 /*.jpg
 /*.jpeg
 
+# Client data exports — NEVER commit (PII)
+/*.csv
+Backend/data/*.csv
+
 # OS files
 .DS_Store
 Thumbs.db

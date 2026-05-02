@@ -1088,11 +1088,11 @@ function TeamSection({ closers, clientId, authOptions, mode, onRefresh, transcri
               </Select>
             </FormControl>
           </Box>
-          {/* Row 4: API Key (shown for providers that support it) */}
-          {(newCloser.transcript_provider === 'fathom' || newCloser.transcript_provider === 'tldv') && (
+          {/* Row 4: API Key (Fathom only — tl;dv uses a single account-level key set on the Settings page) */}
+          {newCloser.transcript_provider === 'fathom' && (
             <Box sx={{ mb: 1.5 }}>
               <TronTextField
-                label={`${newCloser.transcript_provider === 'fathom' ? 'Fathom' : 'tl;dv'} API Key`}
+                label="Fathom API Key"
                 placeholder="Paste your API key — webhook will be registered automatically"
                 value={newCloser.transcript_api_key}
                 onChange={(e) => setNewCloser((p) => ({ ...p, transcript_api_key: e.target.value }))}
@@ -1102,6 +1102,11 @@ function TeamSection({ closers, clientId, authOptions, mode, onRefresh, transcri
                 If provided, the webhook will be registered automatically when the closer is added.
               </Typography>
             </Box>
+          )}
+          {newCloser.transcript_provider === 'tldv' && (
+            <Typography sx={{ color: COLORS.text.muted, fontSize: '0.7rem', mb: 1.5, pl: 0.5 }}>
+              tl;dv uses one account-level API key shared across all closers. Set it once under Settings → Transcript Provider — no per-closer key needed.
+            </Typography>
           )}
           {/* Actions */}
           <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
@@ -1190,16 +1195,21 @@ function TeamSection({ closers, clientId, authOptions, mode, onRefresh, transcri
                   </Select>
                 </FormControl>
               </Box>
-              {(editFields.transcript_provider === 'fathom' || editFields.transcript_provider === 'tldv') && (
+              {editFields.transcript_provider === 'fathom' && (
                 <Box sx={{ mb: 1 }}>
                   <TronTextField
-                    label={`${editFields.transcript_provider === 'fathom' ? 'Fathom' : 'tl;dv'} API Key`}
+                    label="Fathom API Key"
                     value={editFields.transcript_api_key}
                     onChange={(e) => setEditFields((p) => ({ ...p, transcript_api_key: e.target.value }))}
                     fullWidth
                     size="small"
                   />
                 </Box>
+              )}
+              {editFields.transcript_provider === 'tldv' && (
+                <Typography sx={{ color: COLORS.text.muted, fontSize: '0.7rem', mb: 1, pl: 0.5 }}>
+                  tl;dv uses one account-level API key. Manage it under Settings → Transcript Provider.
+                </Typography>
               )}
               <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
                 <Button onClick={() => setEditingId(null)} size="small" sx={{ color: COLORS.text.muted, textTransform: 'none' }}>
