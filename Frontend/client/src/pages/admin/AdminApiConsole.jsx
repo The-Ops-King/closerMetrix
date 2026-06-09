@@ -113,7 +113,7 @@ const CLIENT_FIELDS = [
   { key: 'offer_description', label: 'Offer Description', multiline: true, group: 'Offer' },
   // Config
   { key: 'calendar_source', label: 'Calendar Source', group: 'Config' },
-  { key: 'transcript_provider', label: 'Transcript Provider', group: 'Config', type: 'select', options: ['fathom', 'tldv'] },
+  { key: 'transcript_provider', label: 'Transcript Provider', group: 'Config', type: 'select', options: ['fathom', 'tldv', 'generic'] },
   { key: 'tldv_api_key', label: 'tl;dv API Key', group: 'Config' },
   // AI Prompts
   { key: 'ai_prompt_overall', label: 'AI Prompt — Overall', multiline: true, group: 'AI' },
@@ -576,6 +576,7 @@ function ClientsTab({ selectedClientId, executeRequest, onClientCreated }) {
             <Select label="Transcript Provider" value={createForm.transcript_provider || 'fathom'} onChange={updateCreateField('transcript_provider')}>
               <MenuItem value="fathom">Fathom</MenuItem>
               <MenuItem value="tldv">tl;dv</MenuItem>
+              <MenuItem value="other">Other (generic JSON webhook)</MenuItem>
             </Select>
           </FormControl>
         </Box>

@@ -96,139 +96,44 @@ const webhookAuth = {
   },
 
   /**
-   * Validates transcript webhook HMAC-SHA256 signature.
+   * Identifies the client for a transcript webhook.
    *
-   * Supports multiple provider signature headers:
-   *   - Fathom:   X-Fathom-Signature
-   *   - tl;dv:    X-Tldv-Signature
-   *   - Generic:  X-Webhook-Signature
+   * Transcript webhooks are NOT signed — they carry no secret. The client is
+   * identified via the X-Client-Id header (or `client_id` field in the body)
+   * purely to give downstream processing a clientIdHint for faster, more
+   * accurate matching. When no client_id is present, the request still passes
+   * through and the client is resolved later via closer_email.
    *
-   * The client is identified via X-Client-Id header or `client_id` field in the body.
-   * The webhook_secret from the Clients table is used as the HMAC key.
-   *
-   * Graceful degradation: if a client has no webhook_secret configured,
-   * the request is allowed through with a warning (supports rollout period).
+   * NOTE: webhook_secret is no longer used for transcripts. It remains in use
+   * only for the payment webhook (see webhookAuth.payment).
    */
   async transcript(req, res, next) {
-    // Determine which signature header the provider sent
-    const signatureHeader =
-      req.headers['x-fathom-signature'] ||
-      req.headers['x-tldv-signature'] ||
-      req.headers['x-webhook-signature'];
-
-    // Identify the client — from header or body
     const clientId = req.headers['x-client-id'] || (req.body && req.body.client_id);
 
     if (!clientId) {
-      // No client identification — cannot verify. Allow through for
-      // backwards compatibility (client is resolved later via closer_email).
-      if (!signatureHeader) {
-        logger.warn('Transcript webhook: no client_id and no signature — allowing (legacy mode)', {
-          provider: req.params.provider,
-        });
-        return next();
-      }
-      // Signature present but no client_id to look up secret — reject
-      return res.status(401).json({
-        status: 'error',
-        message: 'Signature provided but no client_id to verify against',
-      });
-    }
-
-    // Look up the client to get their webhook_secret
-    let client;
-    try {
-      client = await clientQueries.findById(clientId);
-    } catch (err) {
-      logger.error('Transcript webhook: client lookup failed', {
-        clientId,
-        error: err.message,
-      });
-      return res.status(500).json({
-        status: 'error',
-        message: 'Internal error during authentication',
-      });
-    }
-
-    if (!client) {
-      return res.status(401).json({
-        status: 'error',
-        message: 'Unknown client_id',
-      });
-    }
-
-    // Graceful degradation: if client has no webhook_secret, allow through
-    // unless TRANSCRIPT_WEBHOOK_ALLOW_UNSIGNED=false in env
-    if (!client.webhook_secret) {
-      if (config.transcriptWebhook.allowUnsigned) {
-        logger.warn('Transcript webhook: client has no webhook_secret configured — allowing (rollout mode)', {
-          clientId,
-          provider: req.params.provider,
-        });
-        req.client = client;
-        req.clientId = clientId;
-        return next();
-      }
-      return res.status(401).json({
-        status: 'error',
-        message: 'Client webhook_secret not configured',
-      });
-    }
-
-    // tl;dv does NOT support HMAC webhook signing — it uses X-Client-Id for auth.
-    // Allow tl;dv requests through without a signature if the client is identified.
-    if (!signatureHeader && req.params.provider === 'tldv') {
-      logger.info('Transcript webhook: tl;dv provider — skipping HMAC (not supported by tl;dv)', {
-        clientId,
-      });
-      req.client = client;
-      req.clientId = clientId;
+      // No hint — client is resolved downstream via closer_email.
       return next();
     }
 
-    // For other providers: if client has a secret, signature MUST be present
-    if (!signatureHeader) {
-      logger.warn('Transcript webhook auth failed: no signature header', {
+    // Best-effort lookup to attach a clientIdHint. Never block ingestion on it.
+    try {
+      const client = await clientQueries.findById(clientId);
+      if (client) {
+        req.client = client;
+        req.clientId = clientId;
+      } else {
+        logger.warn('Transcript webhook: unknown client_id — falling back to closer_email resolution', {
+          clientId,
+          provider: req.params.provider,
+        });
+      }
+    } catch (err) {
+      logger.error('Transcript webhook: client lookup failed — continuing without hint', {
         clientId,
-        provider: req.params.provider,
-      });
-      return res.status(401).json({
-        status: 'error',
-        message: 'Missing webhook signature header',
+        error: err.message,
       });
     }
 
-    // Compute HMAC-SHA256 of the raw body
-    const rawBody = req.rawBody;
-    if (!rawBody) {
-      logger.error('Transcript webhook: rawBody not available for HMAC verification', {
-        clientId,
-      });
-      return res.status(500).json({
-        status: 'error',
-        message: 'Internal error: raw body not available',
-      });
-    }
-
-    const expectedSignature = crypto
-      .createHmac('sha256', client.webhook_secret)
-      .update(rawBody)
-      .digest('hex');
-
-    if (!safeCompare(signatureHeader, expectedSignature)) {
-      logger.warn('Transcript webhook auth failed: signature mismatch', {
-        clientId,
-        provider: req.params.provider,
-      });
-      return res.status(403).json({
-        status: 'error',
-        message: 'Invalid webhook signature',
-      });
-    }
-
-    // Signature valid — attach client info for downstream use
-    req.client = client;
-    req.clientId = clientId;
     next();
   },
 

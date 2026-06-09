@@ -93,8 +93,15 @@ router.post('/', async (req, res) => {
 
   try {
     const clientId = generateId();
+    // webhook_secret is used ONLY by the payment webhook (Authorization: Bearer).
+    // Transcript webhooks are unsigned and do not use it.
     const webhookSecret = crypto.randomBytes(32).toString('hex');
     const now = new Date().toISOString();
+
+    // Normalize transcript source. "other" is the friendly onboarding label for
+    // the generic standardized-JSON endpoint (/webhooks/transcript/generic).
+    const rawProvider = (req.body.transcript_provider || 'fathom').toLowerCase();
+    const provider = rawProvider === 'other' ? 'generic' : rawProvider;
 
     const clientData = {
       client_id: clientId,
@@ -111,7 +118,7 @@ router.post('/', async (req, res) => {
       status: 'Active',
       closer_count: 0,
       calendar_source: req.body.calendar_source || 'google_calendar',
-      transcript_provider: req.body.transcript_provider || 'fathom',
+      transcript_provider: provider,
       script_template: req.body.script_template || null,
       ai_prompt_overall: req.body.ai_prompt_overall || null,
       ai_prompt_discovery: req.body.ai_prompt_discovery || null,
@@ -144,21 +151,73 @@ router.post('/', async (req, res) => {
     });
 
     const baseUrl = config.server.baseUrl;
-    const provider = clientData.transcript_provider;
+    const transcriptWebhookUrl = `${baseUrl}/webhooks/transcript/${provider}`;
 
-    res.status(201).json({
+    const response = {
       status: 'ok',
       client_id: clientId,
+      // webhook_secret is for the PAYMENT webhook only (Authorization: Bearer).
+      // Transcript webhooks are unsigned — no secret needed.
       webhook_secret: webhookSecret,
-      transcript_webhook_url: `${baseUrl}/webhooks/transcript/${provider}`,
+      transcript_webhook_url: transcriptWebhookUrl,
       payment_webhook_url: `${baseUrl}/webhooks/payment`,
       next_steps: [
         `Add closers via POST /admin/clients/${clientId}/closers`,
         'Have closers share their Google Calendar with tyler@closermetrix.com',
-        `Configure ${provider} webhook to send to the transcript_webhook_url`,
-        'Configure payment processor to send to the payment_webhook_url with Authorization header',
+        `Configure ${provider} to send transcripts to the transcript_webhook_url (no signature/secret required — just include the X-Client-Id header)`,
+        'Configure the payment processor to POST to the payment_webhook_url with header "Authorization: Bearer <webhook_secret>"',
       ],
-    });
+    };
+
+    // For the generic ("Other") transcript source there is no native integration,
+    // so return full setup instructions for sending standardized JSON from any
+    // tool (Zapier, Make, n8n, custom code).
+    if (provider === 'generic') {
+      response.transcript_setup = {
+        description:
+          'No native integration for this source. Send a standardized JSON payload from any automation (Zapier, Make, n8n, custom code) when a call recording is ready. Transcript webhooks are NOT signed — no secret required.',
+        method: 'POST',
+        url: transcriptWebhookUrl,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Client-Id': clientId,
+        },
+        required_fields: {
+          closer_email: "Email of the closer who ran the call — must match a closer on this account",
+          transcript: 'Full transcript as a single plain-text string (NOT an array)',
+        },
+        optional_fields: {
+          prospect_email: 'prospect@example.com',
+          prospect_name: 'John Smith',
+          scheduled_start_time: 'ISO 8601 timestamp',
+          recording_start_time: 'ISO 8601 timestamp',
+          recording_end_time: 'ISO 8601 timestamp',
+          duration_seconds: 2580,
+          share_url: 'https://...',
+          transcript_url: 'https://...',
+          title: 'Meeting title',
+          summary: 'Short meeting summary',
+          meeting_id: 'your-provider-meeting-id',
+          speakers: [{ name: 'Speaker Name', email: 'email@example.com' }],
+        },
+        example_payload: {
+          closer_email: 'closer@yourcompany.com',
+          prospect_email: 'prospect@gmail.com',
+          prospect_name: 'John Smith',
+          scheduled_start_time: '2026-06-09T15:00:00Z',
+          transcript:
+            '00:00:05 - Closer: Hey, thanks for joining.\n00:00:12 - John: Happy to be here.',
+          title: 'Discovery Call — John Smith',
+        },
+        notes: [
+          'closer_email and transcript are the only required fields; everything else is optional.',
+          'transcript must be a non-empty string or it is treated as "no transcript" — generic has no API-polling fallback, so always include the text.',
+          'The endpoint returns 200 {"status":"ok","processing":true} immediately; processing happens asynchronously.',
+        ],
+      };
+    }
+
+    res.status(201).json(response);
   } catch (error) {
     logger.error('Failed to create client', { error: error.message });
     res.status(500).json({ status: 'error', message: 'Failed to create client' });
