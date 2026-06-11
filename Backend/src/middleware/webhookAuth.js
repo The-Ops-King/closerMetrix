@@ -59,7 +59,13 @@ const webhookAuth = {
 
   /**
    * Validates payment webhook authorization.
-   * Expects: Authorization: Bearer {client_webhook_secret}
+   * Expects: Authorization: Bearer {payment_webhook_secret}
+   *
+   * Payment auth uses the dedicated `payment_webhook_secret` so it is fully
+   * decoupled from the transcript path (which uses `webhook_secret` for HMAC).
+   * This lets a client run payment webhooks WITH a secret while leaving the
+   * transcript webhook secret-free. Falls back to `webhook_secret` for clients
+   * onboarded before the dedicated field existed (backwards compatibility).
    * The secret is checked against the client record (loaded by clientIsolation middleware).
    */
   payment(req, res, next) {
@@ -82,7 +88,9 @@ const webhookAuth = {
       });
     }
 
-    if (!req.client.webhook_secret || !safeCompare(req.client.webhook_secret, token)) {
+    const paymentSecret = req.client.payment_webhook_secret || req.client.webhook_secret;
+
+    if (!paymentSecret || !safeCompare(paymentSecret, token)) {
       logger.warn('Payment webhook auth failed', {
         clientId: req.clientId,
       });

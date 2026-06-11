@@ -129,7 +129,8 @@ const CLIENT_FIELDS = [
 
 const CLIENT_READONLY_FIELDS = [
   { key: 'client_id', label: 'Client ID' },
-  { key: 'webhook_secret', label: 'Webhook Secret' },
+  { key: 'webhook_secret', label: 'Transcript Webhook Secret (HMAC)' },
+  { key: 'payment_webhook_secret', label: 'Payment Webhook Secret (Bearer)' },
   { key: 'created_at', label: 'Created' },
   { key: 'last_modified', label: 'Last Modified' },
 ];
@@ -1121,6 +1122,13 @@ function ClosersTab({ selectedClientId, executeRequest }) {
       {/* ── Add Closer ── */}
       <Box sx={cardSx}>
         <Typography sx={sectionHeaderSx}>Add Closer</Typography>
+        <Typography sx={{ color: COLORS.text.secondary, fontSize: '0.8rem', mb: 2 }}>
+          Each closer must share their Google Calendar with{' '}
+          <Box component="span" sx={{ color: COLORS.neon.cyan, fontWeight: 600 }}>
+            closermetrix@closer-automation.iam.gserviceaccount.com
+          </Box>
+          {' '}(Google Calendar → Settings → their calendar → "Share with specific people" → "See all event details").
+        </Typography>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 2 }}>
           <TextField size="small" label="Name *" value={addForm.name} onChange={updateAddField('name')} sx={{ minWidth: 160, ...inputSx }} />
           <TextField size="small" label="Work Email *" value={addForm.work_email} onChange={updateAddField('work_email')} sx={{ minWidth: 220, ...inputSx }} />

@@ -968,7 +968,7 @@ function TeamSection({ closers, clientId, authOptions, mode, onRefresh, transcri
             </Typography>
             <Typography sx={{ color: COLORS.text.secondary, fontSize: '0.8rem', pl: 1.5 }}>
               In Google Calendar → Settings → their calendar → "Share with specific people" → add{' '}
-              <Box component="span" sx={{ color: COLORS.neon.cyan, fontWeight: 600 }}>jt@jtylerray.com</Box>
+              <Box component="span" sx={{ color: COLORS.neon.cyan, fontWeight: 600 }}>closermetrix@closer-automation.iam.gserviceaccount.com</Box>
               {' '}with "See all event details" permission.
             </Typography>
           </Box>

@@ -96,6 +96,9 @@ router.post('/', async (req, res) => {
     // webhook_secret is used ONLY by the payment webhook (Authorization: Bearer).
     // Transcript webhooks are unsigned and do not use it.
     const webhookSecret = crypto.randomBytes(32).toString('hex');
+    // Dedicated payment secret — decoupled from the transcript HMAC secret so
+    // payment auth can be enforced independently of transcript signing.
+    const paymentWebhookSecret = crypto.randomBytes(32).toString('hex');
     const now = new Date().toISOString();
 
     // Normalize transcript source. "other" is the friendly onboarding label for
@@ -128,6 +131,7 @@ router.post('/', async (req, res) => {
       common_objections: req.body.common_objections || null,
       disqualification_criteria: req.body.disqualification_criteria || null,
       webhook_secret: webhookSecret,
+      payment_webhook_secret: paymentWebhookSecret,
       created_at: now,
       last_modified: now,
     };
@@ -159,13 +163,14 @@ router.post('/', async (req, res) => {
       // webhook_secret is for the PAYMENT webhook only (Authorization: Bearer).
       // Transcript webhooks are unsigned — no secret needed.
       webhook_secret: webhookSecret,
+      payment_webhook_secret: paymentWebhookSecret,
       transcript_webhook_url: transcriptWebhookUrl,
       payment_webhook_url: `${baseUrl}/webhooks/payment`,
       next_steps: [
         `Add closers via POST /admin/clients/${clientId}/closers`,
-        'Have closers share their Google Calendar with tyler@closermetrix.com',
+        'Have closers share their Google Calendar with closermetrix@closer-automation.iam.gserviceaccount.com',
         `Configure ${provider} to send transcripts to the transcript_webhook_url (no signature/secret required — just include the X-Client-Id header)`,
-        'Configure the payment processor to POST to the payment_webhook_url with header "Authorization: Bearer <webhook_secret>"',
+        'Configure the payment processor to POST to the payment_webhook_url with header "Authorization: Bearer <payment_webhook_secret>"',
       ],
     };
 
