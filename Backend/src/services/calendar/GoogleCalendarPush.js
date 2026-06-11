@@ -21,6 +21,7 @@
  */
 
 const { google } = require('googleapis');
+const { GoogleAuth, Impersonated } = require('google-auth-library');
 const { generateId } = require('../../utils/idGenerator');
 const logger = require('../../utils/logger');
 const config = require('../../config');
@@ -126,65 +127,82 @@ class GoogleCalendarPush {
    *   domain-wide delegation to impersonate this user's calendar
    */
   async _getCalendarApi(closerEmail) {
+    const candidates = await this._getCalendarApiCandidates(closerEmail);
+    return candidates[0] || null;
+  }
+
+  /**
+   * Returns calendar API clients to try, in priority order (see
+   * CalendarService._getCalendarApiCandidates for the strategy list).
+   * Callers fall back to the next client on a 404/403.
+   */
+  async _getCalendarApiCandidates(closerEmail) {
     const creds = config.calendar.credentials;
+    const scopes = [
+      'https://www.googleapis.com/auth/calendar.readonly',
+      'https://www.googleapis.com/auth/calendar.events.readonly',
+    ];
+    const candidates = [];
+
+    // Strategy 0: impersonate the configured service account (share-to-SA model)
+    if (config.calendar.serviceAccountEmail) {
+      if (!this._saApi) {
+        try {
+          const source = await new GoogleAuth().getClient();
+          const auth = new Impersonated({
+            sourceClient: source,
+            targetPrincipal: config.calendar.serviceAccountEmail,
+            lifetime: 3600,
+            targetScopes: scopes,
+          });
+          this._saApi = google.calendar({ version: 'v3', auth });
+        } catch (err) {
+          logger.warn('Calendar SA impersonation init failed', {
+            sa: config.calendar.serviceAccountEmail,
+            error: err.message,
+          });
+        }
+      }
+      if (this._saApi) candidates.push(this._saApi);
+    }
 
     // Strategy 1: OAuth2 with Tyler's refresh token (shared calendars)
     if (creds && creds.refresh_token) {
       if (!this.calendarApi) {
-        const oauth2Client = new google.auth.OAuth2(
-          creds.client_id,
-          creds.client_secret
-        );
+        const oauth2Client = new google.auth.OAuth2(creds.client_id, creds.client_secret);
         oauth2Client.setCredentials({ refresh_token: creds.refresh_token });
         this.calendarApi = google.calendar({ version: 'v3', auth: oauth2Client });
       }
-      return this.calendarApi;
+      candidates.push(this.calendarApi);
     }
 
-    // Strategy 2: Service account with domain-wide delegation
-    // Each closer needs their own client (different impersonation subject)
+    // Strategy 2: Service account with domain-wide delegation (impersonate closer)
     if (closerEmail) {
-      const cacheKey = `dwd_${closerEmail}`;
       if (!this._dwdClients) this._dwdClients = new Map();
-
+      const cacheKey = `dwd_${closerEmail}`;
       if (this._dwdClients.has(cacheKey)) {
-        return this._dwdClients.get(cacheKey);
-      }
-
-      try {
-        const auth = new google.auth.GoogleAuth({
-          scopes: [
-            'https://www.googleapis.com/auth/calendar.readonly',
-            'https://www.googleapis.com/auth/calendar.events.readonly',
-          ],
-          clientOptions: { subject: closerEmail },
-        });
-        const authClient = await auth.getClient();
-        const calApi = google.calendar({ version: 'v3', auth: authClient });
-        this._dwdClients.set(cacheKey, calApi);
-        logger.debug('Calendar API: using domain-wide delegation', { closerEmail });
-        return calApi;
-      } catch (err) {
-        logger.warn('Domain-wide delegation failed, falling back to default credentials', {
-          closerEmail,
-          error: err.message,
-        });
+        candidates.push(this._dwdClients.get(cacheKey));
+      } else {
+        try {
+          const auth = new google.auth.GoogleAuth({ scopes, clientOptions: { subject: closerEmail } });
+          const authClient = await auth.getClient();
+          const calApi = google.calendar({ version: 'v3', auth: authClient });
+          this._dwdClients.set(cacheKey, calApi);
+          candidates.push(calApi);
+        } catch (err) {
+          logger.warn('Domain-wide delegation init failed', { closerEmail, error: err.message });
+        }
       }
     }
 
     // Strategy 3: Application Default Credentials (local dev / basic SA)
-    if (!this.calendarApi) {
-      const auth = new google.auth.GoogleAuth({
-        scopes: [
-          'https://www.googleapis.com/auth/calendar.readonly',
-          'https://www.googleapis.com/auth/calendar.events.readonly',
-        ],
-      });
+    if (candidates.length === 0) {
+      const auth = new google.auth.GoogleAuth({ scopes });
       const authClient = await auth.getClient();
-      this.calendarApi = google.calendar({ version: 'v3', auth: authClient });
+      candidates.push(google.calendar({ version: 'v3', auth: authClient }));
     }
 
-    return this.calendarApi;
+    return candidates;
   }
 
   /**
@@ -200,24 +218,38 @@ class GoogleCalendarPush {
    */
   async createWatch(closerEmail, clientId) {
     closerEmail = (closerEmail || '').toLowerCase().trim();
-    const calendar = await this._getCalendarApi(closerEmail);
+    const candidates = await this._getCalendarApiCandidates(closerEmail);
     const channelId = generateId();
     const webhookUrl = `${config.calendar.webhookUrl}/${clientId}`;
 
     try {
-      const response = await calendar.events.watch({
-        calendarId: closerEmail,
-        requestBody: {
-          id: channelId,
-          type: 'web_hook',
-          address: webhookUrl,
-          token: clientId,
-          params: {
-            // Request events that change, not just existence checks
-            ttl: '604800',  // 7 days in seconds
-          },
-        },
-      });
+      // Try each auth identity in priority order; fall back on 404/403.
+      let response = null;
+      let lastErr = null;
+      for (const calendar of candidates) {
+        try {
+          response = await calendar.events.watch({
+            calendarId: closerEmail,
+            requestBody: {
+              id: channelId,
+              type: 'web_hook',
+              address: webhookUrl,
+              token: clientId,
+              params: {
+                // Request events that change, not just existence checks
+                ttl: '604800',  // 7 days in seconds
+              },
+            },
+          });
+          break;
+        } catch (err) {
+          if (err.code === 404 || err.code === 403) { lastErr = err; continue; }
+          throw err;
+        }
+      }
+      if (!response) {
+        throw lastErr || new Error(`No auth identity could watch calendar for ${closerEmail}`);
+      }
 
       const channelData = {
         channelId,

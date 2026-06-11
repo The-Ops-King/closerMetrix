@@ -13,6 +13,7 @@
  */
 
 const { google } = require('googleapis');
+const { GoogleAuth, Impersonated } = require('google-auth-library');
 const googleAdapter = require('./adapters/GoogleCalendarAdapter');
 const callStateManager = require('../CallStateManager');
 const clientQueries = require('../../db/queries/clients');
@@ -55,58 +56,92 @@ class CalendarService {
    *   domain-wide delegation to impersonate this user's calendar
    */
   async _getCalendarApi(closerEmail) {
+    const candidates = await this._getCalendarApiCandidates(closerEmail);
+    return candidates[0] || null;
+  }
+
+  /**
+   * Returns calendar API clients to try, in priority order. Callers should
+   * attempt each in turn and fall back to the next on a 404/403 (the calendar
+   * is shared with a different identity).
+   *
+   *   0. Impersonated service account (config.calendar.serviceAccountEmail)
+   *      — for calendars shared directly with the SA. Keyless.
+   *   1. OAuth2 with Tyler's refresh token — calendars shared with his account.
+   *   2. Service-account domain-wide delegation (impersonate closerEmail)
+   *      — Workspace domains that granted delegation.
+   *   3. Application Default Credentials (local dev / basic SA).
+   *
+   * @param {string} [closerEmail] — used for the DWD subject.
+   * @returns {Array<Object>} Ordered calendar API clients.
+   */
+  async _getCalendarApiCandidates(closerEmail) {
     const creds = config.calendar.credentials;
+    const scopes = [
+      'https://www.googleapis.com/auth/calendar.readonly',
+      'https://www.googleapis.com/auth/calendar.events.readonly',
+    ];
+    const candidates = [];
+
+    // Strategy 0: impersonate the configured service account (share-to-SA model)
+    if (config.calendar.serviceAccountEmail) {
+      if (!this._saApi) {
+        try {
+          const source = await new GoogleAuth().getClient();
+          const auth = new Impersonated({
+            sourceClient: source,
+            targetPrincipal: config.calendar.serviceAccountEmail,
+            lifetime: 3600,
+            targetScopes: scopes,
+          });
+          this._saApi = google.calendar({ version: 'v3', auth });
+        } catch (err) {
+          logger.warn('Calendar SA impersonation init failed', {
+            sa: config.calendar.serviceAccountEmail,
+            error: err.message,
+          });
+        }
+      }
+      if (this._saApi) candidates.push(this._saApi);
+    }
 
     // Strategy 1: OAuth2 with Tyler's refresh token (shared calendars)
     if (creds && creds.refresh_token) {
       if (!this.calendarApi) {
-        const oauth2Client = new google.auth.OAuth2(
-          creds.client_id,
-          creds.client_secret
-        );
+        const oauth2Client = new google.auth.OAuth2(creds.client_id, creds.client_secret);
         oauth2Client.setCredentials({ refresh_token: creds.refresh_token });
         this.calendarApi = google.calendar({ version: 'v3', auth: oauth2Client });
       }
-      return this.calendarApi;
+      candidates.push(this.calendarApi);
     }
 
-    // Strategy 2: Service account with domain-wide delegation
+    // Strategy 2: Service account with domain-wide delegation (impersonate closer)
     if (closerEmail) {
       if (!this._dwdClients) this._dwdClients = new Map();
       const cacheKey = `dwd_${closerEmail}`;
-
       if (this._dwdClients.has(cacheKey)) {
-        return this._dwdClients.get(cacheKey);
-      }
-
-      try {
-        const auth = new google.auth.GoogleAuth({
-          scopes: ['https://www.googleapis.com/auth/calendar.readonly'],
-          clientOptions: { subject: closerEmail },
-        });
-        const authClient = await auth.getClient();
-        const calApi = google.calendar({ version: 'v3', auth: authClient });
-        this._dwdClients.set(cacheKey, calApi);
-        logger.debug('Calendar API: using domain-wide delegation', { closerEmail });
-        return calApi;
-      } catch (err) {
-        logger.warn('Domain-wide delegation failed, falling back to default', {
-          closerEmail,
-          error: err.message,
-        });
+        candidates.push(this._dwdClients.get(cacheKey));
+      } else {
+        try {
+          const auth = new google.auth.GoogleAuth({ scopes, clientOptions: { subject: closerEmail } });
+          const authClient = await auth.getClient();
+          const calApi = google.calendar({ version: 'v3', auth: authClient });
+          this._dwdClients.set(cacheKey, calApi);
+          candidates.push(calApi);
+        } catch (err) {
+          logger.warn('Domain-wide delegation init failed', { closerEmail, error: err.message });
+        }
       }
     }
 
     // Strategy 3: Application Default Credentials (local dev / basic SA)
-    if (!this.calendarApi) {
-      const auth = new google.auth.GoogleAuth({
-        scopes: ['https://www.googleapis.com/auth/calendar.readonly'],
-      });
+    if (candidates.length === 0) {
+      const auth = new google.auth.GoogleAuth({ scopes });
       const authClient = await auth.getClient();
-      this.calendarApi = google.calendar({ version: 'v3', auth: authClient });
+      candidates.push(google.calendar({ version: 'v3', auth: authClient }));
     }
 
-    return this.calendarApi;
+    return candidates;
   }
 
   /**
@@ -318,31 +353,38 @@ class CalendarService {
         const closerEmailLower = closer.work_email.toLowerCase().trim();
 
         try {
-          // Get a calendar client for this closer (may use DWD impersonation)
-          const calendar = await this._getCalendarApi(closerEmailLower);
-          const response = await calendar.events.list({
-            calendarId: closerEmailLower,
-            updatedMin: fiveMinutesAgo,
-            singleEvents: true,
-            orderBy: 'updated',
-            maxResults: 50,
-            showDeleted: true,
-          });
-
-          if (response.data.items) {
-            allEvents.push(...response.data.items);
+          // Try each auth identity in priority order; fall back on 404/403
+          // (calendar shared with a different identity than the first tried).
+          const candidates = await this._getCalendarApiCandidates(closerEmailLower);
+          let response = null;
+          let lastAccessError = null;
+          for (const calendar of candidates) {
+            try {
+              response = await calendar.events.list({
+                calendarId: closerEmailLower,
+                updatedMin: fiveMinutesAgo,
+                singleEvents: true,
+                orderBy: 'updated',
+                maxResults: 50,
+                showDeleted: true,
+              });
+              break;
+            } catch (err) {
+              if (err.code === 404 || err.code === 403) { lastAccessError = err; continue; }
+              throw err;
+            }
           }
-        } catch (error) {
-          // Calendar might not be shared yet, or access revoked
-          if (error.code === 404 || error.code === 403) {
-            logger.warn('Cannot access closer calendar', {
+          if (response && response.data.items) {
+            allEvents.push(...response.data.items);
+          } else if (!response) {
+            logger.warn('Cannot access closer calendar (no auth identity worked)', {
               closerEmail: closer.work_email,
               clientId,
-              error: error.message,
+              error: lastAccessError && lastAccessError.message,
             });
-          } else {
-            throw error;
           }
+        } catch (error) {
+          throw error;
         }
       }
 

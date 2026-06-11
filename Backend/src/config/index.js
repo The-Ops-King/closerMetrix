@@ -66,6 +66,15 @@ const config = {
   calendar: {
     webhookUrl: process.env.GOOGLE_CALENDAR_WEBHOOK_URL || '',
     /**
+     * Service account to impersonate for reading calendars that closers shared
+     * directly with the SA (e.g. closermetrix@…iam.gserviceaccount.com).
+     * When set, calendar reads are attempted as this SA first, then fall back
+     * to the OAuth/DWD strategies below (so clients that share with Tyler's
+     * personal account keep working). Keyless — uses the runtime identity's
+     * generateAccessToken (Cloud Run compute SA / local ADC) to impersonate.
+     */
+    serviceAccountEmail: process.env.GOOGLE_CALENDAR_SA_EMAIL || '',
+    /**
      * OAuth2 credentials for Google Calendar API access.
      * Stored in Secret Manager as GOOGLE_CALENDAR_CREDENTIALS (JSON string).
      * Contains: { client_id, client_secret, refresh_token, type: "authorized_user" }

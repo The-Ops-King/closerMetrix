@@ -12,3 +12,4 @@ client_secret.json
 *.key
 *credentials*.json
 .gcp-local-key.json
+.vimeo-token
