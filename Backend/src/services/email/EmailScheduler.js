@@ -10,6 +10,7 @@
  */
 
 const bq = require('../../db/BigQueryClient');
+const config = require('../../config');
 const logger = require('../../utils/logger');
 const { fetchEmailData, fetchDailyOnboardingData } = require('./EmailDataFetcher');
 const { generateInsights } = require('./EmailInsightGenerator');
@@ -355,9 +356,24 @@ async function sendOnboardingReportForCloser(clientId, closerId, recipientOverri
 
     const client = clientRows[0];
     const settings = parseSettings(client.settings_json);
-    const recipients = recipientOverride
-      ? [recipientOverride]
-      : getRecipients(settings, client.primary_contact_email);
+
+    // TEMPORARY GATE: while the rubric version is in development, route all
+    // cron-driven Closer Watch emails to a single test recipient instead of
+    // real client contacts. Set CLOSER_WATCH_GATE_RECIPIENT='' (or remove it)
+    // to go live. An explicit recipientOverride (admin manual trigger) bypasses
+    // the gate so previews/tests can still target any address.
+    const gateRecipient = config.email.closerWatchGateRecipient;
+    let recipients;
+    if (recipientOverride) {
+      recipients = [recipientOverride];
+    } else if (gateRecipient) {
+      recipients = [gateRecipient];
+      logger.warn('EmailScheduler: Closer Watch gate active — routing to test recipient', {
+        clientId, closerId, gateRecipient,
+      });
+    } else {
+      recipients = getRecipients(settings, client.primary_contact_email);
+    }
 
     if (recipients.length === 0) throw new Error('No recipients configured');
 

@@ -97,15 +97,14 @@ const config = {
     serviceUrl: process.env.CLOUD_TASKS_SERVICE_URL || 'http://localhost:8080',
   },
 
-  /** Email notifications (weekly/monthly reports) */
+  /** Email notifications (weekly/monthly reports) — sent via Resend */
   email: {
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.SMTP_PORT, 10) || 587,
-    secure: process.env.SMTP_SECURE === 'true',
-    user: process.env.SMTP_USER || '',
-    pass: process.env.SMTP_PASS || '',
+    resendApiKey: process.env.RESEND_API_KEY || '',
     from: process.env.EMAIL_FROM || 'CloserMetrix <reports@closermetrix.com>',
     testRecipient: process.env.EMAIL_TEST_RECIPIENT || 'jt@jtylerray.com',
+    // Temporary: when set, the daily Closer Watch cron routes ALL sends here
+    // instead of real client recipients (rubric version still in dev). Unset to go live.
+    closerWatchGateRecipient: process.env.CLOSER_WATCH_GATE_RECIPIENT || '',
   },
 
   /** Alerting channels */

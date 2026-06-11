@@ -1,7 +1,7 @@
 /**
  * EMAIL SERVICE
  *
- * Handles all outbound email sending via nodemailer.
+ * Handles all outbound email sending via Resend.
  * This is the only place in the system that sends emails.
  *
  * Usage:
@@ -10,7 +10,7 @@
  *   await emailService.sendEmail(to, subject, html);  // send arbitrary email
  */
 
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 const config = require('../../config');
 const logger = require('../../utils/logger');
 const { renderWeeklyReport, renderMonthlyReport, getEmailAttachments } = require('./EmailTemplateEngine');
@@ -18,58 +18,45 @@ const { weeklyTestData, monthlyTestData } = require('./testData');
 
 class EmailService {
   constructor() {
-    this.transporter = null;
+    this.client = null;
     this._initialized = false;
   }
 
   /**
-   * Creates the nodemailer transporter. Called lazily on first send.
-   * Fails gracefully if SMTP credentials aren't configured.
+   * Creates the Resend client. Called lazily on first send.
+   * Fails gracefully if the API key isn't configured (logs instead of sending).
    */
   _init() {
     if (this._initialized) return;
 
-    const { host, port, secure, user, pass } = config.email;
+    const { resendApiKey } = config.email;
 
-    if (!user || !pass) {
-      logger.warn('EmailService: SMTP credentials not configured. Emails will be logged but not sent.');
+    if (!resendApiKey) {
+      logger.warn('EmailService: RESEND_API_KEY not configured. Emails will be logged but not sent.');
       this._initialized = true;
       return;
     }
 
-    this.transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure,
-      auth: { user, pass },
-    });
-
+    this.client = new Resend(resendApiKey);
     this._initialized = true;
-    logger.info('EmailService: Transporter initialized', { host, port });
+    logger.info('EmailService: Resend client initialized');
   }
 
   /**
-   * Sends an email. If no transporter is configured, logs the email instead.
+   * Sends an email via Resend. If no API key is configured, logs the email instead.
    *
-   * @param {string} to - Recipient email address
+   * @param {string|string[]} to - Recipient email address(es)
    * @param {string} subject - Email subject line
    * @param {string} html - HTML body content
-   * @param {Object[]} [attachments] - Nodemailer attachment objects (for CID inline images)
+   * @param {Object[]} [attachments] - Attachments ({ filename, content }). Images are
+   *   served via public URLs, so this is normally empty.
    * @returns {Object} { success: boolean, messageId?: string, logged?: boolean }
    */
   async sendEmail(to, subject, html, attachments = []) {
     this._init();
 
-    const mailOptions = {
-      from: config.email.from,
-      to,
-      subject,
-      html,
-      attachments,
-    };
-
-    if (!this.transporter) {
-      logger.info('EmailService: Email logged (no SMTP configured)', {
+    if (!this.client) {
+      logger.info('EmailService: Email logged (no RESEND_API_KEY configured)', {
         to,
         subject,
         htmlLength: html.length,
@@ -77,14 +64,31 @@ class EmailService {
       return { success: true, logged: true };
     }
 
+    const payload = {
+      from: config.email.from,
+      to,
+      subject,
+      html,
+    };
+    if (attachments && attachments.length > 0) {
+      payload.attachments = attachments.map((a) => ({
+        filename: a.filename,
+        content: a.content,
+      }));
+    }
+
     try {
-      const info = await this.transporter.sendMail(mailOptions);
+      const { data, error } = await this.client.emails.send(payload);
+      if (error) {
+        // Resend returns errors in the response body rather than throwing.
+        throw new Error(error.message || JSON.stringify(error));
+      }
       logger.info('EmailService: Email sent', {
         to,
         subject,
-        messageId: info.messageId,
+        messageId: data?.id,
       });
-      return { success: true, messageId: info.messageId };
+      return { success: true, messageId: data?.id };
     } catch (error) {
       logger.error('EmailService: Failed to send email', {
         to,
