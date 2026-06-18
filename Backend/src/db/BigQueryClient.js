@@ -43,6 +43,29 @@ class BigQueryClient {
     this.client = new BigQuery({
       projectId: config.bigquery.projectId,
     });
+
+    // Disable HTTP keep-alive on the BigQuery transport.
+    //
+    // @google-cloud/bigquery uses teeny-request, which (via @google-cloud/common
+    // util.js defaulting `forever: true`) reuses a pooled `keepAlive: true` agent.
+    // On the rebuilt node:22-alpine image a Node patch changed idle-socket close
+    // timing, so the next request reuses a dead socket and fails with:
+    //   "Invalid response body ... : Premature close"
+    // This is the same stale-socket bug that hit the Anthropic SDK (see
+    // utils/aiHttpAgent.js) — here it took down every client lookup and webhook.
+    //
+    // @google-cloud/common already ships this exact mitigation for Cloud
+    // Functions (service.js sets `forever = false` when FUNCTION_NAME is set);
+    // Cloud Run doesn't set that env var, so we replicate it via the public
+    // interceptors API. forever:false makes teeny-request skip the pooled
+    // keep-alive agent and open a fresh connection per request.
+    this.client.interceptors.push({
+      request(reqOpts) {
+        reqOpts.forever = false;
+        return reqOpts;
+      },
+    });
+
     this.dataset = config.bigquery.dataset;
     this.projectId = config.bigquery.projectId;
   }
