@@ -11,11 +11,11 @@
 
 module.exports = {
   // ── AI Model ───────────────────────────────────────────────────────
-  model: 'claude-sonnet-4-20250514',
+  model: 'claude-sonnet-4-6',
   maxTokens: 512,
 
   // ── Data Analysis Model ────────────────────────────────────────────
-  dataAnalysisModel: 'claude-sonnet-4-20250514',
+  dataAnalysisModel: 'claude-sonnet-4-6',
   dataAnalysisMaxTokens: 6000,
 
   // ── Caching ────────────────────────────────────────────────────────

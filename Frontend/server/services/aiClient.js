@@ -51,7 +51,7 @@ let openaiClient = null;
 let geminiClient = null;
 
 const MODEL_DEFAULTS = {
-  claude: 'claude-sonnet-4-20250514',
+  claude: 'claude-sonnet-4-6',
   chatgpt: 'gpt-4o',
   gemini: 'gemini-2.0-flash',
 };

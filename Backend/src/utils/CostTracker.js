@@ -16,7 +16,7 @@
  *   await costTracker.record({
  *     clientId: 'xxx',
  *     callId: 'yyy',
- *     model: 'claude-sonnet-4-5-20250929',
+ *     model: 'claude-sonnet-4-6',
  *     inputTokens: 4500,
  *     outputTokens: 1200,
  *     processingTimeMs: 3200,
@@ -35,7 +35,7 @@ class CostTracker {
    * @param {Object} params
    * @param {string} params.clientId — Client this cost is for
    * @param {string} params.callId — Call this cost is for
-   * @param {string} params.model — Model used (e.g., 'claude-sonnet-4-5-20250929')
+   * @param {string} params.model — Model used (e.g., 'claude-sonnet-4-6')
    * @param {number} params.inputTokens — Input token count from API response
    * @param {number} params.outputTokens — Output token count from API response
    * @param {number} [params.processingTimeMs] — How long the API call took

@@ -7,7 +7,7 @@
  * Usage:
  *   const config = require('./config');
  *   config.bigquery.projectId  // 'closer-automation'
- *   config.ai.model            // 'claude-sonnet-4-5-20250929'
+ *   config.ai.model            // 'claude-sonnet-4-6'
  *
  * Every value has a sensible default so the app can start in development
  * without a .env file (BigQuery and Anthropic calls will fail, but the
@@ -54,7 +54,7 @@ const config = {
     apiKey: process.env.ANTHROPIC_API_KEY || '',
     openaiApiKey: process.env.OPENAI_API_KEY || '',
     googleAiApiKey: process.env.GOOGLE_AI_API_KEY || '',
-    model: process.env.AI_MODEL || 'claude-sonnet-4-5-20250929',
+    model: process.env.AI_MODEL || 'claude-sonnet-4-6',
     openaiModel: process.env.OPENAI_MODEL || 'gpt-4o',
     geminiModel: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
     maxTokens: parseInt(process.env.AI_MAX_TOKENS, 10) || 8000,

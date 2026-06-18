@@ -7,7 +7,7 @@
 
 module.exports = {
   // ── AI Model ───────────────────────────────────────────────────────
-  model: 'claude-sonnet-4-20250514',
+  model: 'claude-sonnet-4-6',
   maxTokens: 1024,
 
   // ── Caching ────────────────────────────────────────────────────────
@@ -48,7 +48,7 @@ Here are the statements:
 {{statements}}`,
 
   // ── Script Comparison ──────────────────────────────────────────────
-  scriptComparisonModel: 'claude-sonnet-4-20250514',
+  scriptComparisonModel: 'claude-sonnet-4-6',
   scriptComparisonMaxTokens: 2000,
 
   scriptComparisonSystemPrompt: `You are a sales methodology analyst. You compare what prospects actually say in sales calls against a client's sales script template to find alignment gaps. Return structured JSON only.`,

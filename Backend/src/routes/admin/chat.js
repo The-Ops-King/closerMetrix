@@ -15,6 +15,7 @@ const router = express.Router();
 const config = require('../../config');
 const logger = require('../../utils/logger');
 const bq = require('../../db/BigQueryClient');
+const webhookAuth = require('../../middleware/webhookAuth');
 const ChatbotService = require('../../services/chatbot/ChatbotService');
 
 // ── Singleton chatbot service ──
@@ -25,23 +26,9 @@ const CLIENT_ID_RE = /^[a-zA-Z0-9_-]{1,128}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const HTML_TAG_RE = /<[^>]*>/g;
 
-// ── Auth middleware — same pattern as other admin routes ──
-router.use((req, res, next) => {
-  const auth = req.headers.authorization;
-  if (!auth || !auth.startsWith('Bearer ')) {
-    return res.status(401).json({ success: false, error: 'Unauthorized' });
-  }
-  const token = auth.slice(7);
-  if (!config.admin.apiKey) {
-    return res.status(503).json({ success: false, error: 'Admin API key not configured' });
-  }
-  const expected = crypto.createHash('sha256').update(config.admin.apiKey).digest();
-  const received = crypto.createHash('sha256').update(token).digest();
-  if (!crypto.timingSafeEqual(expected, received)) {
-    return res.status(403).json({ success: false, error: 'Invalid API key' });
-  }
-  next();
-});
+// ── Auth middleware — shared admin auth (accepts X-Admin-Key, leaving the
+// Authorization header free for the Cloud Run service-to-service ID token) ──
+router.use(webhookAuth.admin);
 
 /**
  * POST /admin/chat/message

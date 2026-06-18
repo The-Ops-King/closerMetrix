@@ -159,7 +159,7 @@ class ChatbotService {
     let response;
     try {
       response = await client.messages.create({
-        model: 'claude-sonnet-4-5-20250929',
+        model: 'claude-sonnet-4-6',
         max_tokens: 4096,
         system: systemPrompt,
         tools: toolDefs,
@@ -214,7 +214,7 @@ class ChatbotService {
 
       try {
         response = await client.messages.create({
-          model: 'claude-sonnet-4-5-20250929',
+          model: 'claude-sonnet-4-6',
           max_tokens: 4096,
           system: systemPrompt,
           tools: toolDefs,
@@ -281,7 +281,7 @@ class ChatbotService {
       content: userMessage,
       input_tokens: 0,
       output_tokens: 0,
-      model: 'claude-sonnet-4-5-20250929',
+      model: 'claude-sonnet-4-6',
       created_at: now,
       status: 'Active',
     });
@@ -295,7 +295,7 @@ class ChatbotService {
       content: assistantResponse,
       input_tokens: inputTokens,
       output_tokens: outputTokens,
-      model: 'claude-sonnet-4-5-20250929',
+      model: 'claude-sonnet-4-6',
       created_at: now,
       status: 'Active',
     });
@@ -310,7 +310,7 @@ class ChatbotService {
         tool_name: toolName,
         input_tokens: 0,
         output_tokens: 0,
-        model: 'claude-sonnet-4-5-20250929',
+        model: 'claude-sonnet-4-6',
         created_at: now,
         status: 'Active',
       });
