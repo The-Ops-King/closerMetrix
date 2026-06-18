@@ -78,7 +78,7 @@ export default function useChatbot() {
     } finally {
       setIsLoading(false);
     }
-  }, [auth.token, conversationId, messages, isLoading]);
+  }, [auth.token, auth.mode, auth.adminViewClientId, conversationId, messages, isLoading]);
 
   const startNewConversation = useCallback(() => {
     setMessages([]);
