@@ -19,39 +19,9 @@
  *   await bq.insert('Calls', rowData);
  */
 
-const http = require('http');
-const https = require('https');
 const { BigQuery } = require('@google-cloud/bigquery');
 const config = require('../config');
 const logger = require('../utils/logger');
-
-// ── Kill HTTP keep-alive on the BigQuery transport (deterministic) ──
-//
-// @google-cloud/bigquery talks to BigQuery via teeny-request, which reuses a
-// pooled `keepAlive: true` agent whenever the request carries `forever: true`
-// (the @google-cloud/common default). On the rebuilt node:22-alpine image a
-// Node patch changed idle-socket close timing, so the next request grabs a
-// dead socket and fails with "Invalid response body ... Premature close".
-// This took down every client lookup and webhook on closermetrix-api.
-//
-// Setting `forever: false` via the client's request interceptor (below) is NOT
-// enough: common v5 bakes the transport defaults in at construction, so the
-// per-request flag gets overridden and the pooled keep-alive agent is still
-// used. The reliable lever is teeny-request's module-level agent pool:
-// getAgent() returns `pool.get('https:forever')` and only *creates* one when
-// the key is absent. By seeding that key with a keepAlive:false agent at load
-// time, our agent wins no matter what the forever flag ends up as — a fresh
-// connection per request, no stale-socket reuse. Wrapped in try/catch so an
-// internal teeny-request path change degrades to "keep-alive on", never a crash.
-try {
-  const teenyAgents = require('teeny-request/build/src/agents');
-  teenyAgents.pool.set('https:forever', new https.Agent({ keepAlive: false }));
-  teenyAgents.pool.set('http:forever', new http.Agent({ keepAlive: false }));
-} catch (err) {
-  logger.warn('Could not pre-seed teeny-request agent pool — BigQuery keep-alive may remain active', {
-    error: err.message,
-  });
-}
 
 /** Validates that a column name matches standard SQL identifier pattern */
 const VALID_COLUMN_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
@@ -73,20 +43,6 @@ class BigQueryClient {
     this.client = new BigQuery({
       projectId: config.bigquery.projectId,
     });
-
-    // Belt-and-suspenders for the keep-alive fix at module load (see the agent
-    // pool note above, which is the actual lever). This mirrors the mitigation
-    // @google-cloud/common itself applies for Cloud Functions (service.js sets
-    // `forever = false` when FUNCTION_NAME is present); Cloud Run doesn't set
-    // that env var. On its own this interceptor proved insufficient on common
-    // v5 — kept for intent + defense in depth alongside the pool seed.
-    this.client.interceptors.push({
-      request(reqOpts) {
-        reqOpts.forever = false;
-        return reqOpts;
-      },
-    });
-
     this.dataset = config.bigquery.dataset;
     this.projectId = config.bigquery.projectId;
   }

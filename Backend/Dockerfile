@@ -2,8 +2,15 @@
 #
 # Multi-stage build for minimal production image.
 # Node.js 22 LTS on Alpine for small footprint.
-
-FROM node:22-alpine AS builder
+#
+# Node is PINNED to 22.22.3, not the floating `22-alpine` tag. Node 22.23.0
+# (which `22-alpine` rolled forward to on 2026-06-18) regressed node-fetch v2's
+# gzipped-response handling: every BigQuery REST call (and other node-fetch v2
+# traffic) fails mid-stream with "Invalid response body ... Premature close",
+# taking down all client lookups and webhooks. 22.22.3 is the exact runtime the
+# last-known-good revision (00161, 2026-06-11) shipped on. Re-pin/re-test
+# deliberately before bumping Node.
+FROM node:22.22.3-alpine AS builder
 
 WORKDIR /app
 
@@ -15,7 +22,8 @@ RUN npm ci --production
 COPY src/ ./src/
 
 # ── Production image ──────────────────────────────
-FROM node:22-alpine
+# Pinned to 22.22.3 — see header note (22.23.0 breaks node-fetch gzip / BigQuery).
+FROM node:22.22.3-alpine
 
 WORKDIR /app
 
