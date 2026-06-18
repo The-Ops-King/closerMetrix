@@ -162,7 +162,7 @@ class PaymentService {
    */
   async _processPayment(call, prospect, amount, paymentType, clientId, paymentDate, productName, notes, attributionMode, originalPayload) {
     if (!call) {
-      // MTCH-04: No matching call — log enriched audit entry and alert admin
+      // MTCH-04: No matching call — log enriched audit entry (no admin alert)
       logger.warn('Payment received but no matching call found', {
         prospectEmail: prospect.prospect_email,
         clientId,
@@ -183,19 +183,8 @@ class PaymentService {
         },
       });
 
-      // Alert admin for every no-match payment
-      await alertService.send({
-        severity: 'medium',
-        title: 'Unmatched Payment Received',
-        details: `Payment of $${amount} from ${prospect.prospect_email} could not be matched to any call record. Prospect record updated.`,
-        clientId,
-        metadata: {
-          prospect_email: prospect.prospect_email,
-          prospect_name: originalPayload?.prospect_name,
-          amount,
-          prospect_id: prospect.prospect_id,
-        },
-      });
+      // No admin alert on unmatched payments — the audit log above is the
+      // silent record. Prospect totals still advance below.
 
       // Still update the prospect — even without a call, lifetime totals advance
       const finalProspect = await prospectService.updateWithPayment(prospect, {
@@ -209,7 +198,7 @@ class PaymentService {
         action: 'payment_recorded',
         prospect_id: prospect.prospect_id,
         total_cash_collected: finalProspect.total_cash_collected,
-        note: 'No matching call found — payment recorded on prospect only, admin alerted',
+        note: 'No matching call found — payment recorded on prospect only',
       };
     }
 
