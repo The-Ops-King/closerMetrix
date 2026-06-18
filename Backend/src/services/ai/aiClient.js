@@ -7,6 +7,7 @@
 
 const config = require('../../config');
 const logger = require('../../utils/logger');
+const aiHttpAgent = require('../../utils/aiHttpAgent');
 
 // ── Rate Limiter: 10 AI calls per client per hour (across all providers) ──
 const MAX_CALLS_PER_HOUR = 10;
@@ -50,7 +51,7 @@ function getAnthropicClient() {
   if (anthropicClient) return anthropicClient;
   if (!config.ai.apiKey) throw new Error('ANTHROPIC_API_KEY not configured');
   const Anthropic = require('@anthropic-ai/sdk');
-  anthropicClient = new Anthropic({ apiKey: config.ai.apiKey });
+  anthropicClient = new Anthropic({ apiKey: config.ai.apiKey, httpAgent: aiHttpAgent });
   return anthropicClient;
 }
 

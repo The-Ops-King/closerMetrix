@@ -15,6 +15,7 @@ const crypto = require('crypto');
 const Anthropic = require('@anthropic-ai/sdk');
 const config = require('../../config');
 const logger = require('../../utils/logger');
+const aiHttpAgent = require('../../utils/aiHttpAgent');
 const { buildSystemPrompt } = require('./systemPrompt');
 const { getToolDefinitions, executeToolCall } = require('./tools');
 
@@ -115,7 +116,7 @@ class ChatbotService {
       if (!config.ai.apiKey) {
         throw new Error('ANTHROPIC_API_KEY not configured — chatbot unavailable');
       }
-      this.anthropic = new Anthropic({ apiKey: config.ai.apiKey });
+      this.anthropic = new Anthropic({ apiKey: config.ai.apiKey, httpAgent: aiHttpAgent });
     }
     return this.anthropic;
   }
