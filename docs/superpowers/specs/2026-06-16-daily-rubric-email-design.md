@@ -1,7 +1,10 @@
 # Daily Rubric Email — Design Spec
 
+> **⚠️ SUPERSEDED by `2026-06-25-daily-scorecard-email-design.md`** (2026-06-25).
+> That spec carries this design forward unchanged and adds: manager-bundle delivery and Executive-tier gating on the rubric editor. Read the newer file.
+
 **Date:** 2026-06-16
-**Status:** Approved design → pending spec review
+**Status:** Superseded 2026-06-25
 **Author:** Tyler + Claude
 
 ---
