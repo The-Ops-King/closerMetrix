@@ -14,6 +14,7 @@
  */
 
 const prospectService = require('./ProspectService');
+const prospectQueries = require('../db/queries/prospects');
 const matchingService = require('./MatchingService');
 const callQueries = require('../db/queries/calls');
 const clientQueries = require('../db/queries/clients');
@@ -527,6 +528,166 @@ class PaymentService {
       remaining_cash: newCash,
       outcome: call.call_outcome || 'Closed - Won',
     };
+  }
+
+  /**
+   * RECONCILIATION — replay payments that previously failed to match a call.
+   *
+   * Root cause this fixes: the payment webhook frequently fires minutes BEFORE
+   * the call's matchable ('Show') record exists (the transcript creates it after
+   * the call). The payment logs 'payment_no_match', advances prospect totals, and
+   * is never retried — so the close never gets marked. This replays those
+   * unmatched payments once a matching call exists.
+   *
+   * Idempotency: each successful replay writes a prospect-level
+   * 'payment_reconciled' audit row keyed by amount|date|product. Re-runs skip
+   * keys already reconciled. AuditLog is append-only, so this is our marker.
+   *
+   * Safety: if the matched call is ALREADY 'Closed - Won', we mark the payment
+   * reconciled but make NO monetary change (the close is already recorded — e.g.
+   * via a manual/CSV backfill). This prevents double-counting cash_collected.
+   *
+   * Prospect totals: at 'payment_no_match' time cash + payment_count were already
+   * advanced; only total_revenue_generated was not. So on a first-payment close we
+   * bump prospect revenue ONLY (never re-add cash/count).
+   *
+   * @param {string} clientId
+   * @param {string} prospectEmail
+   * @param {string|null} prospectName
+   * @param {Object} [options] — { dryRun } — when true, computes what would change
+   *        but performs no writes (used by the backfill script's preview mode).
+   * @returns {Object} { reconciled, alreadyClosed, stillUnmatched, closes: [] }
+   */
+  async reconcileProspectPayments(clientId, prospectEmail, prospectName = null, options = {}) {
+    const { dryRun = false } = options;
+    const results = { reconciled: 0, alreadyClosed: 0, stillUnmatched: 0, closes: [] };
+    if (!prospectEmail || prospectEmail === 'unknown') return results;
+
+    // Look up WITHOUT creating — the prospect already exists (it was created at
+    // 'payment_no_match' time). Never write a prospect during reconciliation
+    // (especially in dryRun). If absent, there's no unmatched-payment trail.
+    const prospect = await prospectQueries.findByEmail(prospectEmail, clientId);
+    if (!prospect) return results;
+
+    const trail = await auditLogger.getTrail('prospect', prospect.prospect_id);
+    const keyOf = (amount, date, product) => `${amount}|${date || ''}|${product || ''}`;
+    const reconciledKeys = new Set();
+    for (const e of trail) {
+      if (e.action !== 'payment_reconciled') continue;
+      try {
+        const m = JSON.parse(e.metadata || '{}');
+        reconciledKeys.add(keyOf(m.amount, m.payment_date, m.product_name));
+      } catch (_) { /* ignore malformed */ }
+    }
+
+    const client = await clientQueries.findById(clientId);
+
+    for (const e of trail) {
+      if (e.action !== 'payment_no_match') continue;
+      let meta;
+      try { meta = JSON.parse(e.metadata || '{}'); } catch (_) { continue; }
+      const p = meta.original_payload || {};
+      const amount = Math.abs(Number(meta.amount != null ? meta.amount : p.payment_amount));
+      if (!Number.isFinite(amount) || amount <= 0) continue;
+
+      const paymentType = this._normalizePaymentType(p.payment_type);
+      if (paymentType === 'refund' || paymentType === 'chargeback') continue; // refunds handled elsewhere
+
+      const key = keyOf(amount, p.payment_date, p.product_name);
+      if (reconciledKeys.has(key)) continue; // already reconciled
+
+      const match = await matchingService.findMatchingCall(
+        clientId, p.prospect_email || prospectEmail, p.prospect_name || prospectName
+      );
+      if (!match || !match.call) { results.stillUnmatched++; continue; }
+      const call = match.call;
+
+      // Already a close → record reconciled, no monetary change (avoid double-count).
+      if (call.call_outcome === 'Closed - Won') {
+        results.alreadyClosed++;
+      } else {
+        results.reconciled++;
+        results.closes.push({ call_id: call.call_id, amount });
+        if (!dryRun) {
+          const paymentDate = dateInTimezone(client?.timezone, p.payment_date);
+          await this._applyReconciledPayment(call, prospect, amount, paymentType, clientId, paymentDate, p.product_name, match.matchTier);
+        }
+      }
+
+      if (dryRun) { reconciledKeys.add(key); continue; }
+
+      // Idempotency marker (prospect-level), regardless of which branch.
+      await auditLogger.log({
+        clientId,
+        entityType: 'prospect',
+        entityId: prospect.prospect_id,
+        action: 'payment_reconciled',
+        triggerSource: 'reconciliation',
+        triggerDetail: match.matchTier,
+        metadata: {
+          amount,
+          payment_date: p.payment_date,
+          product_name: p.product_name,
+          call_id: call.call_id,
+          already_closed: call.call_outcome === 'Closed - Won',
+        },
+      });
+      reconciledKeys.add(key);
+    }
+
+    return results;
+  }
+
+  /**
+   * Applies a previously-unmatched payment to a now-matched, NOT-yet-won call.
+   * Mirrors the first-payment branch of _processPayment but does NOT re-advance
+   * prospect cash/count (already advanced at no-match time) — only bumps revenue.
+   */
+  async _applyReconciledPayment(call, prospect, amount, paymentType, clientId, paymentDate, productName, matchTier) {
+    const oldCash = call.cash_collected || 0;
+    const isFirstPayment = oldCash === 0;
+    const currentOutcome = call.call_outcome || call.attendance;
+
+    const callUpdates = { cash_collected: oldCash + amount };
+    if (isFirstPayment) {
+      callUpdates.initial_cash_collected = amount;
+      callUpdates.revenue_generated = amount;
+      callUpdates.date_closed = paymentDate;
+      callUpdates.payment_plan = this._mapPaymentTypeToPaymentPlan(paymentType);
+      if (productName) callUpdates.product_purchased = productName;
+      callUpdates.call_outcome = 'Closed - Won';
+      callUpdates.processing_status = 'complete';
+    } else if (productName) {
+      callUpdates.product_purchased = productName;
+    }
+
+    if (callUpdates.call_outcome === 'Closed - Won') {
+      const transitioned = await callStateManager.transitionState(
+        call.call_id, clientId, 'Closed - Won', 'payment_received', callUpdates
+      );
+      if (!transitioned) {
+        await callQueries.update(call.call_id, clientId, callUpdates);
+      }
+      // Bump prospect lifetime contract value (cash/count already counted).
+      if (callUpdates.revenue_generated > 0) {
+        await prospectService.bumpRevenue(prospect, callUpdates.revenue_generated, clientId);
+      }
+    } else {
+      await callQueries.update(call.call_id, clientId, callUpdates);
+    }
+
+    await auditLogger.log({
+      clientId,
+      entityType: 'call',
+      entityId: call.call_id,
+      action: 'payment_reconciled',
+      fieldChanged: 'call_outcome',
+      oldValue: currentOutcome,
+      newValue: callUpdates.call_outcome || currentOutcome,
+      triggerSource: 'reconciliation',
+      triggerDetail: matchTier,
+      metadata: { amount, is_first_payment: isFirstPayment, reconciled: true },
+    });
   }
 
   /**

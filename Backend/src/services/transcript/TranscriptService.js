@@ -759,6 +759,33 @@ class TranscriptService {
       }
     }
 
+    // RECONCILE: a payment may have arrived BEFORE this call became matchable
+    // (the payment webhook commonly fires minutes before the transcript creates
+    // the 'Show' record). Now that the call exists and is a Show, replay any
+    // payments that previously logged 'payment_no_match' for this prospect.
+    // Runs AFTER AI so a real close (payment) wins over the AI-inferred outcome.
+    // Wrapped — reconciliation must never break transcript processing.
+    if (evaluation.isShow) {
+      const reconcileEmail = additionalUpdates.prospect_email || callRecord.prospect_email;
+      if (reconcileEmail && reconcileEmail !== 'unknown') {
+        try {
+          const paymentService = require('../PaymentService');
+          const rec = await paymentService.reconcileProspectPayments(
+            clientId, reconcileEmail, additionalUpdates.prospect_name || callRecord.prospect_name
+          );
+          if (rec && rec.reconciled > 0) {
+            logger.info('Reconciled prior unmatched payments after transcript', {
+              callId: callRecord.call_id, clientId, reconciled: rec.reconciled,
+            });
+          }
+        } catch (error) {
+          logger.error('Payment reconciliation after transcript failed (non-fatal)', {
+            callId: callRecord.call_id, clientId, error: error.message,
+          });
+        }
+      }
+    }
+
     return {
       action,
       callRecord: { ...callRecord, attendance: newState, ...additionalUpdates },

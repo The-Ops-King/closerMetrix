@@ -161,6 +161,22 @@ class ProspectService {
   }
 
   /**
+   * Bumps a prospect's lifetime contract value by `amount`, leaving cash and
+   * payment_count untouched. Used by payment reconciliation: at 'payment_no_match'
+   * time cash + count were already advanced, but total_revenue_generated was not,
+   * so when the deal is later linked to a call we add only the contract value.
+   */
+  async bumpRevenue(prospect, amount, clientId) {
+    if (!amount || amount <= 0) return prospect;
+    const updates = {
+      total_revenue_generated: (prospect.total_revenue_generated || 0) + amount,
+      deal_status: 'closed_won',
+    };
+    await prospectQueries.update(prospect.prospect_id, clientId, updates);
+    return { ...prospect, ...updates };
+  }
+
+  /**
    * Directly updates a prospect's deal_status.
    * Used when PaymentService needs to set 'refunded' independently of updateWithPayment.
    */

@@ -167,6 +167,21 @@ function extractLiteralEqualities(sql) {
 }
 
 /**
+ * Extracts normalized equality patterns: LOWER(TRIM(field)) = LOWER(TRIM(@param)).
+ * Used for case/whitespace-insensitive matching on email and name tiers.
+ * Returns array of { field, param }.
+ */
+function extractNormalizedEqualities(sql) {
+  const results = [];
+  const regex = /LOWER\(TRIM\((?:\w+\.)?(\w+)\)\)\s*=\s*LOWER\(TRIM\(@(\w+)\)\)/gi;
+  let match;
+  while ((match = regex.exec(sql)) !== null) {
+    results.push({ field: match[1], param: match[2] });
+  }
+  return results;
+}
+
+/**
  * Extracts standalone literal IN clauses from SQL WHERE clause.
  * Matches patterns like: field IN ('a', 'b', 'c') that are NOT inside IS NULL OR patterns.
  * Returns array of { field, values: string[] }
@@ -249,6 +264,9 @@ function filterRows(rows, params, sql) {
   // Extract literal IN clauses like: field IN ('a', 'b', 'c') (not inside IS NULL OR)
   const literalInClauses = extractLiteralInClauses(sql);
 
+  // Extract normalized equalities: LOWER(TRIM(field)) = LOWER(TRIM(@param))
+  const normalizedEqualities = extractNormalizedEqualities(sql);
+
   // For JOIN queries, resolve cross-table lookups against seeded data
   const joinLookup = buildJoinLookup(sql, rows);
 
@@ -272,6 +290,13 @@ function filterRows(rows, params, sql) {
     // Check literal IN clause comparisons
     for (const { field, values } of literalInClauses) {
       if (field in row && !values.includes(row[field])) return false;
+    }
+
+    // Check normalized equalities: LOWER(TRIM(field)) = LOWER(TRIM(@param))
+    for (const { field, param } of normalizedEqualities) {
+      if (!(param in params)) continue;
+      const norm = v => (v == null ? '' : String(v).trim().toLowerCase());
+      if (field in row && norm(row[field]) !== norm(params[param])) return false;
     }
 
     for (const [paramName, paramValue] of Object.entries(params)) {

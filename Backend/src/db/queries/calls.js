@@ -176,7 +176,7 @@ module.exports = {
   async findMostRecentShowForProspect(prospectEmail, clientId) {
     const rows = await bq.query(
       `SELECT ${CALL_COLUMNS} FROM ${CALLS_TABLE}
-       WHERE prospect_email = @prospectEmail
+       WHERE LOWER(TRIM(prospect_email)) = LOWER(TRIM(@prospectEmail))
          AND client_id = @clientId
          AND attendance IN ('Show', 'Follow Up', 'Lost', 'Closed - Won', 'Deposit', 'Disqualified', 'Not Pitched')
        ORDER BY appointment_date DESC
