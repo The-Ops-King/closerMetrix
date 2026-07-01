@@ -329,11 +329,35 @@ router.get('/adherence', requireTier('executive'), async (req, res) => {
 
 // ── Call Export (CSV Download — All Tiers) ──────────────────
 
+/**
+ * Serialize row objects to a CSV string. Mirrors the client-side rowsToCsv in
+ * TopBar.jsx so the API output (?format=csv) is identical to the download
+ * button. Headers = keys of the first row (same columns/order as the query).
+ */
+function rowsToCsv(rows) {
+  if (!rows || rows.length === 0) return '';
+  const headers = Object.keys(rows[0]);
+  const esc = (val) => {
+    if (val == null) return '';
+    const str = String(val);
+    return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+  };
+  const lines = [headers.map(esc).join(',')];
+  for (const row of rows) lines.push(headers.map((h) => esc(row[h])).join(','));
+  return lines.join('\n');
+}
+
+/**
+ * GET /api/dashboard/export-calls — same call data as the dashboard download button.
+ *   default            → JSON  { success, data: { rows } }
+ *   ?format=csv        → text/csv attachment (for programmatic / external callers)
+ * Auth: X-Client-Token (clientIsolation) — output is scoped to the token's client.
+ */
 router.get('/export-calls', async (req, res) => {
   try {
     const paramError = validateDashboardParams(req.query);
     if (paramError) return res.status(400).json({ success: false, error: paramError });
-    const { dateStart, dateEnd, closerId } = req.query;
+    const { dateStart, dateEnd, closerId, format } = req.query;
     // Basic tier clients cannot filter by closer
     const effectiveCloserId = req.tier === 'basic' ? null : closerId;
     const result = await getCallExportData(
@@ -341,6 +365,15 @@ router.get('/export-calls', async (req, res) => {
       { dateStart, dateEnd, closerId: effectiveCloserId },
       req.tier
     );
+
+    if (String(format).toLowerCase() === 'csv') {
+      const csv = rowsToCsv(result.rows);
+      const fname = `calls-${dateStart || 'all'}-to-${dateEnd || 'all'}.csv`;
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${fname}"`);
+      return res.send(csv);
+    }
+
     res.json({ success: true, data: result });
   } catch (err) {
     logger.error('Call export endpoint error', { error: err.message, clientId: req.clientId });
