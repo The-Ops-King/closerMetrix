@@ -32,6 +32,17 @@ const { normalizeObjectionType } = require('../../../shared/categoryValues');
 function toDateStr(val, tz) {
   if (!val) return '';
 
+  // DATE columns (e.g. date_closed, follow_up_date) arrive as a date-only
+  // 'YYYY-MM-DD' — a calendar date with NO time or timezone. Return it as-is.
+  // Applying a timezone here treats it as UTC midnight and shifts it a day back
+  // for negative-offset zones (e.g. 2026-06-01 → 2026-05-31), which drops
+  // first-of-month closes out of the selected range. Only TIMESTAMP values
+  // (which carry a time component) should be timezone-converted below.
+  const rawStr = (typeof val === 'object' && val !== null && val.value != null)
+    ? String(val.value)
+    : (val instanceof Date) ? null : String(val);
+  if (rawStr && /^\d{4}-\d{2}-\d{2}$/.test(rawStr.trim())) return rawStr.trim();
+
   // Resolve to a Date object
   let date;
   if (typeof val === 'object' && val !== null && val.value) {
