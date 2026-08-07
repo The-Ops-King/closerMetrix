@@ -6,13 +6,6 @@ import { useDemoModal } from '../hooks/useDemoModal'
 
 const Hero = () => {
   const { openModal } = useDemoModal()
-
-  const scrollToAudit = (e) => {
-    e.preventDefault()
-    const target = document.querySelector('#integrity-audit')
-    if (target) target.scrollIntoView({ behavior: 'smooth' })
-  }
-
   return (
     <section className="hero">
       <div className="hero-content">
@@ -23,7 +16,7 @@ const Hero = () => {
           transition={{ duration: 0.5 }}
         >
           <span className="pulse"></span>
-          Sales Call Intelligence
+          AI-Powered Sales Intelligence
         </motion.div>
 
         <h1>
@@ -33,7 +26,7 @@ const Hero = () => {
             animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
             transition={{ duration: 0.6, delay: 0.1 }}
           >
-            The Sales Call Is
+            Stop Making
           </motion.span>
           <motion.span
             className="hero-title-line gradient-text"
@@ -41,7 +34,7 @@ const Hero = () => {
             animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
             transition={{ duration: 0.6, delay: 0.2 }}
           >
-            The Biggest Blind Spot
+            $100K+ Decisions
           </motion.span>
           <motion.span
             className="hero-title-line"
@@ -49,7 +42,7 @@ const Hero = () => {
             animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
             transition={{ duration: 0.6, delay: 0.3 }}
           >
-            In Your Business
+            Based on Feelings
           </motion.span>
         </h1>
 
@@ -60,7 +53,7 @@ const Hero = () => {
           transition={{ duration: 0.6, delay: 0.4 }}
         >
           <GradualBlurText
-            text="Automatically turn every sales call into CRM updates, manager reports, and business insights — so leadership always knows what's actually happening across the sales team."
+            text="CloserMetrix automatically analyzes your sales calls and delivers actionable insights within 24 hours. No manual input required."
             delay={0.5}
           />
         </motion.p>
@@ -79,7 +72,7 @@ const Hero = () => {
               whileTap={{ scale: 0.98 }}
               style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
             >
-              <span>Book Demo</span>
+              <span>Book a Demo</span>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M5 12h14M12 5l7 7-7 7"/>
               </svg>
@@ -87,14 +80,26 @@ const Hero = () => {
           </StarBorder>
 
           <motion.a
-            href="#integrity-audit"
+            href="#how-it-works"
             className="btn btn-secondary"
-            onClick={scrollToAudit}
             whileHover={{ scale: 1.02, borderColor: 'rgba(255,255,255,0.4)' }}
             whileTap={{ scale: 0.98 }}
           >
-            See Sample Integrity Audit
+            See How It Works
           </motion.a>
+        </motion.div>
+
+        <motion.div
+          className="hero-stats"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.6, delay: 0.8 }}
+        >
+          <Stat number="45" suffix=" min" label="Saved daily per closer" delay={0.9} />
+          <div className="stat-divider" />
+          <Stat number="24" suffix=" hrs" label="To first insights" delay={1.0} />
+          <div className="stat-divider" />
+          <Stat number="100" suffix="%" label="Automatic analysis" delay={1.1} />
         </motion.div>
       </div>
 
@@ -109,5 +114,24 @@ const Hero = () => {
     </section>
   )
 }
+
+const Stat = ({ number, suffix, label, delay = 0 }) => (
+  <motion.div
+    className="stat"
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.5, delay }}
+  >
+    <motion.span
+      className="stat-number"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5, delay: delay + 0.2 }}
+    >
+      {number}{suffix}
+    </motion.span>
+    <span className="stat-label">{label}</span>
+  </motion.div>
+)
 
 export default Hero

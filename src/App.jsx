@@ -4,23 +4,35 @@ import { motion, AnimatePresence } from 'framer-motion'
 import Aurora from './components/Aurora'
 import ShapeBlur from './components/ShapeBlur'
 import Navbar from './components/Navbar'
-import Hero from './components/Hero'
+import LegacyHero from './components/LegacyHero'
 import LogoLoop from './components/LogoLoop'
 import Features from './components/Features'
-import HowItWorks from './components/HowItWorks'
-import Pricing from './components/Pricing'
+import LegacyHowItWorks from './components/LegacyHowItWorks'
+import LegacyPricing from './components/LegacyPricing'
 import ZeroAdmin from './components/ZeroAdmin'
 import RevenueCalculator from './components/RevenueCalculator'
-import CTA from './components/CTA'
+import LegacyCTA from './components/LegacyCTA'
 import Footer from './components/Footer'
 import FAQ from './components/FAQ'
 import DemoModal from './components/DemoModal'
+import TempPage from './TempPage'
 import { DemoModalProvider } from './hooks/useDemoModal'
 
-function HomePage({ logoItems }) {
+const logoItems = [
+  { icon: '📊', text: 'AI-Powered Analytics' },
+  { icon: '🎯', text: 'Close Rate Tracking' },
+  { icon: '📞', text: 'Call Intelligence' },
+  { icon: '⚡', text: 'Real-time Insights' },
+  { icon: '🛡️', text: 'Compliance Monitoring' },
+  { icon: '📈', text: 'Performance Metrics' },
+  { icon: '🤖', text: 'Automated Reports' },
+  { icon: '💡', text: 'Coaching Tips' },
+]
+
+function HomePage() {
   return (
     <>
-      <Hero />
+      <LegacyHero />
 
       {/* Logo Loop / Trust Bar */}
       <section className="logo-loop-section">
@@ -107,8 +119,8 @@ function HomePage({ logoItems }) {
 
       <ZeroAdmin />
       <RevenueCalculator />
-      <HowItWorks />
-      <CTA />
+      <LegacyHowItWorks />
+      <LegacyCTA />
     </>
   )
 }
@@ -146,7 +158,7 @@ function HowItWorksPage() {
           </motion.div>
         </div>
       </section>
-      <Pricing />
+      <LegacyPricing />
     </>
   )
 }
@@ -169,17 +181,6 @@ function App() {
   useEffect(() => {
     setIsLoaded(true)
   }, [])
-
-  const logoItems = [
-    { icon: '📊', text: 'AI-Powered Analytics' },
-    { icon: '🎯', text: 'Close Rate Tracking' },
-    { icon: '📞', text: 'Call Intelligence' },
-    { icon: '⚡', text: 'Real-time Insights' },
-    { icon: '🛡️', text: 'Compliance Monitoring' },
-    { icon: '📈', text: 'Performance Metrics' },
-    { icon: '🤖', text: 'Automated Reports' },
-    { icon: '💡', text: 'Coaching Tips' },
-  ]
 
   return (
     <DemoModalProvider>
@@ -204,9 +205,10 @@ function App() {
               <Navbar />
               <main>
                 <Routes>
-                  <Route path="/" element={<HomePage logoItems={logoItems} />} />
+                  <Route path="/" element={<HomePage />} />
                   <Route path="/how-it-works" element={<HowItWorksPage />} />
                   <Route path="/faq" element={<FAQPage />} />
+                  <Route path="/temp" element={<TempPage />} />
                 </Routes>
               </main>
               <Footer />

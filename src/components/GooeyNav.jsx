@@ -44,13 +44,16 @@ const GooeyNav = ({ items, className = '' }) => {
 
     if (item.isRoute) {
       navigate(item.href)
-    } else if (location.pathname !== '/') {
-      navigate('/' + item.href)
+      return
+    }
+
+    // Anchor links: scroll in-page when the section exists on this route,
+    // otherwise send them to the homepage anchor.
+    const target = document.querySelector(item.href)
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth' })
     } else {
-      const target = document.querySelector(item.href)
-      if (target) {
-        target.scrollIntoView({ behavior: 'smooth' })
-      }
+      navigate('/' + item.href)
     }
   }
 

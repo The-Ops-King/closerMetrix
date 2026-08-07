@@ -19,23 +19,32 @@ const Navbar = () => {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
-  const navItems = [
-    { label: 'Features', href: '#features' },
-    { label: 'How It Works', href: '/how-it-works', isRoute: true },
-    { label: 'FAQ', href: '/faq', isRoute: true },
-  ]
+  const isTemp = location.pathname.startsWith('/temp')
+
+  const navItems = isTemp
+    ? [
+        { label: 'How It Works', href: '#how-it-works' },
+        { label: 'Integrity Audit', href: '#integrity-audit' },
+        { label: 'Pricing', href: '#pricing' },
+      ]
+    : [
+        { label: 'Features', href: '#features' },
+        { label: 'How It Works', href: '/how-it-works', isRoute: true },
+        { label: 'FAQ', href: '/faq', isRoute: true },
+      ]
 
   const handleNavClick = (item) => {
     setIsMobileMenuOpen(false)
     if (item.isRoute) {
       navigate(item.href)
-    } else if (location.pathname !== '/') {
-      navigate('/' + item.href)
+      return
+    }
+
+    const target = document.querySelector(item.href)
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth' })
     } else {
-      const target = document.querySelector(item.href)
-      if (target) {
-        target.scrollIntoView({ behavior: 'smooth' })
-      }
+      navigate('/' + item.href)
     }
   }
 
