@@ -41,7 +41,3 @@ npm-debug.log*
 # Test coverage
 coverage/
 .playwright-mcp/
-
-# Marketing site build output
-/dist/
-/dist-ssr/

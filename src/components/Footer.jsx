@@ -1,12 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 
-const tempProductLinks = [
-  { name: 'How It Works', href: '#how-it-works' },
-  { name: 'Integrity Audit', href: '#integrity-audit' },
-  { name: 'Pricing', href: '#pricing' },
-]
-
 const footerLinks = {
   Product: [
     { name: 'Features', href: '#features' },
@@ -27,22 +21,20 @@ const footerLinks = {
 const Footer = () => {
   const navigate = useNavigate()
   const location = useLocation()
-  const isTemp = location.pathname.startsWith('/temp')
-  const links = isTemp ? { ...footerLinks, Product: tempProductLinks } : footerLinks
 
   const handleLinkClick = (e, link) => {
     e.preventDefault()
     if (link.isRoute) {
       navigate(link.href)
+    } else if (link.href === '#') {
       return
-    }
-    if (link.href === '#') return
-
-    const target = document.querySelector(link.href)
-    if (target) {
-      target.scrollIntoView({ behavior: 'smooth' })
-    } else {
+    } else if (location.pathname !== '/') {
       navigate('/' + link.href)
+    } else {
+      const target = document.querySelector(link.href)
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth' })
+      }
     }
   }
 
@@ -66,11 +58,11 @@ const Footer = () => {
             >
               <img src="/logo-full.png" alt="CloserMetrix" className="logo-img-full" />
             </a>
-            <p>{isTemp ? 'Every sales call, turned into business evidence.' : 'Sales intelligence for high-ticket teams.'}</p>
+            <p>Sales intelligence for high-ticket teams.</p>
           </motion.div>
 
           <div className="footer-links">
-            {Object.entries(links).map(([category, categoryLinks], categoryIndex) => (
+            {Object.entries(footerLinks).map(([category, links], categoryIndex) => (
               <motion.div
                 key={category}
                 className="footer-column"
@@ -80,7 +72,7 @@ const Footer = () => {
                 transition={{ delay: categoryIndex * 0.1 }}
               >
                 <h4>{category}</h4>
-                {categoryLinks.map((link) => (
+                {links.map((link) => (
                   <motion.a
                     key={link.name}
                     href={link.href}
