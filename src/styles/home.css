@@ -16,6 +16,7 @@
 }
 
 /* Nav is fixed — keep anchored headings clear of it. */
+#decisions,
 #what-you-get,
 #objections,
 #compliance,
@@ -222,7 +223,89 @@
   color: var(--text-secondary);
 }
 
-/* ---------- 2 · the gap ---------- */
+/* ---------- 2 · decisions ---------- */
+
+/* Four ruled columns, not four cards. Separation is a vertical hairline
+   between columns and a rule top and bottom — the same ruled-paper device
+   the gap table uses, at a different rhythm so the two do not read as one
+   block running long. */
+.home-decisions {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-top: 1px solid var(--rule-hairline);
+  border-bottom: 1px solid var(--rule-hairline);
+}
+
+.home-decision {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 28px 24px 28px 0;
+}
+
+.home-decision + .home-decision {
+  padding-left: 24px;
+  border-left: 1px solid var(--rule-hairline);
+}
+
+.home-decision-dept {
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.home-decision-blind {
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+.home-decisions-body {
+  margin-top: 40px;
+}
+
+/* The second half of the pull steps back so the statement in front of it
+   lands alone. Secondary, never the banned muted floor. */
+.home-pull-quiet {
+  color: var(--text-secondary);
+}
+
+/* Two columns before one: four one-word labels in a vertical stack read as
+   a nav menu rather than as a set of functions. */
+@media (max-width: 900px) {
+  .home-decisions {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .home-decision:nth-child(odd) {
+    padding-left: 0;
+    border-left: none;
+  }
+
+  .home-decision:nth-child(n + 3) {
+    border-top: 1px solid var(--rule-hairline);
+  }
+}
+
+@media (max-width: 560px) {
+  .home-decisions {
+    grid-template-columns: 1fr;
+  }
+
+  .home-decision {
+    padding: 24px 0;
+  }
+
+  .home-decision + .home-decision {
+    padding-left: 0;
+    border-left: none;
+    border-top: 1px solid var(--rule-hairline);
+  }
+}
+
+/* ---------- 3 · the gap ---------- */
 
 .home-gap-head,
 .home-gap-row {

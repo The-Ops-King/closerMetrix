@@ -18,7 +18,17 @@ const AUDIT_URL = '/preview/'
    knows what the product does. The last node is the deliverable. */
 const flow = ['Call ends', 'We review it', 'CRM updated, team alerted', 'Monthly report']
 
-/* 2 — The Gap. Every row states the old world before the new one.
+/* 2 — Decisions. The four functions that get measured, and what each one is
+   guessing at without the call. No figures here on purpose: every real
+   number on the page lives in Proof. */
+const decisions = [
+  { dept: 'Marketing', blind: 'Guesses which message actually landed' },
+  { dept: 'Revenue', blind: 'Sees the close rate, never the cause' },
+  { dept: 'Finance', blind: 'Hears about the refund once it clears' },
+  { dept: 'Operations', blind: 'Builds for a customer nobody described' },
+]
+
+/* 3 — The Gap. Every row states the old world before the new one.
    Never add a third column: this is not a comparison page. */
 const gap = [
   ['Recordings pile up in a folder', 'Every call reviewed, same day'],
@@ -30,7 +40,7 @@ const gap = [
 ]
 
 /*
- * 3 — Objections. A distribution, not a quote wall. No single call matters;
+ * 4 — Objections. A distribution, not a quote wall. No single call matters;
  * the shape across hundreds is the product. Illustrative percentages,
  * labelled as such in the block.
  */
@@ -46,7 +56,7 @@ const objectionMix = [
   },
 ]
 
-/* 4 — Compliance. No regulator is named anywhere on this page, by design. */
+/* 5 — Compliance. No regulator is named anywhere on this page, by design. */
 const flagChips = [
   'Income claims',
   'Guarantees',
@@ -56,7 +66,7 @@ const flagChips = [
 ]
 
 /*
- * 5 — Proof. Every real figure on the page lives here and nowhere else,
+ * 6 — Proof. Every real figure on the page lives here and nowhere else,
  * with the scope stated: one client, 90 days. Scattered across sections
  * they read as decoration; together they read as a record.
  */
@@ -67,7 +77,7 @@ const proof = [
   { stat: '1 in 10', line: 'calls had a promise the closer should not have made', flag: true },
 ]
 
-/* 5 — CRM. The output nobody expects a review service to produce, so it
+/* 7 — CRM. The output nobody expects a review service to produce, so it
    gets shown as the record itself rather than described. */
 const crmRecord = [
   {
@@ -267,7 +277,39 @@ const HomePage = () => {
         </div>
       </section>
 
-      {/* 2 — The Gap. Ruled table. No body copy: he runs the comparison himself. */}
+      {/* 2 — Decisions. The stakes block. Four ruled columns, so it does not
+          repeat the hero's centered stack above it or the Gap's two-column
+          table below it. Solid headline: the gradient budget is spent. */}
+      <section id="decisions" className="home-section">
+        <div className="container">
+          <motion.h2 className="home-h2 is-lead" {...reveal}>
+            Every important business decision starts in a sales call.
+          </motion.h2>
+
+          <div className="home-decisions">
+            {decisions.map((item, index) => (
+              <motion.div key={item.dept} className="home-decision" {...sequence(index, 0.08)}>
+                <span className="home-decision-dept">{item.dept}</span>
+                <span className="home-decision-blind">{item.blind}</span>
+              </motion.div>
+            ))}
+          </div>
+
+          <motion.p className="home-body home-decisions-body" {...reveal}>
+            Those calls already hold the answer — what buyers asked for, what stopped them, what
+            changed since last month. Almost all of it is thrown out the moment the call ends.
+          </motion.p>
+
+          <motion.p className="home-pull" {...reveal}>
+            Better information creates better decisions.{' '}
+            <span className="home-pull-quiet">
+              CloserMetrix doesn't tell you what to do — it tells you what's actually happening.
+            </span>
+          </motion.p>
+        </div>
+      </section>
+
+      {/* 3 — The Gap. Ruled table. No body copy: he runs the comparison himself. */}
       <section id="what-you-get" className="home-section">
         <div className="container">
           <motion.h2 className="home-h2" {...reveal}>
@@ -303,7 +345,7 @@ const HomePage = () => {
         </div>
       </section>
 
-      {/* 3 — Objections. Everything about what buyers say lives here: the
+      {/* 4 — Objections. Everything about what buyers say lives here: the
           distribution, the counts, and the month-over-month language shift. */}
       <section id="objections" className="home-section home-objections">
         <div className="container">
@@ -366,7 +408,7 @@ const HomePage = () => {
         </div>
       </section>
 
-      {/* 4 — Compliance. Everything about risky promises lives here: the
+      {/* 5 — Compliance. Everything about risky promises lives here: the
           alert, the categories, and the counts. */}
       <section id="compliance" className="home-section home-flags">
         <div className="container home-flags-grid">
@@ -442,7 +484,7 @@ const HomePage = () => {
         </div>
       </section>
 
-      {/* 5 — Proof. One client, 90 days. Every real number on the page. */}
+      {/* 6 — Proof. One client, 90 days. Every real number on the page. */}
       <section className="home-section home-proof-section">
         <div className="container">
           <motion.p className="home-proof-scope" {...reveal}>
@@ -469,7 +511,7 @@ const HomePage = () => {
         </div>
       </section>
 
-      {/* 5 — CRM. Shown as the record itself: nobody expects a review
+      {/* 7 — CRM. Shown as the record itself: nobody expects a review
           service to write back into their pipeline, so describing it
           doesn't land. */}
       <section id="crm" className="home-section home-crm">
@@ -510,7 +552,7 @@ const HomePage = () => {
         </div>
       </section>
 
-      {/* 6 — The Integrity Audit. The monthly report, and why month twelve
+      {/* 8 — The Integrity Audit. The monthly report, and why month twelve
           beats month one. */}
       <section id="integrity-audit" className="home-section home-audit">
         <div className="container">
@@ -544,7 +586,7 @@ const HomePage = () => {
         </div>
       </section>
 
-      {/* 7 — Twenty-four hours. */}
+      {/* 9 — Twenty-four hours. */}
       <section className="home-section home-clock">
         <div className="container">
           <motion.h2 className="home-h2 is-wide" {...reveal}>
@@ -570,7 +612,7 @@ const HomePage = () => {
         </div>
       </section>
 
-      {/* 8 — Fit. One ruled strip, distributed across the full measure. */}
+      {/* 10 — Fit. One ruled strip, distributed across the full measure. */}
       <section className="home-fit">
         <div className="container">
           <motion.div className="home-fit-strip" {...reveal}>
@@ -595,7 +637,7 @@ const HomePage = () => {
         </div>
       </section>
 
-      {/* 9 — Pricing. The cost of missing it comes first, so the number
+      {/* 11 — Pricing. The cost of missing it comes first, so the number
           lands as relief rather than as a charge. */}
       <section className="home-section home-pricing">
         <div className="container">
@@ -675,7 +717,7 @@ const HomePage = () => {
         </div>
       </section>
 
-      {/* 10 — Close */}
+      {/* 12 — Close */}
       <section className="home-section home-close">
         <div className="container">
           <motion.h2 className="home-h2" {...reveal}>
