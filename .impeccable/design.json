@@ -1,0 +1,277 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-08T06:00:00Z",
+  "title": "Design System: CloserMetrix",
+  "extensions": {
+    "colorMeta": {
+      "aurora-green": {
+        "role": "primary",
+        "displayName": "Aurora Green",
+        "canonical": "#00ff88",
+        "tonalRamp": ["#002316", "#00432b", "#006642", "#008a59", "#00b070", "#00d488", "#00ff88", "#9dffcf"]
+      },
+      "aurora-green-deep": {
+        "role": "primary",
+        "displayName": "Aurora Green Deep",
+        "canonical": "#00cc6a",
+        "tonalRamp": ["#001c11", "#003622", "#005134", "#006e46", "#008c59", "#00aa6c", "#00cc6a", "#7bebb7"]
+      },
+      "aurora-cyan": {
+        "role": "secondary",
+        "displayName": "Aurora Cyan",
+        "canonical": "#00d4ff",
+        "tonalRamp": ["#001d24", "#003745", "#005468", "#00738c", "#0093b2", "#00b4d9", "#00d4ff", "#96e9ff"]
+      },
+      "aurora-blue": {
+        "role": "secondary",
+        "displayName": "Aurora Blue",
+        "canonical": "#0066ff",
+        "tonalRamp": ["#000f28", "#001c4a", "#002b70", "#003b98", "#004cc0", "#005ce8", "#0066ff", "#8fb8ff"]
+      },
+      "aurora-purple": {
+        "role": "tertiary",
+        "displayName": "Aurora Purple",
+        "canonical": "#6366f1",
+        "tonalRamp": ["#101038", "#1b1c5c", "#282a80", "#3739a4", "#484ac6", "#5a5ce2", "#6366f1", "#b4b5f8"]
+      },
+      "night-void": {
+        "role": "neutral",
+        "displayName": "Night Void",
+        "canonical": "#020617",
+        "tonalRamp": ["#020617", "#0a0f24", "#131933", "#1d2443", "#283053", "#343d64", "#414b76", "#5b6690"]
+      },
+      "night-deep": {
+        "role": "neutral",
+        "displayName": "Night Deep",
+        "canonical": "#0f172a",
+        "tonalRamp": ["#050810", "#0f172a", "#1a2440", "#263156", "#333f6c", "#414d82", "#505c98", "#7b87b8"]
+      },
+      "night-mid": {
+        "role": "neutral",
+        "displayName": "Night Mid",
+        "canonical": "#1e293b",
+        "tonalRamp": ["#0a0e15", "#141b27", "#1e293b", "#2c3a50", "#3b4b66", "#4b5d7c", "#5c6f93", "#8b9ab5"]
+      },
+      "night-light": {
+        "role": "neutral",
+        "displayName": "Night Light",
+        "canonical": "#334155",
+        "tonalRamp": ["#101620", "#1a2231", "#262f42", "#334155", "#425369", "#52657d", "#637792", "#93a3b8"]
+      },
+      "text-primary": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "canonical": "#f1f5f9",
+        "tonalRamp": ["#1b1f24", "#333a42", "#4d5661", "#68737f", "#8a949f", "#adb6bf", "#d2d9e0", "#f1f5f9"]
+      },
+      "text-secondary": {
+        "role": "neutral",
+        "displayName": "Ash",
+        "canonical": "#cbd5e1",
+        "tonalRamp": ["#1b2029", "#2b3340", "#3e4859", "#546074", "#6b7a90", "#8b9ab0", "#adbccf", "#cbd5e1"]
+      },
+      "text-muted": {
+        "role": "neutral",
+        "displayName": "Slate Dim",
+        "canonical": "#64748b",
+        "tonalRamp": ["#11151b", "#1e242e", "#2c3542", "#3c4757", "#4d5a6d", "#5e6c81", "#64748b", "#9aa6b6"]
+      },
+      "flag-red": {
+        "role": "tertiary",
+        "displayName": "Flag Red",
+        "canonical": "#ef4444",
+        "tonalRamp": ["#2b0b0b", "#4a1313", "#6c1c1c", "#912626", "#b83030", "#d93a3a", "#ef4444", "#f89e9e"]
+      },
+      "flag-red-light": {
+        "role": "tertiary",
+        "displayName": "Flag Red Light",
+        "canonical": "#f87171",
+        "tonalRamp": ["#3a1414", "#5c1f1f", "#802c2c", "#a53a3a", "#c94e4e", "#e46161", "#f87171", "#fbb4b4"]
+      },
+      "slack-aubergine": {
+        "role": "neutral",
+        "displayName": "Slack Aubergine",
+        "canonical": "#3f0e40",
+        "tonalRamp": ["#1a061b", "#280a29", "#340c35", "#3f0e40", "#571355", "#70206e", "#8c3a89", "#c084bd"]
+      },
+      "slack-rail-dim": {
+        "role": "neutral",
+        "displayName": "Slack Rail Dim",
+        "canonical": "#6b3f6c",
+        "tonalRamp": ["#231425", "#341e35", "#472948", "#5a345a", "#6b3f6c", "#84557f", "#a0779a", "#c9aec4"]
+      },
+      "rule-hairline": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "rgba(255, 255, 255, 0.08)",
+        "tonalRamp": ["rgba(255,255,255,0.02)", "rgba(255,255,255,0.04)", "rgba(255,255,255,0.06)", "rgba(255,255,255,0.08)", "rgba(255,255,255,0.12)", "rgba(255,255,255,0.16)", "rgba(255,255,255,0.24)", "rgba(255,255,255,0.32)"]
+      },
+      "surface-wash": {
+        "role": "neutral",
+        "displayName": "Surface Wash",
+        "canonical": "rgba(255, 255, 255, 0.03)",
+        "tonalRamp": ["rgba(255,255,255,0.01)", "rgba(255,255,255,0.02)", "rgba(255,255,255,0.03)", "rgba(255,255,255,0.05)", "rgba(255,255,255,0.07)", "rgba(255,255,255,0.10)", "rgba(255,255,255,0.14)", "rgba(255,255,255,0.20)"]
+      },
+      "signal-wash": {
+        "role": "primary",
+        "displayName": "Signal Wash",
+        "canonical": "rgba(0, 255, 136, 0.10)",
+        "tonalRamp": ["rgba(0,255,136,0.03)", "rgba(0,255,136,0.06)", "rgba(0,255,136,0.10)", "rgba(0,255,136,0.16)", "rgba(0,255,136,0.24)", "rgba(0,255,136,0.36)", "rgba(0,255,136,0.55)", "rgba(0,255,136,0.80)"]
+      },
+      "shadow-ink": {
+        "role": "neutral",
+        "displayName": "Shadow Ink",
+        "canonical": "rgba(0, 0, 0, 0.6)",
+        "tonalRamp": ["rgba(0,0,0,0.10)", "rgba(0,0,0,0.20)", "rgba(0,0,0,0.30)", "rgba(0,0,0,0.40)", "rgba(0,0,0,0.50)", "rgba(0,0,0,0.60)", "rgba(0,0,0,0.75)", "rgba(0,0,0,0.90)"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "The H1. One per page." },
+      "headline": { "displayName": "Headline", "purpose": "Block H2s. Always states, never asks." },
+      "headline-compact": { "displayName": "Headline Compact", "purpose": "A block headline in a narrow column beside an artifact. Headline at full size ran to six lines there and swamped the artifact it described." },
+      "title": { "displayName": "Title", "purpose": "Sub-structure inside a block." },
+      "body": { "displayName": "Body", "purpose": "Two sentences maximum per block, measure capped at 65 characters." },
+      "figure-hero": { "displayName": "Figure Hero", "purpose": "Exactly one per page — the number the whole page argues toward. Must be larger than the H1 or the reveal it exists for does not fire." },
+      "figure-sum": { "displayName": "Figure Sum", "purpose": "A total that adds up the Data figures above it. One step larger than its parts, always smaller than Figure Hero, so the page keeps exactly one biggest number." },
+      "data": { "displayName": "Data", "purpose": "Extracted figures — audit percentages, proof counts, the price. Set at display weight because a number is a headline here." },
+      "control": { "displayName": "Control", "purpose": "Button labels and input text. The one step between Label and Body, because a control is neither a caption nor prose." },
+      "label": { "displayName": "Label", "purpose": "Eyebrows, badges, chips, table headers, flow-strip nodes." },
+      "annotation": { "displayName": "Annotation", "purpose": "Rare handwritten aside in Caveat. Never load-bearing." }
+    },
+    "shadows": [
+      { "name": "artifact-lift", "value": "0 25px 80px rgba(0, 0, 0, 0.6)", "purpose": "Mockups depicting a real external object (Slack message, sample audit). The only content elevation permitted." },
+      { "name": "signal-glow", "value": "0 0 12px rgba(0, 255, 136, 0.4)", "purpose": "Focus and active states on green interactive elements." },
+      { "name": "flag-glow", "value": "0 0 8px rgba(239, 68, 68, 0.5)", "purpose": "Risk-flag indicators only." },
+      { "name": "ambient-field", "value": "inset 0 0 60px rgba(0, 255, 136, 0.03)", "purpose": "Atmospheric property of the background night field, never of a content block." }
+    ],
+    "motion": [
+      { "name": "ease-standard", "value": "0.3s ease", "purpose": "Default state transition on interactive elements." },
+      { "name": "ease-quick", "value": "0.2s ease", "purpose": "Input focus and small color shifts." },
+      { "name": "ease-atmospheric", "value": "0.4s ease", "purpose": "Background field, blur, and reveal transitions." }
+    ],
+    "breakpoints": [
+      { "name": "xs", "value": "480px" },
+      { "name": "sm", "value": "768px" },
+      { "name": "md", "value": "900px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "container", "value": "1200px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single most important action in view. Highest-contrast pairing in the system.",
+      "html": "<button class=\"ds-btn-primary\">Book a demo</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: linear-gradient(135deg, #00ff88 0%, #00d4ff 50%, #0066ff 100%); color: #020617; font-family: Inter, -apple-system, sans-serif; font-size: 1rem; font-weight: 600; padding: 14px 28px; border: none; border-radius: 12px; cursor: pointer; transition: all 0.3s ease; } .ds-btn-primary:hover { box-shadow: 0 0 12px rgba(0, 255, 136, 0.4); transform: translateY(-1px); } .ds-btn-primary:focus-visible { outline: 2px solid #00ff88; outline-offset: 3px; }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Secondary CTA, e.g. 'See a sample Integrity Audit'. Stroke and label both go green on hover.",
+      "html": "<button class=\"ds-btn-outline\">See a sample Integrity Audit</button>",
+      "css": ".ds-btn-outline { display: inline-flex; align-items: center; justify-content: center; gap: 8px; background: transparent; color: #f1f5f9; font-family: Inter, -apple-system, sans-serif; font-size: 1rem; font-weight: 600; padding: 14px 28px; border: 2px solid rgba(255, 255, 255, 0.2); border-radius: 12px; cursor: pointer; transition: all 0.3s ease; } .ds-btn-outline:hover { border-color: #00ff88; color: #00ff88; } .ds-btn-outline:focus-visible { outline: 2px solid #00ff88; outline-offset: 3px; }"
+    },
+    {
+      "name": "Badge",
+      "kind": "chip",
+      "refersTo": "badge",
+      "description": "Eyebrow or delivery-promise marker beside a CTA. Green because it states a commitment the system keeps.",
+      "html": "<span class=\"ds-badge\">First audit inside 24 hours</span>",
+      "css": ".ds-badge { display: inline-block; background: rgba(0, 255, 136, 0.1); border: 1px solid rgba(0, 255, 136, 0.3); color: #00ff88; font-family: Inter, -apple-system, sans-serif; font-size: 0.85rem; font-weight: 600; letter-spacing: 0.02em; padding: 8px 20px; border-radius: 50px; }"
+    },
+    {
+      "name": "Chip",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Scannable set member — flag categories, integration names. Replaces bulleted lists that were four lines of reading.",
+      "html": "<span class=\"ds-chip\">Income claims</span>",
+      "css": ".ds-chip { display: inline-block; background: rgba(255, 255, 255, 0.04); color: #94a3b8; font-family: Inter, -apple-system, sans-serif; font-size: 0.85rem; font-weight: 500; padding: 6px 14px; border-radius: 50px; transition: color 0.2s ease, background 0.2s ease; } .ds-chip:hover { background: rgba(255, 255, 255, 0.08); color: #f1f5f9; }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Demo-modal field. Stroke goes green with a signal glow on focus.",
+      "html": "<input class=\"ds-input\" type=\"email\" placeholder=\"you@company.com\" />",
+      "css": ".ds-input { width: 100%; background: #0f172a; color: #f1f5f9; font-family: Inter, -apple-system, sans-serif; font-size: 1rem; padding: 14px 16px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; transition: border-color 0.2s, box-shadow 0.2s; } .ds-input::placeholder { color: #64748b; } .ds-input:focus { outline: none; border-color: #00ff88; box-shadow: 0 0 12px rgba(0, 255, 136, 0.4); } .ds-input[aria-invalid=\"true\"] { border-color: #ef4444; box-shadow: 0 0 8px rgba(239, 68, 68, 0.5); }"
+    },
+    {
+      "name": "Navigation",
+      "kind": "nav",
+      "refersTo": "nav-link",
+      "description": "Transparent at rest, night-void glass with a hairline border once scrolled. Only the demo CTA is a button.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-link\" href=\"#\">What You Get</a><a class=\"ds-nav-link\" href=\"#\">Pricing</a><a class=\"ds-nav-cta\" href=\"#\">Book a Demo</a></nav>",
+      "css": ".ds-nav { display: flex; align-items: center; gap: 40px; background: rgba(2, 6, 23, 0.9); backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding: 16px 24px; font-family: Inter, -apple-system, sans-serif; } .ds-nav-link { color: #94a3b8; text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: color 0.3s ease; } .ds-nav-link:hover { color: #f1f5f9; } .ds-nav-cta { margin-left: auto; background: #00ff88; color: #020617; text-decoration: none; font-size: 0.9rem; font-weight: 600; padding: 10px 20px; border-radius: 12px; transition: all 0.3s ease; } .ds-nav-cta:hover { background: #00cc6a; }"
+    },
+    {
+      "name": "Flow Strip",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Signature. Horizontal sequence of label nodes joined by arrows, set directly on the night field with no container. Exists so a visitor who reads nothing else still knows what the product does.",
+      "html": "<div class=\"ds-flow\"><span class=\"ds-flow-node\">Call ends</span><span class=\"ds-flow-arrow\">&rarr;</span><span class=\"ds-flow-node\">We read it</span><span class=\"ds-flow-arrow\">&rarr;</span><span class=\"ds-flow-node\">CRM updated, team alerted</span><span class=\"ds-flow-arrow\">&rarr;</span><span class=\"ds-flow-node is-terminal\">Monthly report</span></div>",
+      "css": ".ds-flow { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; font-family: Inter, -apple-system, sans-serif; } .ds-flow-node { color: #94a3b8; font-size: 0.85rem; font-weight: 600; letter-spacing: 0.02em; } .ds-flow-node.is-terminal { color: #00ff88; } .ds-flow-arrow { color: #334155; font-size: 0.85rem; }"
+    },
+    {
+      "name": "Big-Number Row",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Signature. Extracted figures set at display weight with label captions, on a shared baseline, no dividers. One member may be a non-numeric finding in the same weight — the asymmetry is the argument.",
+      "html": "<div class=\"ds-numbers\"><div class=\"ds-number\"><span class=\"ds-number-value\">1,020</span><span class=\"ds-number-caption\">calls read</span></div><div class=\"ds-number\"><span class=\"ds-number-value\">1,322</span><span class=\"ds-number-caption\">objections captured in the buyer's own words</span></div><div class=\"ds-number\"><span class=\"ds-number-value\">425</span><span class=\"ds-number-caption\">risky promises flagged</span></div></div>",
+      "css": ".ds-numbers { display: flex; flex-wrap: wrap; gap: 48px; font-family: Inter, -apple-system, sans-serif; } .ds-number { display: flex; flex-direction: column; gap: 8px; max-width: 220px; } .ds-number-value { color: #00ff88; font-size: clamp(2.5rem, 6vw, 4rem); font-weight: 700; line-height: 1; letter-spacing: -0.02em; } .ds-number-caption { color: #94a3b8; font-size: 0.85rem; font-weight: 500; line-height: 1.4; }"
+    },
+    {
+      "name": "Artifact Surface",
+      "kind": "card",
+      "refersTo": null,
+      "description": "The only bounded surface in the system. Depicts an object that exists elsewhere — a Slack alert, a CRM record, an audit page — and takes real elevation so it reads as pasted onto the page rather than composed into it.",
+      "html": "<div class=\"ds-artifact\"><div class=\"ds-artifact-meta\">CloserMetrix &middot; APP &middot; 2:47 PM</div><div class=\"ds-artifact-flag\">Flag on today's call &mdash; Discovery Call, 34:12</div><div class=\"ds-artifact-body\">Rep said: “Honestly most of our guys make it back in the first sixty days.”</div></div>",
+      "css": ".ds-artifact { background: #1e293b; border-radius: 16px; padding: 24px; box-shadow: 0 25px 80px rgba(0, 0, 0, 0.6); font-family: Inter, -apple-system, sans-serif; max-width: 480px; } .ds-artifact-meta { color: #64748b; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.02em; margin-bottom: 12px; } .ds-artifact-flag { color: #ef4444; font-size: 0.9rem; font-weight: 600; margin-bottom: 12px; } .ds-artifact-body { color: #f1f5f9; font-size: 1rem; line-height: 1.6; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Night Watch",
+    "overview": "Something is awake while the team sleeps. The field is a deep, unlit night sky and almost all of it stays empty — the page is not decorated, it is watched. Aurora light does not wash over the composition; it appears in the specific places where the system found something, the way a monitoring surface only lights up when there is something to report. The atmosphere is calm and slightly cold, never anxious, because the product's promise is that the watching already happened and nothing was missed.\n\nStructurally the system is flat and ruled. Content sits directly on the night field, separated by hairline rules and shifts in background tone rather than by cards, borders, and shadows. This is deliberate: the page has to carry six different block shapes in ten blocks — a comparison table, a split quote composition, a Slack mockup, a big-number row, a timeline, a checklist — and card containers would flatten all six into the same rectangle. The absence of chrome is what lets the shapes be legible as shapes.\n\nThe confirmed anti-reference is the site's own previous build: a gradient headline over two paragraphs of grey body copy, centered, ten times in a row. Nothing varied, so the eye never landed and the page read as an essay with headers. Icons were everywhere and read as decoration. Both are now prohibited. Anywhere the old page would have reached for an icon, this system reaches for the product's actual output.",
+    "keyCharacteristics": [
+      "Near-empty night field; content is sparse and the emptiness is load-bearing",
+      "Aurora accent as signal, never as surface treatment",
+      "Flat and ruled — no cards, no content shadows",
+      "Layout shape varies block to block; no two adjacent blocks share a composition",
+      "Type does the hierarchy work; there are no icons anywhere",
+      "Motion is atmospheric and slow, never announcing itself"
+    ],
+    "rules": [
+      { "name": "The Finding Rule", "body": "Aurora Green only ever marks something the system found or something the visitor should do. A number the product extracted, a flag, a quoted buyer phrase, the primary CTA. It never becomes a border, a background wash, a decorative rule, or an accent on copy that makes no claim. Audit test: point at any green pixel and name the finding it represents. If you cannot, remove it.", "section": "colors" },
+      { "name": "The Four Gradient Rule", "body": "The aurora gradient appears on at most four moments per page — the hero, the depth block, the 24-hour promise, and the price reveal. When every headline is gradient, none of them are emphasized.", "section": "colors" },
+      { "name": "The Muted Floor Rule", "body": "Slate Dim (#64748b) is banned as a text color at any size — it measures 3.9:1 against Night Void. Body copy uses Paper; secondary prose, captions, and legal small type bottom out at Ash (#94a3b8, 6.9:1). Grey-on-near-black was a real legibility defect on the previous build, not a style.", "section": "colors" },
+      { "name": "The Two Sentence Rule", "body": "No block carries more than two sentences of body copy. A block that needs a third needed a picture instead. This is a hard structural constraint, not a preference.", "section": "typography" },
+      { "name": "The Display Line", "body": "Archivo stops at the figure. Headings (h1–h6), Data and Figure Hero get it; body, labels, chips, nav, and every UI control stay Inter. A page where both faces appear at the same size has lost the distinction that justifies the second file.", "section": "typography" },
+      { "name": "The One Figure Rule", "body": "Exactly one Figure Hero per page — the number the whole page argues toward, larger than the H1. On the homepage that is $3. A second one means neither is the point.", "section": "typography" },
+      { "name": "The Number Is A Headline Rule", "body": "Extracted figures are set in Data, not in body copy with bold. '1,020 calls read' is a headline that happens to be numeric.", "section": "typography" },
+      { "name": "The Emptiness Rule", "body": "The hero carries no dashboard image and no illustration. Space around a claim is what makes the claim legible; do not fill a quiet region because it looks unfinished.", "section": "layout" },
+      { "name": "The No Card Rule", "body": "Content blocks have no container. If a block feels like it needs a card to hold together, its layout is wrong — change the shape, don't add a box.", "section": "elevation" },
+      { "name": "The Flat At Rest Rule", "body": "Nothing glows until it is hovered, focused, or is itself a flag. Glow is a response, not a finish.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do make every green pixel name a finding or an action. Aurora Green stays under ~10% of any viewport.",
+      "Do cap body copy at two sentences per block and measure at ~65 characters.",
+      "Do vary the composition every block; six distinct shapes across a ten-block page, no two adjacent alike.",
+      "Do separate with hairline rules (1px, Night Light) and tonal steps, not with cards.",
+      "Do set extracted figures in Data type at display weight — a number is a headline here.",
+      "Do give artifact mockups real elevation so they read as objects lifted from somewhere real.",
+      "Do honor prefers-reduced-motion; the aurora field, blur, and scroll effects must all have a still state."
+    ],
+    "donts": [
+      "Don't use icons as decoration, as section ornament, or as a stand-in for evidence. The one carve-out is a mark that performs a function no type can: the pricing checklist's check, which confirms a delivered output rather than labelling a topic. If a glyph could be deleted without losing information, it was decoration.",
+      "Don't put a gradient on more than four moments per page.",
+      "Don't set any text in Slate Dim (#64748b) — it fails contrast at every size on the night field.",
+      "Don't wrap content in cards, and don't add a shadow to anything that isn't an artifact, a focus state, or a flag.",
+      "Don't center-stack more than two consecutive blocks.",
+      "Don't hardcode a hex. Every value in this file exists as a CSS custom property in src/styles/index.css.",
+      "Don't build a competitor comparison column, table, or cost-versus-X block — the position is different, not better.",
+      "Don't name a regulator, and don't invent a finding, quote, testimonial, logo, or metric inside a visual. This product sells evidence."
+    ]
+  }
+}

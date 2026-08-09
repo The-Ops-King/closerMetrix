@@ -6,13 +6,18 @@ const GooeyNav = ({ items, className = '' }) => {
   const navigate = useNavigate()
   const location = useLocation()
 
+  /*
+   * Falling back to index 0 on the homepage made the first item look
+   * permanently selected — a system-status indicator that was never true.
+   * No match now means no active item; scroll position supplies the rest.
+   */
   const getActiveIndex = () => {
     const idx = items.findIndex((item) =>
       item.isRoute
         ? location.pathname === item.href
         : location.pathname === '/' && location.hash === item.href
     )
-    return idx >= 0 ? idx : location.pathname === '/' ? 0 : -1
+    return idx
   }
 
   const [activeIndex, setActiveIndex] = useState(getActiveIndex)
@@ -24,6 +29,35 @@ const GooeyNav = ({ items, className = '' }) => {
   useEffect(() => {
     setActiveIndex(getActiveIndex())
   }, [location.pathname, location.hash])
+
+  /* On the homepage the anchors are sections, so the indicator tracks what
+     is actually on screen rather than what was last clicked. */
+  useEffect(() => {
+    if (location.pathname !== '/') return
+
+    const anchors = items
+      .map((item, index) => ({ index, el: item.isRoute ? null : document.querySelector(item.href) }))
+      .filter((entry) => entry.el)
+
+    if (!anchors.length) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter((entry) => entry.isIntersecting)
+        if (!visible.length) {
+          setActiveIndex(-1)
+          return
+        }
+        const top = visible.reduce((a, b) => (a.boundingClientRect.top < b.boundingClientRect.top ? a : b))
+        const match = anchors.find((entry) => entry.el === top.target)
+        setActiveIndex(match ? match.index : -1)
+      },
+      { rootMargin: '-40% 0px -50% 0px' }
+    )
+
+    anchors.forEach((entry) => observer.observe(entry.el))
+    return () => observer.disconnect()
+  }, [location.pathname, items])
 
   useEffect(() => {
     const currentIndex = hoverIndex !== null ? hoverIndex : activeIndex
@@ -128,10 +162,14 @@ const GooeyNav = ({ items, className = '' }) => {
           onMouseEnter={() => setHoverIndex(index)}
           onMouseLeave={() => setHoverIndex(null)}
           whileTap={{ scale: 0.95 }}
+          aria-current={activeIndex === index ? 'true' : undefined}
           style={{
             position: 'relative',
             zIndex: 1,
-            padding: '10px 14px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            minHeight: '44px',
+            padding: '10px 16px',
             fontSize: '0.85rem',
             fontWeight: 500,
             color: activeIndex === index ? 'var(--aurora-green)' : 'var(--text-secondary)',
@@ -145,7 +183,7 @@ const GooeyNav = ({ items, className = '' }) => {
       ))}
 
       {/* SVG filter for gooey effect */}
-      <svg style={{ position: 'absolute', width: 0, height: 0 }}>
+      <svg aria-hidden="true" focusable="false" style={{ position: 'absolute', width: 0, height: 0 }}>
         <defs>
           <filter id="gooey">
             <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blur" />

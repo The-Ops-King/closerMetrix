@@ -1,0 +1,113 @@
+/* Legal and data-handling pages. Read mode, not Persuade.
+   One column at reading measure, no motion, no accent decoration.
+   The only green on these pages is the focus ring and a link. */
+
+.legal {
+  position: relative;
+  z-index: 1;
+  padding: 160px 0 128px;
+}
+
+.legal-inner {
+  max-width: 720px;
+}
+
+.legal-header {
+  padding-bottom: 40px;
+  margin-bottom: 48px;
+  border-bottom: 1px solid var(--rule-hairline);
+}
+
+.legal h1 {
+  font-size: clamp(2.5rem, 5vw, 4rem);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  margin-bottom: 24px;
+}
+
+.legal-standfirst {
+  max-width: 56ch;
+  font-size: clamp(1.25rem, 2vw, 1.5rem);
+  line-height: 1.45;
+  color: var(--text-primary);
+  margin-bottom: 24px;
+}
+
+.legal-updated {
+  max-width: 56ch;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.legal-section {
+  margin-bottom: 48px;
+}
+
+.legal-section h2 {
+  font-size: clamp(1.25rem, 2vw, 1.5rem);
+  line-height: 1.2;
+  margin-bottom: 16px;
+}
+
+.legal-section p {
+  max-width: 56ch;
+  font-size: 1.05rem;
+  line-height: 1.7;
+  color: var(--text-primary);
+}
+
+.legal-section p + p {
+  margin-top: 16px;
+}
+
+/* An unfinished clause is stated as unfinished. It is never styled to look
+   like a published commitment. */
+.legal-todo {
+  padding: 16px 20px;
+  border-left: 1px solid var(--flag-red-light);
+  background: var(--surface-wash);
+  color: var(--text-secondary);
+}
+
+.legal-todo strong {
+  color: var(--flag-red-light);
+  font-weight: 600;
+}
+
+.legal-list {
+  margin-top: 16px;
+  padding-left: 20px;
+  max-width: 56ch;
+}
+
+.legal-list li {
+  font-size: 1.05rem;
+  line-height: 1.7;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.legal a {
+  color: var(--aurora-green);
+}
+
+.legal-footer {
+  padding-top: 32px;
+  border-top: 1px solid var(--rule-hairline);
+}
+
+.legal-footer p {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 768px) {
+  .legal {
+    padding: 120px 0 96px;
+  }
+
+  .legal-section {
+    margin-bottom: 40px;
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "inter",
+        "createdAt": "2026-08-08T22:34:49.477Z",
+        "reason": "Archivo is the display face; Inter retained for body/UI by user decision 2026-08-08"
+      },
+      {
+        "rule": "gradient-text",
+        "value": "*",
+        "files": [
+          "src/styles/index.css"
+        ],
+        "createdAt": "2026-08-09T00:21:53.311Z",
+        "reason": "Three-headline gradient confirmed by user 2026-08-08; DESIGN.md caps it at hero/depth/price and each pass verifies the count is 3"
+      }
+    ]
+  }
+}

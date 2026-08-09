@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 
 const StarBorder = ({
   children,
@@ -7,6 +7,10 @@ const StarBorder = ({
   speed = 6,
   borderRadius = '16px'
 }) => {
+  /* A rotating conic sweep is exactly the motion this guard exists for.
+     Reduced motion gets the same ring, held still. */
+  const still = useReducedMotion()
+
   return (
     <div
       className={`star-border-wrapper ${className}`}
@@ -30,12 +34,10 @@ const StarBorder = ({
           background: `conic-gradient(from 0deg, transparent 0deg, ${color} 60deg, transparent 120deg)`,
           opacity: 0.8,
         }}
-        animate={{ rotate: 360 }}
-        transition={{
-          duration: speed,
-          repeat: Infinity,
-          ease: 'linear',
-        }}
+        animate={still ? { rotate: 0 } : { rotate: 360 }}
+        transition={
+          still ? { duration: 0 } : { duration: speed, repeat: Infinity, ease: 'linear' }
+        }
       />
 
       {/* Inner content container */}

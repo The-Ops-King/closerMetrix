@@ -1,8 +1,11 @@
 import { useEffect, useRef } from 'react'
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 
 const Aurora = () => {
   const canvasRef = useRef(null)
+  /* The CSS prefers-reduced-motion block cannot stop a rAF loop or a Web
+     Animations object, so the guard has to live in the component. */
+  const still = useReducedMotion()
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -23,7 +26,7 @@ const Aurora = () => {
       { amplitude: 80, frequency: 0.003, speed: 0.02, color: 'rgba(6, 249, 136, 0.15)', yOffset: 0.2, blend: 0 },
       { amplitude: 60, frequency: 0.004, speed: 0.015, color: 'rgba(0, 212, 255, 0.12)', yOffset: 0.25, blend: 1 },
       { amplitude: 100, frequency: 0.002, speed: 0.025, color: 'rgba(99, 102, 241, 0.1)', yOffset: 0.15, blend: 0},
-      { amplitude: 50, frequency: 0.005, speed: 0.018, color: 'rgba(0, 255, 200, 0.08)', yOffset: 0.3, blend: 0 },
+      { amplitude: 50, frequency: 0.005, speed: 0.018, color: 'rgba(0, 255, 136, 0.08)', yOffset: 0.3, blend: 0 },
     ]
 
     const drawAurora = () => {
@@ -56,6 +59,8 @@ const Aurora = () => {
         ctx.fill()
       })
 
+      if (still) return
+
       time++
       animationId = requestAnimationFrame(drawAurora)
     }
@@ -66,7 +71,7 @@ const Aurora = () => {
       window.removeEventListener('resize', resize)
       cancelAnimationFrame(animationId)
     }
-  }, [])
+  }, [still])
 
   return (
     <>
@@ -83,13 +88,13 @@ const Aurora = () => {
           zIndex: 0,
         }}
       />
-      <Stars />
+      <Stars still={still} />
     </>
   )
 }
 
 // Animated Stars Component
-const Stars = () => {
+const Stars = ({ still }) => {
   const stars = Array.from({ length: 100 }, (_, i) => ({
     id: i,
     x: Math.random() * 100,
@@ -111,16 +116,17 @@ const Stars = () => {
             width: star.size,
             height: star.size,
           }}
-          animate={{
-            opacity: [0.2, 1, 0.2],
-            scale: [1, 1.2, 1],
-          }}
-          transition={{
-            duration: star.duration,
-            repeat: Infinity,
-            delay: star.delay,
-            ease: 'easeInOut',
-          }}
+          animate={still ? { opacity: 0.6 } : { opacity: [0.2, 1, 0.2], scale: [1, 1.2, 1] }}
+          transition={
+            still
+              ? { duration: 0 }
+              : {
+                  duration: star.duration,
+                  repeat: Infinity,
+                  delay: star.delay,
+                  ease: 'easeInOut',
+                }
+          }
         />
       ))}
     </div>

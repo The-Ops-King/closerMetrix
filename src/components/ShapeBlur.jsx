@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 
 const ShapeBlur = ({
   className = '',
@@ -9,6 +9,9 @@ const ShapeBlur = ({
   opacity = 0.3,
   animate = true,
 }) => {
+  const still = useReducedMotion()
+  const drifts = animate && !still
+
   const shapes = [
     {
       color: color1,
@@ -56,17 +59,21 @@ const ShapeBlur = ({
             x: 0,
             y: 0,
           }}
-          animate={animate ? {
+          animate={drifts ? {
             scale: [1, 1.2, 1],
             x: [0, 30, -20, 0],
             y: [0, -20, 30, 0],
           } : {}}
-          transition={{
-            duration: 15,
-            repeat: Infinity,
-            delay: shape.animationDelay,
-            ease: 'easeInOut',
-          }}
+          transition={
+            drifts
+              ? {
+                  duration: 15,
+                  repeat: Infinity,
+                  delay: shape.animationDelay,
+                  ease: 'easeInOut',
+                }
+              : { duration: 0 }
+          }
           style={{
             position: 'absolute',
             width: shape.size,

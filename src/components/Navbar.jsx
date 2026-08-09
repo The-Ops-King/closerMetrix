@@ -19,10 +19,11 @@ const Navbar = () => {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
+  // Anchors must match real sections on the homepage. A nav link that
+  // scrolls nowhere is worse than no nav.
   const navItems = [
-    { label: 'Features', href: '#features' },
-    { label: 'How It Works', href: '/how-it-works', isRoute: true },
-    { label: 'FAQ', href: '/faq', isRoute: true },
+    { label: 'What You Get', href: '#what-you-get' },
+    { label: 'Pricing', href: '#pricing' },
   ]
 
   const handleNavClick = (item) => {
@@ -77,6 +78,9 @@ const Navbar = () => {
         <button
           className="mobile-menu-toggle"
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          aria-label={isMobileMenuOpen ? 'Close menu' : 'Open menu'}
+          aria-expanded={isMobileMenuOpen}
+          aria-controls="mobile-menu"
         >
           <motion.span
             animate={{ rotate: isMobileMenuOpen ? 45 : 0, y: isMobileMenuOpen ? 7 : 0 }}
@@ -94,6 +98,7 @@ const Navbar = () => {
         {isMobileMenuOpen && (
           <motion.div
             className="mobile-menu"
+            id="mobile-menu"
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}

@@ -1,0 +1,1419 @@
+/* Homepage — Sales Integrity Audit positioning. Page spec v5.
+   Layout only. Every color and size comes from a DESIGN.md token.
+
+   The rules this file exists to hold:
+   - No cards. Hairline rules and empty space separate blocks.
+   - No two adjacent blocks share a composition, and no block leaves the
+     right half of the measure doing nothing.
+   - Gradient text on four moments only: hero, objections, 24 hours, price. */
+
+/* ---------- shared ---------- */
+
+.home-section {
+  padding: 96px 0;
+  position: relative;
+  z-index: 1;
+}
+
+/* Nav is fixed — keep anchored headings clear of it. */
+#what-you-get,
+#objections,
+#compliance,
+#crm,
+#pricing,
+#integrity-audit {
+  scroll-margin-top: 96px;
+}
+
+.home-h2 {
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  max-width: 20ch;
+  margin-bottom: 48px;
+}
+
+/* For headlines that must not wrap — a two-word promise broken across two
+   lines reads as two thoughts. */
+.home-h2.is-wide {
+  max-width: none;
+}
+
+/* Section leads that carry the argument rather than label it. Display
+   size, wider measure. */
+.home-h2.is-lead {
+  font-size: clamp(2.5rem, 5vw, 4rem);
+  max-width: 26ch;
+}
+
+.home-h2-flag {
+  color: var(--flag-red-light);
+}
+
+.home-h2.is-centered {
+  max-width: 24ch;
+  margin-left: auto;
+  margin-right: auto;
+  text-align: center;
+}
+
+/* Solid, not gradient: the gradient budget is spent, and this marks a
+   commitment the product keeps. */
+.home-h2-mark {
+  color: var(--aurora-green);
+}
+
+.home-body {
+  max-width: 56ch;
+  font-size: 1.05rem;
+  line-height: 1.7;
+  color: var(--text-primary);
+}
+
+/* A line set apart from the argument that earned it. */
+.home-pull {
+  max-width: 48ch;
+  margin-top: 40px;
+  padding-top: 24px;
+  border-top: 1px solid var(--rule-hairline);
+  font-size: clamp(1.25rem, 2vw, 1.5rem);
+  line-height: 1.45;
+  color: var(--text-primary);
+}
+
+.home-fineprint {
+  max-width: 56ch;
+  margin-top: 32px;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+/* Bullets, not a paragraph. Three short parallel statements are read;
+   the same content as prose is skipped. */
+.home-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 40px;
+}
+
+/* Extracted figures are headlines that happen to be numeric. */
+.home-figure {
+  display: block;
+  font-family: 'Archivo', 'Inter', sans-serif;
+  font-size: clamp(2.5rem, 6vw, 4rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--aurora-green);
+}
+
+/* Audit percentages sit a step down, so the language finding beneath them
+   can carry equal weight. They are commodity output; it is the moat. */
+.home-figure.is-secondary {
+  font-size: clamp(2rem, 4vw, 3rem);
+}
+
+/* Counts that are risks, not wins. */
+.home-figure.is-flag {
+  color: var(--flag-red-light);
+}
+
+/* Body size, not label size. At 0.85rem Ash these captions read as
+   footnotes to the figure instead of as the finding itself. */
+.home-figure-line {
+  display: block;
+  margin-top: 12px;
+  max-width: 26ch;
+  font-size: 1.05rem;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+/* ---------- 1 · hero ---------- */
+
+.home-hero {
+  min-height: 76vh;
+  display: flex;
+  align-items: center;
+  padding: 96px 0 64px;
+  position: relative;
+  z-index: 1;
+}
+
+.home-hero .container {
+  max-width: 900px;
+  text-align: center;
+}
+
+.home-eyebrow {
+  margin-bottom: 24px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.home-hero h1 {
+  font-size: clamp(2.5rem, 5vw, 4rem);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  margin-bottom: 24px;
+  text-wrap: balance;
+}
+
+.home-hero-sub {
+  font-size: clamp(1.25rem, 2vw, 1.5rem);
+  line-height: 1.4;
+  color: var(--text-primary);
+  margin-bottom: 40px;
+}
+
+/* The only graphic element above the fold. */
+.home-flow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px 14px;
+  padding: 20px 0;
+  border-top: 1px solid var(--rule-hairline);
+  border-bottom: 1px solid var(--rule-hairline);
+}
+
+.home-flow-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.home-flow-node {
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+}
+
+.home-flow-node.is-terminal {
+  color: var(--aurora-green);
+}
+
+.home-flow-arrow {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.home-hero-cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 40px;
+}
+
+.home-hero-note {
+  flex-basis: 100%;
+  margin-top: 4px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+/* ---------- 2 · the gap ---------- */
+
+.home-gap-head,
+.home-gap-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px;
+}
+
+.home-gap-head {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--night-light);
+}
+
+.home-gap-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--aurora-green);
+}
+
+.home-gap-label.is-muted {
+  color: var(--text-secondary);
+}
+
+.home-gap-row {
+  padding: 18px 0;
+  border-bottom: 1px solid var(--rule-hairline);
+}
+
+.home-gap-old,
+.home-gap-new {
+  font-size: 1.05rem;
+  line-height: 1.6;
+}
+
+.home-gap-old {
+  color: var(--text-secondary);
+}
+
+.home-gap-new {
+  color: var(--text-primary);
+}
+
+/* Per-row labels. Hidden on desktop where the column head does the work,
+   shown on mobile where the head collapses. */
+.home-gap-tag {
+  display: none;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.home-gap-tag.is-new {
+  color: var(--aurora-green);
+}
+
+.home-gap-note {
+  margin-top: 32px;
+  font-size: clamp(1.25rem, 2vw, 1.5rem);
+  color: var(--text-primary);
+}
+
+/* ---------- 4 · flags ---------- */
+
+/* Artifact left, copy right — the mirror of the block above, so two
+   neighbours never share a frame. */
+.home-flags-grid {
+  display: grid;
+  gap: 48px;
+  /* The artifact is the proof; the copy explains it. Weight the split so
+     the alert reads at real size instead of as a thumbnail. */
+  grid-template-columns: 1.5fr 1fr;
+  gap: 64px;
+  align-items: center;
+}
+
+.home-flags .home-h2 {
+  /* Headline step, not display: in a narrow column the display size ran
+     to six lines and dwarfed the artifact it was describing. */
+  font-size: clamp(1.75rem, 2.6vw, 2.25rem);
+  max-width: 18ch;
+  margin-bottom: 32px;
+}
+
+.home-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 32px;
+  list-style: none;
+}
+
+.home-chip {
+  padding: 8px 16px;
+  border: 1px solid var(--night-light);
+  border-radius: 50px;
+  font-size: 1.05rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+/* The Slack alert. This is the only place on the page the product is shown
+   existing somewhere real, so it depicts Slack rather than approximating
+   it — sidebar rail, channel header, message row, action links. */
+.home-slack {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  margin: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--night-mid);
+  box-shadow: 0 25px 80px var(--shadow-ink);
+}
+
+.home-slack-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 0;
+  background: var(--slack-aubergine);
+}
+
+.home-slack-workspace {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--text-primary);
+  color: var(--slack-aubergine);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.home-slack-dot {
+  width: 22px;
+  height: 4px;
+  border-radius: 50px;
+  background: var(--slack-rail-dim);
+}
+
+.home-slack-body {
+  min-width: 0;
+  background: var(--night-void);
+}
+
+.home-slack-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--rule-hairline);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.home-slack-hash {
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.home-slack-message {
+  display: flex;
+  gap: 12px;
+  padding: 20px;
+}
+
+.home-slack-avatar {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--aurora-green);
+  color: var(--night-void);
+  -webkit-text-fill-color: var(--night-void);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.home-slack-content {
+  min-width: 0;
+}
+
+.home-slack-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 0.85rem;
+}
+
+.home-slack-author {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.home-slack-tag {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--night-light);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text-primary);
+}
+
+.home-slack-time {
+  color: var(--text-secondary);
+}
+
+.home-slack-flag {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--flag-red-light);
+}
+
+.home-slack-flagmark {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--flag-red-light);
+}
+
+.home-slack-said {
+  margin-bottom: 10px;
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.home-slack-category {
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.home-slack-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--rule-hairline);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+/* ---------- 5 · the integrity audit ---------- */
+
+.home-findings {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 40px;
+}
+
+/* The finding with no number, at the same weight as the figures above it.
+   It is the only one a tag-based product could not have produced, so it
+   must not be the smallest thing in the block. */
+.home-language-finding {
+  margin-top: 56px;
+  margin-bottom: 40px;
+  padding-top: 40px;
+  border-top: 1px solid var(--rule-hairline);
+  max-width: 26ch;
+  font-family: 'Archivo', 'Inter', sans-serif;
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.home-sample-label {
+  margin-top: 28px;
+  max-width: 46ch;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.home-audit .home-body {
+  margin-top: 40px;
+}
+
+/* ---------- 6 · twenty-four hours ---------- */
+
+/* Full width, three nodes. The middle node is the company. */
+.home-timeline {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  list-style: none;
+  padding: 0;
+}
+
+.home-timeline-node {
+  position: relative;
+  padding: 0 32px 0 0;
+}
+
+.home-timeline-mark {
+  display: flex;
+  align-items: center;
+  height: 24px;
+  margin-bottom: 20px;
+}
+
+.home-timeline-mark::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  margin-left: 12px;
+  background: var(--rule-hairline);
+}
+
+.home-timeline-node:last-child .home-timeline-mark::after {
+  display: none;
+}
+
+.home-timeline-dot {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--aurora-green);
+}
+
+.home-timeline-label {
+  display: block;
+  max-width: 16ch;
+  font-size: clamp(1.25rem, 2vw, 1.5rem);
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--text-primary);
+}
+
+.home-timeline-note {
+  display: block;
+  margin-top: 10px;
+  font-size: 1.05rem;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+.home-clock-foot {
+  margin-top: 56px;
+  padding-top: 24px;
+  border-top: 1px solid var(--rule-hairline);
+  max-width: 56ch;
+  font-size: 1.05rem;
+  line-height: 1.7;
+  color: var(--text-secondary);
+}
+
+/* ---------- 7 · proof ---------- */
+
+/* 2x2 across the full measure, so it doesn't rhyme with the row of three
+   two blocks earlier. */
+.home-figure-block {
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--rule-hairline);
+}
+
+/* ---------- 8 · fit ---------- */
+
+.home-fit {
+  padding: 48px 0;
+  position: relative;
+  z-index: 1;
+}
+
+.home-fit-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  padding: 24px 0;
+  border-top: 1px solid var(--rule-hairline);
+  border-bottom: 1px solid var(--rule-hairline);
+}
+
+.home-fit-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.home-fit-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  /* Ash, not cyan. Cyan was reading as "the price" two blocks later. */
+  color: var(--text-secondary);
+}
+
+/* Marks, not names. Monochrome so eight brand palettes don't fight the
+   page; they mark compatibility, they are not the point of the block. */
+.home-marks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+}
+
+.home-mark {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-primary);
+  opacity: 0.85;
+  transition: opacity 0.2s ease, color 0.2s ease;
+}
+
+.home-mark:hover,
+.home-mark:focus-visible {
+  opacity: 1;
+  color: var(--aurora-green);
+}
+
+/* Named on hover. A monochrome glyph is recognisable to someone who
+   already uses the tool and a mystery to everyone else. */
+.home-mark::after {
+  content: attr(data-label);
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  padding: 6px 10px;
+  border: 1px solid var(--night-light);
+  border-radius: 8px;
+  background: var(--night-mid);
+  box-shadow: 0 12px 32px var(--shadow-ink);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.home-mark::before {
+  content: '';
+  position: absolute;
+  bottom: calc(100% + 5px);
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  transform: translateX(-50%) rotate(45deg) translateY(2px);
+  border-right: 1px solid var(--night-light);
+  border-bottom: 1px solid var(--night-light);
+  background: var(--night-mid);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.home-mark:hover::after,
+.home-mark:focus-visible::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.home-mark:hover::before,
+.home-mark:focus-visible::before {
+  opacity: 1;
+  transform: translateX(-50%) rotate(45deg) translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-mark::after,
+  .home-mark::before {
+    transition: none;
+  }
+}
+
+.home-mark-glyph {
+  width: 26px;
+  height: 26px;
+  display: block;
+}
+
+/* Client-supplied raster marks, flattened to white so they sit in the same
+   set as the vector glyphs instead of dragging three brand palettes in. */
+.home-mark-img {
+  width: 26px;
+  height: 26px;
+  display: block;
+  object-fit: contain;
+  filter: brightness(0) invert(1);
+  transition: filter 0.2s ease;
+}
+
+.home-mark:hover .home-mark-img {
+  filter: brightness(0) invert(1) sepia(1) saturate(6) hue-rotate(90deg);
+}
+
+/* ---------- 9 · pricing ---------- */
+
+.home-pricing .home-h2 {
+  max-width: 14ch;
+  margin-bottom: 32px;
+}
+
+/* Two columns across the full measure. Eight items in one left rail read
+   as a stray list against two thirds of empty page. */
+.home-scope-list {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 56px;
+}
+
+.home-scope-item {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 7px 0;
+  font-size: 1.05rem;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+/* A check confirms; the square it replaced only listed. */
+.home-check {
+  flex-shrink: 0;
+  color: var(--aurora-green);
+  transform: translateY(2px);
+}
+
+/* Heavy space above the number. The reaction comes from the gap between
+   the list and the figure, so the list must be finished before the figure
+   is in view. Nothing here calls it a good deal. */
+.home-price {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-top: 96px;
+}
+
+/* Runs straight into the figure: "And the investment is — $3 — per
+   reviewed call." One sentence, broken by the number. */
+.home-price-lead {
+  margin-bottom: 8px;
+  font-size: clamp(1.25rem, 2vw, 1.5rem);
+  line-height: 1.3;
+  color: var(--text-secondary);
+}
+
+/* The largest object on the page, H1 included. */
+.home-price-figure {
+  font-family: 'Archivo', 'Inter', sans-serif;
+  font-size: clamp(4.5rem, 14vw, 10rem);
+  font-weight: 700;
+  line-height: 0.9;
+  letter-spacing: -0.04em;
+}
+
+.home-price-unit {
+  margin-top: 12px;
+  font-size: clamp(1.25rem, 2vw, 1.5rem);
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
+.home-price-terms {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 40px;
+  padding-top: 24px;
+  border-top: 1px solid var(--rule-hairline);
+  max-width: 46ch;
+}
+
+.home-price-line {
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.home-price-note {
+  margin-top: 16px;
+  max-width: 40ch;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+/* ---------- 9b · cost of inaction ---------- */
+
+/* The price only means something beside what the alternative costs. */
+.home-inaction {
+  margin-top: 88px;
+  padding-top: 56px;
+  border-top: 1px solid var(--rule-hairline);
+  text-align: center;
+}
+
+.home-inaction-head {
+  margin-bottom: 16px;
+  font-family: 'Archivo', 'Inter', sans-serif;
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.home-inaction-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 40px;
+  text-align: left;
+}
+
+/* The example the figures are computed from, stated before them so no
+   number on this page reads as a measured client result. */
+.home-inaction-assume {
+  max-width: 56ch;
+  margin: 0 auto 56px;
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.home-inaction-item {
+  padding-top: 20px;
+  border-top: 1px solid var(--flag-red-light);
+}
+
+/* Red, and the largest thing in the block. These are bills. */
+.home-inaction-figure {
+  display: block;
+  margin-bottom: 12px;
+  font-family: 'Archivo', 'Inter', sans-serif;
+  font-size: clamp(2.5rem, 6vw, 4rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--flag-red-light);
+}
+
+.home-inaction-title {
+  display: block;
+  margin-bottom: 10px;
+  font-size: clamp(1.25rem, 2vw, 1.5rem);
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--text-primary);
+}
+
+.home-inaction-line {
+  display: block;
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+/* The three bills above, added up. Bigger than any one of them and still
+   well under the price figure, which stays the largest object on the page. */
+.home-inaction-close {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 46ch;
+  margin: 72px auto 0;
+  padding-top: 48px;
+  border-top: 1px solid var(--flag-red-light);
+}
+
+.home-inaction-close-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.home-inaction-close-figure {
+  font-family: 'Archivo', 'Inter', sans-serif;
+  font-size: clamp(3rem, 8vw, 5.5rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--flag-red-light);
+}
+
+.home-inaction-close-line {
+  font-size: clamp(1.25rem, 2vw, 1.5rem);
+  line-height: 1.45;
+  color: var(--text-primary);
+}
+
+.home-inaction .home-actions {
+  justify-content: center;
+}
+
+/* ---------- 10 · close ---------- */
+
+.home-close {
+  padding-bottom: 128px;
+  text-align: center;
+}
+
+.home-close .home-h2 {
+  max-width: 22ch;
+  margin: 0 auto 24px;
+}
+
+.home-close .home-body {
+  margin: 0 auto;
+}
+
+.home-close .home-actions {
+  justify-content: center;
+}
+
+/* ---------- responsive ---------- */
+
+@media (max-width: 900px) {
+  .home-depth-split,
+  .home-flags-grid {
+    grid-template-columns: 1fr;
+    gap: 40px;
+  }
+
+  /* Copy first, artifact second — the headline has to arrive before the
+     thing it is describing. */
+  .home-flags-copy {
+    order: 1;
+  }
+
+  .home-slack {
+    order: 2;
+  }
+
+  .home-findings,
+  .home-timeline,
+  .home-fit-strip {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+
+  .home-timeline-node {
+    padding: 0;
+  }
+
+  .home-timeline-mark::after {
+    display: none;
+  }
+
+  .home-timeline-label {
+    max-width: none;
+  }
+
+.home-inaction-grid {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+}
+
+@media (max-width: 768px) {
+  .home-section {
+    padding: 64px 0;
+  }
+
+  .home-hero {
+    min-height: 0;
+    padding: 72px 0 48px;
+  }
+
+  .home-h2 {
+    margin-bottom: 32px;
+  }
+
+  /* Stacked pairs. Two ~155px columns of wrapped text is not a table. */
+  .home-gap-head {
+    display: none;
+  }
+
+  .home-gap-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 20px 0;
+  }
+
+  .home-gap-tag {
+    display: block;
+    margin-bottom: 4px;
+  }
+
+  .home-proof,
+  .home-scope-list {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+
+  .home-scope-list {
+    gap: 0;
+  }
+
+  .home-slack-message {
+    padding: 16px;
+  }
+
+  .home-close {
+    padding-bottom: 96px;
+  }
+}
+
+/* ---------- 3 · objection mix ---------- */
+
+/* A distribution, not a quote wall. The 50/25/20/5 shape is the argument:
+   what a closer remembers is not what the month actually contained. */
+.home-mix {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  max-width: 900px;
+}
+
+.home-mix-row {
+  display: grid;
+  grid-template-columns: minmax(96px, 120px) 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+.home-mix-pct {
+  font-family: 'Archivo', 'Inter', sans-serif;
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--aurora-green);
+  text-align: right;
+}
+
+.home-mix-body {
+  min-width: 0;
+}
+
+.home-mix-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px;
+  font-size: clamp(1.25rem, 2vw, 1.5rem);
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--text-primary);
+}
+
+.home-mix-tag {
+  padding: 3px 10px;
+  border: 1px solid var(--aurora-cyan);
+  border-radius: 50px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--aurora-cyan);
+}
+
+.home-mix-note {
+  display: block;
+  margin-top: 6px;
+  font-size: 1.05rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.home-mix-track {
+  display: block;
+  margin-top: 14px;
+  height: 6px;
+  border-radius: 50px;
+  background: var(--surface-wash);
+}
+
+.home-mix-fill {
+  display: block;
+  height: 100%;
+  border-radius: 50px;
+  background: var(--aurora-green);
+}
+
+.home-mix-fill.is-accent {
+  background: var(--aurora-cyan);
+}
+
+/* ---------- 5 · the CRM record ---------- */
+
+.home-crm-sub {
+  max-width: 60ch;
+  margin: 0 auto 56px;
+  text-align: center;
+  font-size: 1.05rem;
+  line-height: 1.7;
+  color: var(--text-secondary);
+}
+
+/* An artifact: this is the record as it appears in their pipeline, so it
+   is bounded and lifted like the Slack alert rather than composed in. */
+.home-record {
+  border-radius: 16px;
+  background: var(--night-mid);
+  box-shadow: 0 25px 80px var(--shadow-ink);
+  overflow: hidden;
+}
+
+.home-record-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--rule-hairline);
+  background: var(--night-void);
+}
+
+.home-record-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.home-record-stamp {
+  font-size: 0.85rem;
+  color: var(--aurora-green);
+}
+
+.home-record-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 200px) 1fr;
+  gap: 24px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--rule-hairline);
+}
+
+.home-record-row:last-child {
+  border-bottom: none;
+}
+
+.home-record-field {
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.home-record-value {
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.home-record-value.is-tag {
+  color: var(--aurora-green);
+  font-weight: 600;
+}
+
+.home-record-value.is-flag {
+  color: var(--flag-red-light);
+  font-weight: 600;
+}
+
+@media (max-width: 900px) {
+  .home-mix-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .home-mix-pct {
+    text-align: left;
+  }
+
+  .home-record-row,
+  .home-record-head {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+}
+
+/* ---------- objection mix: the takeaway ---------- */
+
+/* The block is easy to read backwards, so the split is stated outright:
+   the rare objection is the memorable one, not the expensive one. */
+.home-split-note {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px 48px;
+  margin-top: 48px;
+  padding-top: 32px;
+  border-top: 1px solid var(--rule-hairline);
+  max-width: 900px;
+}
+
+.home-split-note-item {
+  font-size: clamp(1.25rem, 2vw, 1.5rem);
+  line-height: 1.4;
+  color: var(--text-primary);
+}
+
+.home-split-note-item strong {
+  font-family: 'Archivo', 'Inter', sans-serif;
+  font-weight: 700;
+  color: var(--aurora-green);
+}
+
+.home-split-note-item.is-accent strong {
+  color: var(--aurora-cyan);
+}
+
+/* ---------- proof: one client, 90 days ---------- */
+
+.home-proof-scope {
+  margin-bottom: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--aurora-green);
+}
+
+.home-proof {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 56px 64px;
+}
+
+.home-proof .home-figure-block {
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--rule-hairline);
+}
+
+.home-proof-section .home-pull {
+  margin-top: 56px;
+}
+
+@media (max-width: 900px) {
+  .home-split-note {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .home-proof {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+}
+
+/* Restored under the language finding: the headline states the shift, the
+   bullets say why the two mean different things. */
+.home-points {
+  list-style: none;
+  padding: 0;
+  max-width: 56ch;
+  margin-top: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.home-points li {
+  position: relative;
+  padding-left: 22px;
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.home-points li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.6em;
+  width: 6px;
+  height: 1px;
+  background: var(--aurora-green);
+}
+
+.home-points strong {
+  font-weight: 700;
+}
+
+/* The anchored target inside the pricing section. */
+#pricing {
+  scroll-margin-top: 96px;
+}
+
+/* ---------- flags artifact: scaled up ---------- */
+
+.home-slack {
+  grid-template-columns: 68px 1fr;
+}
+
+.home-slack-rail {
+  gap: 16px;
+  padding: 20px 0;
+}
+
+.home-slack-workspace {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  font-size: 1.05rem;
+}
+
+.home-slack-dot {
+  width: 28px;
+  height: 5px;
+}
+
+.home-slack-header {
+  padding: 18px 28px;
+  font-size: 1.05rem;
+}
+
+.home-slack-message {
+  gap: 16px;
+  padding: 28px;
+}
+
+.home-slack-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  font-size: 1.05rem;
+}
+
+.home-slack-meta {
+  gap: 10px;
+  margin-bottom: 12px;
+  font-size: 1.05rem;
+}
+
+.home-slack-flag {
+  gap: 10px;
+  margin-bottom: 14px;
+  font-size: clamp(1.25rem, 2vw, 1.5rem);
+}
+
+.home-slack-flagmark {
+  width: 8px;
+  height: 8px;
+}
+
+.home-slack-said {
+  margin-bottom: 14px;
+  font-size: clamp(1.25rem, 2vw, 1.5rem);
+  line-height: 1.5;
+}
+
+.home-slack-category,
+.home-slack-actions {
+  font-size: 1.05rem;
+}
+
+.home-slack-actions {
+  gap: 20px;
+  margin-top: 16px;
+  padding-top: 16px;
+}
+
+@media (max-width: 900px) {
+  .home-slack {
+    grid-template-columns: 56px 1fr;
+  }
+
+  .home-slack-message {
+    padding: 20px;
+  }
+}
